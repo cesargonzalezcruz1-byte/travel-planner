@@ -156,7 +156,7 @@ svg{width:1em;height:1em;flex-shrink:0}
 
 /* ================================================================ day view */
 .dayview{max-width:760px;margin:0 auto;padding:12px 12px 60px}
-.dayhead{display:flex;align-items:center;justify-content:space-between;background:var(--card);border-radius:28px;padding:10px;text-align:center;margin-top:4px;box-shadow:0 1px 2px #14213D10}
+.dayhead{display:flex;align-items:center;justify-content:space-between;background:var(--card);border-radius:28px;padding:10px;text-align:center;margin:4px 0 12px;box-shadow:0 1px 2px #14213D10}
 .dayhead .wd{font-size:13px;color:var(--muted);font-weight:700} .dayhead .dt{font-size:21px;font-weight:800}
 .dayhead .nav{background:var(--dark);border:0;color:#fff;font-size:26px;width:44px;height:44px;border-radius:22px;cursor:pointer;line-height:1}
 .dayhead .nav:disabled{opacity:.25}

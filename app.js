@@ -298,6 +298,7 @@ function header(opts = {}) {
         ${PEOPLE().map((p) => `<button data-person="${p}" class="${p === me ? "on" : ""}"><span class="sw" style="background:${pcolor(p)};color:${inkOn(pcolor(p))}">${esc(p)}</span><span class="grow">${esc(NAME(p))}</span>${p === me ? "✓" : ""}</button>`).join("")}</div></details>
     </div>
     <div class="hero-bar">
+      ${!opts.views && ui.day ? `<button class="iconbtn" data-itinerary data-back aria-label="Back to ${VIEWS.find((v) => v[0] === ui.view)?.[1] || "Overview"}" title="Back to ${VIEWS.find((v) => v[0] === ui.view)?.[1] || "Overview"}">${ICON.home}</button>` : ""}
       ${opts.views ? `<nav class="vseg" aria-label="View">${VIEWS.map(([k, l, ic]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}" aria-label="${l}" title="${l}">${ICON[ic]}${ui.view === k ? `<span>${l}</span>` : ""}</button>`).join("")}</nav>` : `<span class="hero-hint">${esc(NAME(me))}'s day</span>`}
       <span class="grow"></span>
       ${isEditor() ? `<button class="iconbtn" data-act="add" aria-label="Add booking" title="Add booking">${ICON.plus}</button>` : ""}
@@ -314,6 +315,7 @@ function wireHeader() {
   root.querySelectorAll("[data-view]").forEach((b) => (b.onclick = () => { ui.view = b.dataset.view; try { localStorage.setItem("tp.view", ui.view); } catch (e) { /* ignore */ } sessionStorage.removeItem("tp.wscroll"); render(); }));
   root.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.(b)));
   root.querySelectorAll("[data-home]").forEach((b) => (b.onclick = () => routeTo(null)));
+  root.querySelectorAll("[data-itinerary]").forEach((b) => (b.onclick = () => routeTo(ui.tripId, null)));
   // close an open menu when tapping elsewhere
   document.onclick = (e) => root.querySelectorAll("details.more[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
 }
@@ -647,7 +649,7 @@ function renderDay() {
       <div><div class="wd">${WD[D(date).getDay()]}</div><div class="dt">${longDate(date)}</div></div>
       <button class="nav" data-go="1" ${idx === ds.length - 1 ? "disabled" : ""}>›</button>
     </div>
-    <button class="btn back" data-back>← ${VIEWS.find((v) => v[0] === ui.view)?.[1] || "Overview"}</button>
+    
     <div class="withrow"><span class="muted">With ${esc(NAME(p))} tonight:</span>
       ${others.map((o) => together(p, o, date) ? `<span class="pill yes">☑ <span class="t-init">${o}</span> ${esc(NAME(o))}</span>` : `<span class="pill no">☐ ${o}</span>`).join("")}</div>
 

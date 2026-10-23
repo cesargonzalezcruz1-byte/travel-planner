@@ -65,7 +65,7 @@ export async function drawDayMap(holder, pins, msgEl) {
     const at = pos[i]; if (!at) { missing.push(p.name); return; }
     const k = at.lat.toFixed(4) + "," + at.lng.toFixed(4); const dup = (seen[k] = (seen[k] || 0) + 1) - 1;   // nudge pins on the same spot
     const position = { lat: at.lat + dup * 0.0004, lng: at.lng + dup * 0.0004 };
-    const el = document.createElement("div"); el.className = "mpin"; el.style.setProperty("--pin", p.color);
+    const el = document.createElement("div"); el.className = "mpin" + (p.hollow ? " hollow" : ""); el.style.setProperty("--pin", p.color);
     el.innerHTML = `<span>${p.glyph}</span>`;
     const m = new AdvancedMarkerElement({ map, position, content: el, title: `${p.kind}: ${p.name}` });
     m.addListener("click", () => {

@@ -203,30 +203,34 @@ export async function migrateConfirmed(isConfirmed) {
 }
 
 // ------------------------------------------------------------------ AI: read a booking PDF / photo (editors)
-const EXTRACT_SCHEMA = {
-  type: "object",
-  properties: {
-    type: { type: "string", enum: ["flight", "stay", "car", "activity"], description: "What the document books" },
-    who: { type: "array", items: { type: "string" }, description: "Traveller codes on the booking" },
-    start: { type: "string", description: "First date YYYY-MM-DD (flight departure / check-in / pick-up / activity date)" },
-    end: { type: "string", description: "Last date YYYY-MM-DD (flight arrival date / check-out / drop-off)" },
-    route: { type: "string", description: "Flight: airport codes joined with '-', e.g. LAX-IAH-TQO" },
-    airline: { type: "string" }, number: { type: "string", description: "Flight numbers, e.g. UA1306/1600" },
-    dep: { type: "string", description: "Departure time HH:MM (24h)" }, arr: { type: "string", description: "Arrival time HH:MM (24h); add (dd-Mon) if next day" },
-    name: { type: "string", description: "Hotel / property / activity name" }, short: { type: "string", description: "Short hotel name, max 14 characters" },
-    address: { type: "string" }, checkin: { type: "string", description: "HH:MM" }, checkout: { type: "string", description: "HH:MM" },
-    company: { type: "string", description: "Car rental company" }, vehicle: { type: "string", description: "Short vehicle description, e.g. 7-seat SUV" },
-    pickup: { type: "string", description: "Short pick-up location, e.g. LAX or MIA" }, dropoff: { type: "string" },
-    pickupTime: { type: "string" }, dropoffTime: { type: "string" },
-    text: { type: "string", description: "Activity: short description, e.g. 'Xcaret full day + evening show'" },
-    place: { type: "string", description: "Activity: place name for Google Maps" }, time: { type: "string" },
-    note: { type: "string", description: "One short practical note for the family (no confirmation numbers)" },
-    private: { type: "object", properties: {
-      confirmation: { type: "string" }, tickets: { type: "string" }, seats: { type: "string" }, cost: { type: "string", description: "Total paid with currency" },
-      paidWith: { type: "string" }, cancel: { type: "string", description: "Cancellation rule in one line" }, phone: { type: "string" }, notes: { type: "string" } } },
-  },
-  required: ["type"],
-};
+// Every field is required (empty string when the document doesn't say) - with optional fields Gemini skips most of them.
+const S = (description) => ({ type: "string", description });
+const req = (properties) => ({ type: "object", properties, required: Object.keys(properties), propertyOrdering: Object.keys(properties) });
+const EXTRACT_SCHEMA = req({
+  type: { type: "string", enum: ["flight", "stay", "car", "activity"], description: "What the document books" },
+  who: { type: "array", items: { type: "string" }, description: "Traveller codes on the booking" },
+  start: S("First date YYYY-MM-DD: flight departure date / hotel check-in date / car pick-up date / activity date"),
+  end: S("Last date YYYY-MM-DD: flight arrival date / hotel CHECK-OUT date / car drop-off date / activity end date"),
+  route: S("Flight: airport codes joined with '-', e.g. LAX-IAH-TQO"),
+  airline: S("Flight: airline name"), number: S("Flight numbers, e.g. UA1306/1600"),
+  dep: S("Flight departure time HH:MM (24h)"), arr: S("Flight arrival time HH:MM (24h); add (dd-Mon) if next day"),
+  name: S("Hotel / property / activity full name"), short: S("Short hotel name for a small grid cell, max 14 characters"),
+  address: S("Full street address of the hotel / property / activity / pick-up desk"),
+  checkin: S("Hotel check-in time HH:MM (24h), e.g. 15:00"), checkout: S("Hotel check-out time HH:MM (24h), e.g. 11:00"),
+  company: S("Car rental company"), vehicle: S("Short vehicle description, e.g. 7-seat SUV"),
+  pickup: S("Car pick-up location, short, e.g. MIA airport"), dropoff: S("Car drop-off location, short"),
+  pickupTime: S("Car pick-up time HH:MM"), dropoffTime: S("Car drop-off time HH:MM"),
+  text: S("Activity: short description, e.g. 'Xcaret full day + evening show'"),
+  place: S("Activity: place name for Google Maps"), time: S("Activity start time HH:MM"),
+  note: S("One short practical note for the family, e.g. room type, breakfast included, parking, shuttle (no confirmation numbers or prices)"),
+  private: req({
+    confirmation: S("Booking / confirmation / reservation / itinerary number(s)"), tickets: S("Ticket numbers"), seats: S("Seat numbers"),
+    cost: S("Total price with currency, e.g. USD 245.10"), paidWith: S("Payment card or method, e.g. Visa ending 1234, or 'Pay at hotel'"),
+    dueAtHotel: S("Amount still to pay at the property, with currency"),
+    cancel: S("Cancellation rule in one line, with the deadline date"), phone: S("Phone number of the hotel / company"),
+    notes: S("Other useful private details: room type, guests, booking site, taxes, deposit"),
+  }),
+});
 let aiModel = null;
 async function getModel(tryIndex = 0) {
   const aiM = await import(`${FIREBASE_SDK}/firebase-ai.js`);
@@ -235,6 +239,8 @@ async function getModel(tryIndex = 0) {
   return aiM.getGenerativeModel(ai, { model: AI_MODELS[tryIndex],
     generationConfig: { responseMimeType: "application/json", responseJsonSchema: EXTRACT_SCHEMA, temperature: 0 } });
 }
+const dropEmpty = (o) => { for (const k of Object.keys(o)) { const v = o[k];
+  if (v && typeof v === "object" && !Array.isArray(v)) dropEmpty(v); else if (v === "" || v === null) delete o[k]; } return o; };
 const toBase64 = (file) => new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = bad; r.readAsDataURL(file); });
 export async function extractFromFile(file, hint, ctx) {
   if (DEMO) {
@@ -245,18 +251,21 @@ export async function extractFromFile(file, hint, ctx) {
              private: { confirmation: "DEMO123", cost: "AU$100.00", cancel: "Free cancellation until 1 day before" } };
   }
   const people = ctx.travellers.map((t) => `${t.code} = ${t.fullName || t.name}`).concat((ctx.extended || []).map((t) => `${t.code} = ${t.name}`)).join("; ");
-  const prompt = `You read travel booking confirmations for a family trip (${ctx.start} to ${ctx.end}).
+  const prompt = `Read this travel booking confirmation for a family trip (${ctx.start} to ${ctx.end}) and extract it into the JSON schema.
 Traveller codes: ${people}. Put in "who" only the codes of these main travellers who are on the booking: ${ctx.travellers.map((t) => t.code).join(", ")}
 (match by name; if the booking only gives a head count such as "2 adults, 1 child", include the travellers that fits).
 The user expects a "${hint}" booking but set "type" to what the document really is.
-Dates as YYYY-MM-DD, times as 24h HH:MM. Fill only fields you can read in the document; leave others out. Keep texts short.`;
-  const parts = [{ text: prompt }, { inlineData: { mimeType: file.type || "application/pdf", data: await toBase64(file) } }];
+Read the WHOLE document, every page, and fill EVERY field that applies to this type of booking - address, times, confirmation number,
+price, payment, cancellation policy and phone are almost always somewhere in a confirmation, often in small print.
+For a hotel, "end" is the check-out date (a 1-night stay from 8 Jan has end 9 Jan). Hotel check-in/check-out times are often in the policies section.
+Dates as YYYY-MM-DD, times as 24h HH:MM. Use "" only for fields that really are not in the document or don't apply to this type. Keep texts short.`;
+  const parts = [{ inlineData: { mimeType: file.type || "application/pdf", data: await toBase64(file) } }, { text: prompt }];
   let lastErr;
   for (let i = 0; i < AI_MODELS.length; i++) {
     try {
       if (!aiModel || aiModel._i !== i) { aiModel = await getModel(i); aiModel._i = i; }
       const res = await aiModel.generateContent(parts);
-      return JSON.parse(res.response.text());
+      return dropEmpty(JSON.parse(res.response.text()));
     } catch (e) {
       lastErr = e; aiModel = null; console.warn("AI model", AI_MODELS[i], "failed:", e.message);
       if (i > 0) e.message = `[tried ${AI_MODELS.slice(0, i + 1).join(", ")}] ` + e.message;

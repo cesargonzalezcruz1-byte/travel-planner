@@ -314,7 +314,7 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .ov-card{background:var(--card);border-radius:26px;padding:10px 8px 12px;box-shadow:0 1px 2px #0000001A}
 .ov-head,.ov-grid{display:grid;grid-template-columns:54px 66px repeat(4,minmax(0,1fr));column-gap:3px}
 .ov-head{padding-bottom:8px;border-bottom:1px solid var(--line);margin-bottom:4px;font-size:10px;font-weight:800;letter-spacing:.3px}
-.ov-head span{text-align:center;color:var(--k)} .ov-head .l{text-align:left;padding-left:5px;color:var(--muted)}
+.ov-head span{text-align:center;color:var(--k)} .ov-head .l{text-align:center;color:var(--muted)}
 .ov-grid{grid-template-rows:repeat(var(--n),34px);position:relative}
 .ov-bg{grid-column:1/-1;border-radius:10px;background:var(--card)}
 .ov-bg.alt{background:var(--row-alt)} .ov-bg.wk{background:var(--row-wk)}
@@ -451,5 +451,8 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .ov-bg.today{box-shadow:none}
 /* overview: today = the day cell only (date + traveller dots), framed with a little room around the content */
 .ov-today{grid-column:1/2;z-index:1;margin:-3px 1px -3px -3px;background:var(--today-bg);border:2px solid var(--today);border-radius:13px;pointer-events:none}
-.ov-day.today{padding-left:6px}
 .ov-day.today .ov-dn b{color:var(--today-ink)}
+/* day column centred under its title, like the other columns */
+.ov-day{align-items:center;padding:0;text-align:center}
+.ov-dn{justify-content:center}
+.ov-dots{justify-content:center}

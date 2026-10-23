@@ -127,3 +127,12 @@ section h3{margin:0 0 10px;color:var(--darkred);font-size:16px}
 .extract-status.busy::before{content:"";display:inline-block;width:12px;height:12px;margin-right:6px;border:2px solid #C65911;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .stripe[data-slot]{cursor:pointer}
+
+.conf input{width:18px;height:18px;margin:0 6px 0 0;vertical-align:-3px;accent-color:#00B050}
+.planned{font-size:11px;color:#C65911;border:1px solid #C65911;border-radius:6px;padding:0 5px;margin-left:4px}
+.entry.is-plan .etext{color:#555}
+.efiles{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;width:100%}
+.entry{flex-wrap:wrap}
+.btn.tiny.danger{border-color:#C00000}
+.sheet label.check{display:flex;gap:8px;align-items:center;font-weight:600}
+.sheet label.check input{width:18px;height:18px}

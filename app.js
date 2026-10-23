@@ -206,7 +206,7 @@ function renderGrid() {
   stripeRuns((r) => !used.cdrop.has(r) && used.cpick.has(r), COL.cdrop, COL.cdrop);
   stripeRuns((r) => !used.cpick.has(r) && used.cdrop.has(r), COL.cpick, COL.cpick);
   // activities & comments (confirmed only), identical consecutive runs merged
-  const textFor = (kind, date) => entriesFor(p, date).filter((e) => e.kind === kind && e.status !== "recommended").map((e) => e.text).join("\n");
+  const textFor = (kind, date) => entriesFor(p, date).filter((e) => e.kind === kind && e.status !== "recommended" && (kind === "comment" || e.confirmed)).map((e) => e.text).join("\n");
   const runs = (kind, c, cls) => {
     let k = 0;
     while (k < ds.length) {
@@ -270,6 +270,7 @@ function itemCard(i, date) {
     ${pvHtml}
     <div class="ilinks">${mapLinks}${files.map(fileLink).join("")}</div>
     ${isEditor() ? `<div class="iacts"><button class="btn small" data-edit-item="${i.id}">Edit</button>
+       <button class="btn small danger" data-del-item="${i.id}">🗑 Delete</button>
        <label class="btn small">Attach file<input type="file" hidden data-attach-item="${i.id}" multiple></label></div>` : ""}
   </article>`;
 }
@@ -291,15 +292,24 @@ function renderDay() {
   const places = [];
   its.forEach((i) => { if (i.type === "stay" && i.status !== "tbc" && i.address) places.push([i.short || i.name, i.address]); });
   acts.forEach((e) => e.place && places.push([e.place, e.place]));
-  const dayFiles = isEditor() ? store.files.filter((f) => f.date === date || (f.itemId && its.some((i) => i.id === f.itemId))) : [];
+  const dayFiles = isEditor() ? store.files.filter((f) => f.date === date || (f.itemId && its.some((i) => i.id === f.itemId)) || (f.entryId && ents.some((e) => e.id === f.entryId))) : [];
   const route = places.length >= 2 ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(places[0][1])}&destination=${encodeURIComponent(places.at(-1)[1])}${places.length > 2 ? "&waypoints=" + encodeURIComponent(places.slice(1, -1).map((x) => x[1]).join("|")) : ""}` : "";
-  const entryLi = (e) => `<li class="entry ${e.status}">
-      <div class="etext">${e.status === "recommended" ? "☆ " : e.kind === "activity" ? "✓ " : ""}${fmt(e.text)}
+  const entryLi = (e) => {
+    const isAct = e.kind === "activity" && e.status !== "recommended";
+    const mark = e.status === "recommended" ? "☆ " : !isAct ? "" : isEditor()
+      ? `<label class="conf" title="Confirmed activities show in the itinerary"><input type="checkbox" data-confirm="${e.id}" ${e.confirmed ? "checked" : ""}></label>`
+      : (e.confirmed ? "✓ " : "○ ");
+    const efiles = isEditor() ? store.files.filter((f) => f.entryId === e.id) : [];
+    return `<li class="entry ${e.status} ${isAct ? (e.confirmed ? "is-conf" : "is-plan") : ""}">
+      <div class="etext">${mark}${fmt(e.text)}${isAct && !e.confirmed ? ` <span class="planned">planned</span>` : ""}
         ${(e.endDate && e.endDate !== e.date) ? `<span class="muted small"> (${fmtDate(e.date)} – ${fmtDate(e.endDate)})</span>` : ""}
         ${e.who.length < PEOPLE().length ? `<span class="whos">${e.who.map((w) => `<span class="t-init">${w}</span>`).join(" ")}</span>` : ""}</div>
       <div class="eacts">${e.place ? `<a class="maplink" target="_blank" rel="noopener" href="${maps(e.place)}">📍</a>` : ""}
         ${isEditor() ? `${e.status === "recommended" ? `<button class="btn tiny" data-plan="${e.id}">Add to plan</button>` : ""}
-        <button class="btn tiny" data-edit-entry="${e.id}">Edit</button>` : ""}</div></li>`;
+        ${isAct ? `<label class="btn tiny" title="Attach a booking / ticket - marks it confirmed">📎<input type="file" hidden data-attach-entry="${e.id}"></label>` : ""}
+        <button class="btn tiny" data-edit-entry="${e.id}">Edit</button>
+        <button class="btn tiny danger" data-del-entry="${e.id}" title="Delete">🗑</button>` : ""}</div>
+      ${efiles.length ? `<div class="efiles">${efiles.map(fileLink).join("")}</div>` : ""}</li>`; };
   root.innerHTML = `${header()}
   <div class="dayview">
     <div class="dayhead ${WEEKDAY_CLASS(date)}">
@@ -313,7 +323,7 @@ function renderDay() {
 
     <section><h3>Travel & stays</h3>${its.length ? its.map((i) => itemCard(i, date)).join("") : `<p class="muted">No flights, hotels or cars today.</p>`}</section>
 
-    <section><h3>Activities</h3><ul class="entries">${acts.map(entryLi).join("") || `<li class="muted">Nothing planned yet.</li>`}</ul>
+    <section><h3>Activities</h3>${isEditor() ? `<p class="muted small">Tick ☑ to confirm - only confirmed activities show in the itinerary. Attaching a booking confirms it.</p>` : ""}<ul class="entries">${acts.map(entryLi).join("") || `<li class="muted">Nothing planned yet.</li>`}</ul>
       ${isEditor() ? `<button class="btn small" data-new-entry="activity">+ Add activity</button>` : ""}</section>
 
     ${recs.length ? `<section><h3>Recommended</h3><ul class="entries">${recs.map(entryLi).join("")}</ul></section>` : ""}
@@ -334,8 +344,17 @@ function renderDay() {
   root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => { ui.day = ds[idx + +b.dataset.go]; history.replaceState({ day: ui.day }, "", "#" + ui.day); render(); }));
   root.querySelectorAll("[data-edit-item]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.editItem))));
   root.querySelectorAll("[data-edit-entry]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.editEntry))));
-  root.querySelectorAll("[data-new-entry]").forEach((b) => (b.onclick = () => entryForm({ kind: b.dataset.newEntry, date, endDate: date, who: [p, ...others.filter((o) => together(p, o, date))], status: "confirmed", text: "", place: "" })));
-  root.querySelectorAll("[data-plan]").forEach((b) => (b.onclick = () => { const e = store.entries.find((x) => x.id === b.dataset.plan); data.saveEntry({ ...e, status: "confirmed", date, endDate: date }); }));
+  root.querySelectorAll("[data-new-entry]").forEach((b) => (b.onclick = () => entryForm({ kind: b.dataset.newEntry, date, endDate: date, who: [p, ...others.filter((o) => together(p, o, date))], status: "planned", confirmed: false, text: "", place: "" })));
+  root.querySelectorAll("[data-plan]").forEach((b) => (b.onclick = () => { const e = store.entries.find((x) => x.id === b.dataset.plan); data.saveEntry({ ...e, status: "planned", confirmed: false, date, endDate: date }); }));
+  root.querySelectorAll("[data-confirm]").forEach((cb) => (cb.onchange = () => { const e = store.entries.find((x) => x.id === cb.dataset.confirm); data.saveEntry({ ...e, confirmed: cb.checked }); }));
+  root.querySelectorAll("[data-del-entry]").forEach((b) => (b.onclick = () => { const e = store.entries.find((x) => x.id === b.dataset.delEntry);
+    if (confirm(`Delete "${e.text}"${e.endDate && e.endDate !== e.date ? " (all its days)" : ""} for everyone?`)) data.deleteEntry(e.id); }));
+  root.querySelectorAll("[data-del-item]").forEach((b) => (b.onclick = () => { const i = store.items.find((x) => x.id === b.dataset.delItem);
+    const nm = i.type === "flight" ? `${i.route} ${i.number}` : i.type === "stay" ? i.name : `${i.company} car`;
+    if (confirm(`Delete ${nm} (${fmtDate(i.start)} – ${fmtDate(i.end)}) for everyone? Its attached documents stay in Documents.`)) data.deleteItem(i.id); }));
+  root.querySelectorAll("[data-attach-entry]").forEach((inp) => (inp.onchange = async () => {
+    const e = store.entries.find((x) => x.id === inp.dataset.attachEntry);
+    await upload(inp.files, { entryId: e.id, date: e.date }); await data.saveEntry({ ...e, confirmed: true }); }));
   root.querySelectorAll("[data-file]").forEach((b) => (b.onclick = async () => { const f = store.files.find((x) => x.id === b.dataset.file); const w = window.open("", "_blank"); const u = await data.fileUrl(f); if (w) w.location = u; else location.href = u; }));
   root.querySelectorAll("[data-del-file]").forEach((b) => (b.onclick = () => { const f = store.files.find((x) => x.id === b.dataset.delFile); if (confirm(`Remove ${f.name}?`)) data.deleteFile(f); }));
   root.querySelectorAll("[data-attach-item]").forEach((inp) => (inp.onchange = () => upload(inp.files, { itemId: inp.dataset.attachItem })));
@@ -440,15 +459,16 @@ function entryForm(e) {
   modal(`<h3>${isNew ? "Add" : "Edit"} ${e.kind}</h3>${e.kind === "activity" ? PDF_BTN : ""}
     <label>${e.kind === "comment" ? "Comment" : "Activity"}<textarea name="text" rows="3" required>${esc(e.text)}</textarea></label>
     ${e.kind === "activity" ? `<label>Place (for Google Maps)<input name="place" value="${esc(e.place || "")}" placeholder="e.g. Gran Cenote Tulum"></label>
-      <label>Status<select name="status"><option value="confirmed" ${e.status !== "recommended" ? "selected" : ""}>Confirmed</option><option value="recommended" ${e.status === "recommended" ? "selected" : ""}>Recommended</option></select></label>` : ""}
+      <label>Type<select name="status"><option value="planned" ${e.status !== "recommended" ? "selected" : ""}>In the plan</option><option value="recommended" ${e.status === "recommended" ? "selected" : ""}>Recommended idea</option></select></label>
+      <label class="check"><input type="checkbox" name="confirmed" ${e.confirmed ? "checked" : ""}> Confirmed - show it in the itinerary</label>` : ""}
     <div class="row"><label>From<input type="date" name="date" value="${e.date}" required></label><label>To<input type="date" name="endDate" value="${e.endDate || e.date}"></label></div>
     ${whoBoxes(e.who)}`,
     async (fd, form) => {
-      const out = { ...e, text: fd.get("text").trim(), place: fd.get("place") ?? e.place ?? "", status: fd.get("status") || "confirmed",
+      const out = { ...e, text: fd.get("text").trim(), place: fd.get("place") ?? e.place ?? "", status: fd.get("status") || "planned", confirmed: e.kind === "activity" ? (fd.get("confirmed") === "on" || !!form._pendingFile) && fd.get("status") !== "recommended" : true,
                     date: fd.get("date"), endDate: fd.get("endDate") || fd.get("date"), who: fd.getAll("who") };
       if (!out.who.length) throw new Error("Pick at least one person");
-      await data.saveEntry(out);
-      if (form._pendingFile) { toast("Attaching file…"); await data.uploadFile(form._pendingFile, { date: out.date }); toast("Saved with file attached"); }
+      const id = await data.saveEntry(out);
+      if (form._pendingFile) { toast("Attaching file…"); await data.uploadFile(form._pendingFile, { entryId: id, date: out.date }); toast("Saved and confirmed, with file attached"); }
     }, isNew ? null : () => data.deleteEntry(e.id));
   const form = document.querySelector(".sheet");
   wireExtract(form, () => "activity", (r) => {
@@ -484,7 +504,16 @@ function toast(msg) {
 
 // ================================================================= start
 ui.day = location.hash.slice(1) || null;
-data.onChange(() => { if (!document.querySelector(".modal")) render(); });
+const PLANNED_IDS = ["e007","e008","e009","e010","e011","e012","e013","e014","e015","e016","e017","e020"]; // Tulum day plans + Ruta del Vino: not booked yet
+let migrating = false;
+data.onChange(() => {
+  if (isEditor() && store.trip && (store.trip.schema || 1) < 2 && store.entries.length && !migrating) {
+    migrating = true;
+    data.migrateConfirmed((e) => e.kind === "comment" || (e.status !== "recommended" && !PLANNED_IDS.includes(e.id)))
+      .then(() => toast("Updated: activities now have a Confirmed tick")).catch((x) => { console.error(x); migrating = false; });
+  }
+  if (!document.querySelector(".modal")) render();
+});
 render();
 data.init(() => render()).catch((e) => { root.innerHTML = `<div class="login"><h1 class="title-red">Travel Planner</h1><p class="err">Couldn't start: ${esc(e.message)}. Check your connection and reload.</p></div>`; });
 if ("serviceWorker" in navigator && !data.DEMO) navigator.serviceWorker.register("./sw.js").catch(() => {});

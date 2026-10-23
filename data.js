@@ -125,9 +125,9 @@ export async function deleteEntry(id) {
 }
 
 // ------------------------------------------------------------------ files (editors)
-export async function uploadFile(file, { itemId = "", date = "" } = {}) {
+export async function uploadFile(file, { itemId = "", entryId = "", date = "" } = {}) {
   const id = uid("file");
-  const meta = { name: file.name, size: file.size, contentType: file.type || "application/octet-stream", itemId, date,
+  const meta = { name: file.name, size: file.size, contentType: file.type || "application/octet-stream", itemId, entryId, date,
                  uploadedBy: store.email, uploadedAt: new Date().toISOString() };
   if (DEMO) { store.files.push({ id, ...meta, path: "", demoUrl: URL.createObjectURL(file) }); emit(); return; }
   const path = `trips/${TRIP_ID}/files/${id}/${file.name}`;
@@ -244,4 +244,13 @@ Dates as YYYY-MM-DD, times as 24h HH:MM. Fill only fields you can read in the do
     }
   }
   throw lastErr;
+}
+
+// One-time update: give every activity a "confirmed" flag (only confirmed ones show in the grid)
+export async function migrateConfirmed(isConfirmed) {
+  if (DEMO) { store.entries.forEach((e) => { if (e.confirmed === undefined) e.confirmed = isConfirmed(e); }); store.trip.schema = 2; emit(); return; }
+  const { fsM } = fb; const batch = fsM.writeBatch(fb.db);
+  store.entries.filter((e) => e.confirmed === undefined).forEach((e) => batch.update(fsM.doc(col("entries"), e.id), { confirmed: isConfirmed(e) }));
+  batch.set(fsM.doc(fb.db, "trips", TRIP_ID), { schema: 2 }, { merge: true });
+  await batch.commit();
 }

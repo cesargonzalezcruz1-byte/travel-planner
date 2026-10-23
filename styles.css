@@ -353,3 +353,8 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 @keyframes from-left{from{transform:translateX(-40px);opacity:0}to{transform:none;opacity:1}}
 .from-right{animation:from-right .22s ease-out} .from-left{animation:from-left .22s ease-out}
 @media (prefers-reduced-motion:reduce){.from-right,.from-left{animation:none}}
+
+/* logo */
+.logo-lg{width:96px;height:96px;display:inline-block;margin-bottom:14px;filter:drop-shadow(0 10px 24px #00000040)}
+.logo-sm{width:36px;height:36px;display:block;border-radius:10px;box-shadow:0 0 0 1.5px #FFFFFF33}
+.loading .logo-lg{width:72px;height:72px;margin-bottom:10px}

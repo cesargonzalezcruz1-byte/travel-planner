@@ -99,7 +99,7 @@ function texts(i) {
 // ================================================================= rendering
 const root = $("#app");
 function render() {
-  if (!store.ready) { root.innerHTML = `<div class="loading">Loading…</div>`; return; }
+  if (!store.ready) { root.innerHTML = `<div class="loading"><img class="logo-lg" src="icons/logo.svg" alt=""><br>Loading…</div>`; return; }
   if (!store.role) return renderLogin();
   if (store.role === "none") return renderNoAccess();
   if (!ui.tripId) { data.openTrip(null); applyTheme(); return renderHome(); }
@@ -115,7 +115,7 @@ function render() {
 function renderLogin(err = "") {
   root.innerHTML = `
   <div class="login">
-    <h1 class="title-red">Travel Planner</h1>
+    <img class="logo-lg" src="icons/logo.svg" alt="Travel Planner logo"><h1 class="title-red">Travel Planner</h1>
     <p class="muted">Family itinerary</p>
     <form id="famForm" class="card">
       <label>Family Password</label>
@@ -138,7 +138,7 @@ function renderLogin(err = "") {
       : x.code === "auth/popup-closed-by-user" ? "" : "Google sign-in failed (" + (x.code || x.message) + ")."); } };
 }
 function renderNoAccess() {
-  root.innerHTML = `<div class="login"><h1 class="title-red">Travel Planner</h1>
+  root.innerHTML = `<div class="login"><img class="logo-lg" src="icons/logo.svg" alt="Travel Planner logo"><h1 class="title-red">Travel Planner</h1>
     <p>${esc(store.email)} isn't set up as an editor.</p><button class="btn" id="out">Sign Out</button></div>`;
   $("#out").onclick = data.signOut;
 }
@@ -167,7 +167,7 @@ function renderHome() {
       ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
     </article>`;
   };
-  root.innerHTML = `<header class="top"><div class="brand"><span class="title-red">Travel Planner</span>
+  root.innerHTML = `<header class="top"><div class="brand"><img class="logo-sm" src="icons/logo.svg" alt=""><span class="title-red">Travel Planner</span>
       <span class="role ${store.role}">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span></div>
     <div class="menu">${isEditor() ? `<button class="btn small primary" data-act="newtrip">+ New Trip</button>` : ""}
       <details class="more"><summary class="btn small">⋯</summary><div class="pop">
@@ -993,5 +993,5 @@ data.onChange(() => {
   if (!document.querySelector(".modal")) render();
 });
 render();
-data.init(() => render()).catch((e) => { root.innerHTML = `<div class="login"><h1 class="title-red">Travel Planner</h1><p class="err">Couldn't start: ${esc(e.message)}. Check your connection and reload.</p></div>`; });
+data.init(() => render()).catch((e) => { root.innerHTML = `<div class="login"><img class="logo-lg" src="icons/logo.svg" alt="Travel Planner logo"><h1 class="title-red">Travel Planner</h1><p class="err">Couldn't start: ${esc(e.message)}. Check your connection and reload.</p></div>`; });
 if ("serviceWorker" in navigator && !data.DEMO) navigator.serviceWorker.register("./sw.js").catch(() => {});

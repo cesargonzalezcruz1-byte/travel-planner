@@ -205,7 +205,7 @@ export async function migrateConfirmed(isConfirmed) {
 // ------------------------------------------------------------------ AI: read a booking PDF / photo (editors)
 // Every field is required (empty string when the document doesn't say) - with optional fields Gemini skips most of them.
 const S = (description) => ({ type: "string", description });
-const req = (properties) => ({ type: "object", properties, required: Object.keys(properties), propertyOrdering: Object.keys(properties) });
+const req = (properties) => ({ type: "object", properties, required: Object.keys(properties)});
 const EXTRACT_SCHEMA = req({
   type: { type: "string", enum: ["flight", "stay", "car", "activity"], description: "What the document books" },
   who: { type: "array", items: { type: "string" }, description: "Traveller codes on the booking" },

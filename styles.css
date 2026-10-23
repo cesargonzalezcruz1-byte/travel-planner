@@ -8,6 +8,7 @@
   --stay:#7A4BD6;   --stay-t:#ECE3FC;   --stay-t2:#D9C7F7; --stay-x:#3E1E7A;
   --car:#5D6573;    --car-t:#ECEDF1;    --car-t2:#D6D9E0;  --car-x:#2E3340;
   --act:#E0457B;    --act-t:#FCE3EE;    --act-x:#7A1440;
+  --food:#C77D0A; --transport:#0B8FB3; --shopping:#5E8F1A; --other:#A5A9B6;
   --danger:#B42318; --ok:#1E7A4E;
   font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif; color:var(--ink);
 }
@@ -28,6 +29,7 @@
   --stay:#A47BFF;   --stay-t:#2E2350;   --stay-t2:#40306E; --stay-x:#DDD0FF;
   --car:#9AA3B2;    --car-t:#2A2D36;    --car-t2:#3A3E49;  --car-x:#D9DDE6;
   --act:#FF5FA2;    --act-t:#3A1F2E;    --act-x:#FFC2DC;
+  --food:#E0A030; --transport:#2DB3D6; --shopping:#8CC63F; --other:#6B6F7C;
   --danger:#FF6B6B; --ok:#3DD68C; color-scheme:dark;
 }
 .k-flight{--k:var(--flight);--kt:var(--flight-t);--kx:var(--flight-x)}
@@ -361,7 +363,7 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 
 /* ================================================================ budget */
 .c-flight{--k:var(--flight);--kt:var(--flight-t)} .c-stay{--k:var(--stay);--kt:var(--stay-t)} .c-car{--k:var(--car);--kt:var(--car-t)} .c-act{--k:var(--act);--kt:var(--act-t)}
-.c-food{--k:#F2A93B;--kt:#F2A93B33} .c-transport{--k:#17B2D9;--kt:#17B2D933} .c-shopping{--k:#14B8A6;--kt:#14B8A633} .c-other{--k:#8B8FA0;--kt:#8B8FA033}
+.c-food{--k:var(--food)} .c-transport{--k:var(--transport)} .c-shopping{--k:var(--shopping)} .c-other{--k:var(--other)}
 .vseg.icons button{min-width:44px;padding:0 10px}
 .bd{max-width:640px;margin:0 auto;padding:14px 12px 60px}
 .bd-sum{display:grid;gap:12px}
@@ -397,3 +399,35 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 
 .bd-rates{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}
 .bd-rates p{margin:0;flex:1;min-width:200px}
+
+.pmrow{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.pmrow input{flex:1;min-width:0;padding:9px 10px;border:1.5px solid var(--line2);border-radius:12px;background:var(--card)}
+#pmlist:empty{display:none}
+.sheet label[hidden]{display:none}
+
+/* charts */
+.charts{display:grid;gap:18px}
+.chart{margin:0}
+.chart figcaption{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;font-size:13px;font-weight:800;margin-bottom:8px}
+.chart svg{width:100%;height:auto;display:block;overflow:visible;touch-action:pan-y}
+.chart .g{stroke:var(--line);stroke-width:1}
+.chart .ax{font-size:9.5px;fill:var(--muted);font-family:inherit} .chart .ax.strong{fill:var(--ink);font-weight:800}
+.chart .budget{stroke:var(--danger);stroke-width:1.5;stroke-dasharray:4 4}
+.chart .today{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 3}
+.chart .run{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+:root[data-theme="midnight"] .chart .run{stroke:var(--stay)}
+.chart .run-end{fill:var(--accent);stroke:var(--card);stroke-width:2} :root[data-theme="midnight"] .chart .run-end{fill:var(--stay)}
+.chart .cross-dot{fill:var(--card);stroke:var(--accent);stroke-width:2;pointer-events:none} :root[data-theme="midnight"] .chart .cross-dot{stroke:var(--stay)}
+.chart [data-tip]{cursor:pointer}
+.donut-wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.donut{width:150px!important;flex-shrink:0}
+.donut .d-lab{font-size:10px;fill:var(--muted);font-weight:700} .donut .d-val{font-size:16px;fill:var(--ink);font-weight:800}
+.legend{list-style:none;margin:0;padding:0;display:grid;gap:5px;flex:1;min-width:170px;font-size:12.5px}
+.legend li{display:flex;align-items:center;gap:7px}
+.legend i{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.legend span{flex:1} .legend b{font-weight:800} .legend small{color:var(--muted);width:32px;text-align:right}
+.legend.inline{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px} .legend.inline span{flex:none}
+.seg-mini{display:inline-flex;background:var(--soft);border-radius:14px;padding:3px;gap:2px}
+.seg-mini button{border:0;background:transparent;border-radius:11px;padding:4px 10px;font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer}
+.seg-mini button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px #0000001F}
+.ch-tip{position:fixed;z-index:70;max-width:260px;background:var(--dark);color:#fff;font-size:12px;font-weight:600;line-height:1.35;padding:7px 10px;border-radius:10px;pointer-events:none;box-shadow:0 6px 18px #0000003D}

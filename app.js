@@ -331,6 +331,8 @@ const BCATS = [["flight", "Flights", "flight"], ["stay", "Stays", "stay"], ["car
   ["food", "Food & Drink", "food"], ["transport", "Transport", "bus"], ["shopping", "Shopping", "bag"], ["other", "Other", "dots"]];
 const CURRENCIES = ["AUD", "USD", "MXN", "CAD", "NZD", "EUR", "GBP"];
 const SHARE = { ours: "Us", split: "Shared - split TBC", theirs: "Family (not ours)" };
+const usedMethods = () => [...new Set(Object.values(store.priv).map((v) => (v && v.paidWith || "").trim()).filter((m) => m && !/^paid$/i.test(m)))].sort();
+const payMethods = () => { const s = store.priv._budget; return s && Array.isArray(s.methods) ? s.methods : usedMethods(); };
 const budgetSettings = () => { const s = store.priv._budget || {}; return { home: s.home || "AUD", rates: s.rates || { USD: 1.5 }, total: +s.total || 0, cats: s.cats || {} }; };
 function parseMoney(str, home) {
   const s = String(str ?? "").trim(); if (!s) return null;
@@ -408,13 +410,14 @@ function renderBudget() {
         </div>
         <div class="bd-acts"><button class="btn primary" data-add-exp>+ Add Expense</button><button class="btn" data-bsettings>Budget Settings</button></div>
       </section>
+      <section class="charts"><h3>Charts</h3>${donutChart(B)}${dailyChart(B)}${cumulativeChart(B)}</section>
       <section><h3>By Category</h3><ul class="bc">${catRows || `<li class="muted">No costs yet.</li>`}</ul>
         <div class="bd-rates"><p class="muted small">All amounts in ${cur}${Object.keys(S.rates).length ? ` · ${Object.entries(S.rates).map(([c, r]) => `1 ${c} = ${r} ${cur}`).join(" · ")}` : ""}${store.priv._budget?.ratesDate ? ` · rates of ${longDate(store.priv._budget.ratesDate)}` : " · rates entered by hand"}</p>
           <button class="btn small" data-rates>↻ Latest Rates</button></div></section>
       <section><h3>Spending</h3>${expHtml || `<p class="muted">Nothing logged yet. Use <b>+ Add Expense</b> for meals, tickets, fuel, shopping…</p>`}</section>
       <section><h3>Bookings</h3>${bkHtml || `<p class="muted">No bookings yet.</p>`}</section>
     </div>`;
-  wireHeader(); wireBudget();
+  wireHeader(); wireBudget(); wireCharts();
 }
 function wireBudget() {
   root.querySelectorAll("[data-add-exp]").forEach((b) => (b.onclick = () => expenseForm({ date: b.dataset.addExp || (ui.day || defaultExpenseDate()) })));
@@ -447,7 +450,120 @@ async function refreshRates() {
     toast(`Rates updated (${date || "today"})`);
   } catch (e) { toast(e.message); }
 }
+// ---------------------------------------------------------------- budget charts (SVG, hover/tap tooltips)
+// Fixed category order for charts (chosen so neighbouring colours stay distinct, incl. colour-blind checks)
+const CHART_ORDER = ["flight", "food", "stay", "transport", "act", "shopping", "car", "other"];
+const catLabel = (k) => (BCATS.find((c) => c[0] === k) || [k, k])[1];
+const catVar = (k) => `var(--${k === "act" ? "act" : k})`;
+// spread each cost over the trip days it covers: stays per night, cars per rental day, everything else on its date
+function dailyCosts(B, spentOnly) {
+  const ds = days(), idx = Object.fromEntries(ds.map((d, i) => [d, i])), out = ds.map(() => Object.fromEntries(CHART_ORDER.map((k) => [k, 0])));
+  const put = (d, k, v) => { if (d in idx) out[idx[d]][k] += v; else if (ds.length) out[d < ds[0] ? 0 : ds.length - 1][k] += v; };
+  for (const r of B.rows) {
+    if (!r.home || r.share !== "ours" || (spentOnly && r.src !== "expense")) continue;
+    const k = CHART_ORDER.includes(r.cat) ? r.cat : "other";
+    if (r.src === "item" && (r.cat === "stay" || r.cat === "car") && r.end && r.end > r.date) {
+      const n = dayDiff(r.date, r.end); for (let j = 0; j < n; j++) put(addDays(r.date, j), k, r.home / n);
+    } else put(r.date, k, r.home);
+  }
+  return { ds, out };
+}
+const niceMax = (v) => { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p; };
+const kfmt = (v, cur) => (v >= 1000 ? `${money(v / 1000, cur, Number.isInteger(Math.round(v / 100) / 10) ? 0 : 1)}k` : money(v, cur));
+const pctTxt = (v, t) => { const p = v / t * 100; return p > 0 && p < 1 ? "<1%" : Math.round(p) + "%"; };
+function donutChart(B) {
+  const cur = B.S.home, parts = CHART_ORDER.map((k) => ({ k, v: B.cats[k].booked + B.cats[k].spent })).filter((p) => p.v > 0);
+  const total = parts.reduce((a, p) => a + p.v, 0); if (!total) return "";
+  const R = 64, r = 42, cx = 80, cy = 80; let a0 = -Math.PI / 2;
+  const arc = (a1, a2) => { const big = a2 - a1 > Math.PI ? 1 : 0, p = (a, rad) => `${(cx + rad * Math.cos(a)).toFixed(2)} ${(cy + rad * Math.sin(a)).toFixed(2)}`;
+    return `M${p(a1, R)}A${R} ${R} 0 ${big} 1 ${p(a2, R)}L${p(a2, r)}A${r} ${r} 0 ${big} 0 ${p(a1, r)}Z`; };
+  const segs = parts.map((p) => { const a1 = a0, a2 = a0 + p.v / total * Math.PI * 2 - (parts.length > 1 ? 0.0001 : 0.0002); a0 = a1 + p.v / total * Math.PI * 2;
+    const tip = `${catLabel(p.k)}: ${money(p.v, cur)} (${pctTxt(p.v, total)})`;
+    return parts.length === 1 ? `<circle cx="${cx}" cy="${cy}" r="${(R + r) / 2}" fill="none" stroke="${catVar(p.k)}" stroke-width="${R - r}" data-tip="${esc(tip)}"></circle>`
+      : `<path d="${arc(a1, a2)}" style="fill:${catVar(p.k)};stroke:var(--card);stroke-width:2" data-tip="${esc(tip)}"></path>`; }).join("");
+  return `<figure class="chart"><figcaption>Where the money goes</figcaption>
+    <div class="donut-wrap"><svg viewBox="0 0 160 160" class="donut" role="img" aria-label="Costs by type">${segs}
+      <text x="80" y="76" text-anchor="middle" class="d-lab">Total</text><text x="80" y="94" text-anchor="middle" class="d-val">${esc(kfmt(total, cur))}</text></svg>
+    <ul class="legend">${parts.map((p) => `<li><i style="background:${catVar(p.k)}"></i><span>${catLabel(p.k)}</span><b>${money(p.v, cur)}</b><small>${pctTxt(p.v, total)}</small></li>`).join("")}</ul></div></figure>`;
+}
+function dailyChart(B) {
+  const cur = B.S.home, spentOnly = ui.chartMode === "spent", { ds, out } = dailyCosts(B, spentOnly);
+  const tot = out.map((o) => Object.values(o).reduce((a, b) => a + b, 0)), max = niceMax(Math.max(0, ...tot));
+  const W = 340, H = 170, L = 38, T = 8, Bm = 22, cw = (W - L - 4) / Math.max(1, ds.length), bw = Math.max(3, Math.min(18, cw - 2)), ph = H - T - Bm;
+  const y = (v) => T + ph - v / max * ph;
+  const grid = [0, 0.5, 1].map((f) => `<line x1="${L}" x2="${W}" y1="${y(max * f)}" y2="${y(max * f)}" class="g"></line><text x="${L - 5}" y="${y(max * f) + 3.5}" text-anchor="end" class="ax">${esc(kfmt(max * f, cur))}</text>`).join("");
+  const bars = ds.map((d, i) => {
+    const x = L + 2 + i * cw + (cw - bw) / 2; let acc = 0, segs = "";
+    const ks = CHART_ORDER.filter((k) => out[i][k] > 0);
+    ks.forEach((k, j) => { const v = out[i][k], y0 = y(acc), y1 = y(acc + v), h = Math.max(0, y0 - y1 - (j < ks.length - 1 ? 1.5 : 0)); acc += v;
+      segs += j === ks.length - 1 ? `<path d="M${x} ${y0}V${y1 + Math.min(3, h / 2)}Q${x} ${y1} ${x + Math.min(3, bw / 2)} ${y1}H${x + bw - Math.min(3, bw / 2)}Q${x + bw} ${y1} ${x + bw} ${y1 + Math.min(3, h / 2)}V${y0}Z" style="fill:${catVar(k)}"></path>`
+        : `<rect x="${x}" y="${y0 - h}" width="${bw}" height="${h}" style="fill:${catVar(k)}"></rect>`; });
+    const tip = `${WD[D(d).getDay()].slice(0, 3)} ${shortDate(d)}: ${money(tot[i], cur)}${ks.length ? " · " + ks.map((k) => `${catLabel(k)} ${money(out[i][k], cur)}`).join(" · ") : ""}`;
+    const lab = i === 0 || D(d).getDate() === 1 || D(d).getDay() === 1 ? `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" class="ax">${D(d).getDate()}${i === 0 || D(d).getDate() === 1 ? " " + MON[D(d).getMonth()] : ""}</text>` : "";
+    return `<g>${segs}<rect x="${L + 2 + i * cw}" y="${T}" width="${cw}" height="${ph}" fill="transparent" data-tip="${esc(tip)}" data-day="${d}"></rect>${lab}</g>`;
+  }).join("");
+  const used = CHART_ORDER.filter((k) => out.some((o) => o[k] > 0));
+  return `<figure class="chart"><figcaption>${spentOnly ? "Spending by day" : "Cost by day"}
+      <span class="seg-mini"><button class="${spentOnly ? "" : "on"}" data-chart-mode="all">All costs</button><button class="${spentOnly ? "on" : ""}" data-chart-mode="spent">Spending only</button></span></figcaption>
+    ${tot.some((v) => v) ? `<svg viewBox="0 0 ${W} ${H}" class="bars" role="img" aria-label="${spentOnly ? "Spending" : "Costs"} per trip day">${grid}${bars}</svg>
+    <ul class="legend inline">${used.map((k) => `<li><i style="background:${catVar(k)}"></i><span>${catLabel(k)}</span></li>`).join("")}</ul>
+    <p class="muted small">${spentOnly ? "Expenses you logged, by the day you spent them." : "Hotels and cars are spread across the nights / days they cover; flights and activities sit on their date."} Tap a bar to open that day.</p>`
+    : `<p class="muted">${spentOnly ? "No expenses logged yet." : "No costs yet."}</p>`}</figure>`;
+}
+function cumulativeChart(B) {
+  const cur = B.S.home, { ds, out } = dailyCosts(B, false); if (!ds.length) return "";
+  let run = 0; const cum = out.map((o) => (run += Object.values(o).reduce((a, b) => a + b, 0)));
+  if (!run) return "";
+  const target = B.S.total, max = niceMax(Math.max(run, target || 0));
+  const W = 340, H = 150, L = 38, T = 10, Bm = 20, ph = H - T - Bm, step = (W - L - 8) / Math.max(1, ds.length - 1);
+  const x = (i) => L + 4 + i * step, y = (v) => T + ph - v / max * ph;
+  const grid = [0, 0.5, 1].map((f) => `<line x1="${L}" x2="${W}" y1="${y(max * f)}" y2="${y(max * f)}" class="g"></line><text x="${L - 5}" y="${y(max * f) + 3.5}" text-anchor="end" class="ax">${esc(kfmt(max * f, cur))}</text>`).join("");
+  const pts = cum.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const today = iso(new Date()), ti = ds.indexOf(today);
+  const hits = ds.map((d, i) => `<rect x="${x(i) - step / 2}" y="${T}" width="${step}" height="${ph}" fill="transparent" data-tip="${esc(`${WD[D(d).getDay()].slice(0, 3)} ${shortDate(d)}: ${money(cum[i], cur)} so far${target ? ` · ${Math.round(cum[i] / target * 100)}% of budget` : ""}`)}" data-x="${x(i)}" data-y="${y(cum[i])}"></rect>`).join("");
+  return `<figure class="chart"><figcaption>Running total${target ? " vs budget" : ""}</figcaption>
+    <svg viewBox="0 0 ${W} ${H}" class="line" role="img" aria-label="Cumulative trip cost${target ? " against the budget" : ""}">${grid}
+      ${target ? `<line x1="${L}" x2="${W}" y1="${y(target)}" y2="${y(target)}" class="budget"></line><text x="${W - 2}" y="${y(target) - 4}" text-anchor="end" class="ax strong">Budget ${esc(kfmt(target, cur))}</text>` : ""}
+      ${ti >= 0 ? `<line x1="${x(ti)}" x2="${x(ti)}" y1="${T}" y2="${T + ph}" class="today"></line>` : ""}
+      <polyline points="${pts}" class="run"></polyline>
+      <circle cx="${x(ds.length - 1)}" cy="${y(run)}" r="4" class="run-end"></circle>
+      <text x="${x(ds.length - 1) - 6}" y="${y(run) + (y(run) < T + 14 ? 14 : -8)}" text-anchor="end" class="ax strong">${esc(kfmt(run, cur))}</text>
+      <text x="${L + 4}" y="${H - 5}" class="ax">${shortDate(ds[0])}</text><text x="${W}" y="${H - 5}" text-anchor="end" class="ax">${shortDate(ds.at(-1))}</text>
+      <circle r="4.5" class="cross-dot" cx="-20" cy="-20"></circle>${hits}</svg></figure>`;
+}
+function wireCharts() {
+  let tip = document.querySelector(".ch-tip");
+  if (!tip) { tip = document.createElement("div"); tip.className = "ch-tip"; tip.setAttribute("role", "status"); document.body.appendChild(tip); }
+  const show = (el, ev) => {
+    tip.textContent = el.dataset.tip; tip.hidden = false;
+    const r = tip.getBoundingClientRect(), px = (ev.clientX ?? 0), py = (ev.clientY ?? 0);
+    tip.style.left = Math.max(8, Math.min(innerWidth - r.width - 8, px - r.width / 2)) + "px"; tip.style.top = Math.max(8, py - r.height - 14) + "px";
+    const dot = el.closest("svg")?.querySelector(".cross-dot"); if (dot && el.dataset.x) { dot.setAttribute("cx", el.dataset.x); dot.setAttribute("cy", el.dataset.y); }
+  };
+  const hide = () => { tip.hidden = true; root.querySelectorAll(".cross-dot").forEach((d) => { d.setAttribute("cx", -20); d.setAttribute("cy", -20); }); };
+  root.querySelectorAll(".chart [data-tip]").forEach((el) => { el.onpointermove = el.onpointerenter = (ev) => show(el, ev); el.onpointerleave = hide; });
+  root.querySelectorAll(".chart [data-day]").forEach((el) => (el.onclick = () => { hide(); openDay(el.dataset.day); }));
+  root.querySelectorAll("[data-chart-mode]").forEach((b) => (b.onclick = () => { ui.chartMode = b.dataset.chartMode; const y = scrollY; render(); scrollTo(0, y); }));
+  hide();
+}
+
 const defaultExpenseDate = () => { const t = iso(new Date()), tr = store.trip; return tr && t >= tr.start && t <= tr.end ? t : tr?.start || t; };
+// "Paid With": a list of the payment methods from Budget Settings, plus "Other…" for a one-off
+function payField(cur, name = "paidWith") {
+  const ms = payMethods(), v = (cur || "").trim(), other = v && !ms.includes(v);
+  return `<label>Paid With<select name="${name}" data-pay>${ms.length ? "" : `<option value="">-</option>`}${ms.map((m) => `<option ${m === v ? "selected" : ""}>${esc(m)}</option>`).join("")}<option value="__other" ${other || !ms.length ? "selected" : ""}>Other…</option></select></label>
+    <label class="payother" ${other || !ms.length ? "" : "hidden"}>Other Payment Method<input name="${name}Other" value="${other ? esc(v) : ""}" placeholder="e.g. Cash, Visa 0385"></label>`;
+}
+const readPay = (fd, name = "paidWith") => (fd.get(name) === "__other" ? (fd.get(name + "Other") || "") : (fd.get(name) || "")).trim();
+function setPay(form, name, v) {
+  const sel = form.querySelector(`[name="${name}"]`); if (!sel) return;
+  const opt = [...sel.options].find((o) => o.value.toLowerCase() === String(v).trim().toLowerCase());
+  sel.value = opt ? opt.value : "__other"; const o = sel.closest("label").nextElementSibling; o.hidden = !!opt;
+  if (!opt) o.querySelector("input").value = v;
+}
+function wirePay(form) {
+  form.querySelectorAll("[data-pay]").forEach((sel) => (sel.onchange = () => { const o = sel.closest("label").nextElementSibling; o.hidden = sel.value !== "__other"; if (!o.hidden) o.querySelector("input").focus(); }));
+}
 function expenseForm(x) {
   const S = budgetSettings(), isNew = !x.id;
   const curs = [...new Set([S.home, ...Object.keys(S.rates), ...CURRENCIES])];
@@ -457,12 +573,13 @@ function expenseForm(x) {
       <label>Currency<select name="currency">${curs.map((c) => `<option ${c === (x.currency || S.home) ? "selected" : ""}>${c}</option>`).join("")}</select></label></div>
     <div class="row"><label>Category<select name="cat">${BCATS.map(([k, l]) => `<option value="${k}" ${k === (x.cat || "food") ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label>Date<input type="date" name="date" value="${x.date || defaultExpenseDate()}"></label></div>
-    <label>Paid With<input name="paidWith" value="${esc(x.paidWith || "")}" placeholder="e.g. Amex 2008, cash"></label>
+    ${payField(x.paidWith)}
     ${whoBoxes(x.who || PEOPLE())}`,
     async (fd) => {
       const amount = parseFloat(fd.get("amount")); if (!(amount >= 0)) throw new Error("Enter an amount");
-      await data.savePrivate(x.id || null, { kind: "expense", text: fd.get("text").trim(), amount, currency: fd.get("currency"), cat: fd.get("cat"), date: fd.get("date"), paidWith: fd.get("paidWith").trim(), who: fd.getAll("who") });
+      await data.savePrivate(x.id || null, { kind: "expense", text: fd.get("text").trim(), amount, currency: fd.get("currency"), cat: fd.get("cat"), date: fd.get("date"), paidWith: readPay(fd), who: fd.getAll("who") });
     }, isNew ? null : () => data.deletePrivate(x.id));
+  wirePay(document.querySelector(".sheet"));
 }
 function budgetForm() {
   const S = budgetSettings();
@@ -472,6 +589,10 @@ function budgetForm() {
     <fieldset class="pbox"><legend>Exchange Rates (in home currency)</legend><div class="rates">${rateRows}</div>
       <div class="row wrap"><button type="button" class="btn small" data-fetch-rates>↻ Get Latest Rates</button><span class="muted small" data-rates-note>${store.priv._budget?.ratesDate ? `Last updated: ${longDate(store.priv._budget.ratesDate)}` : "Daily European Central Bank rates"}</span></div>
       <p class="muted small">Costs in other currencies are converted with these. Banks and cards add their own fees.</p></fieldset>
+    <fieldset class="pbox"><legend>Payment Methods</legend>
+      <div id="pmlist">${payMethods().map((m) => `<div class="pmrow"><input name="pm" value="${esc(m)}" placeholder="e.g. Amex 2008"><button type="button" class="btn tiny danger" data-rm-pm aria-label="Remove">✕</button></div>`).join("")}</div>
+      <button type="button" class="btn tiny" data-add-pm>+ Add Method</button>
+      <p class="muted small">These appear in the Paid With list when you add an expense or a booking.</p></fieldset>
     <label>Total Budget<input name="total" type="number" step="any" min="0" value="${S.total || ""}" placeholder="optional"></label>
     <fieldset class="pbox"><legend>Budget per Category (Optional)</legend><div class="rates">
       ${BCATS.map(([k, l]) => `<label>${l}<input name="cat.${k}" type="number" step="any" min="0" value="${S.cats[k] || ""}"></label>`).join("")}</div></fieldset>`,
@@ -479,9 +600,14 @@ function budgetForm() {
       const rates = {}, cats = {};
       for (const [k, v] of fd.entries()) { if (k.startsWith("rate.") && v) rates[k.slice(5)] = +v; if (k.startsWith("cat.") && v) cats[k.slice(4)] = +v; }
       const form = document.querySelector(".sheet");
-      await data.savePrivate("_budget", { home: fd.get("home"), rates, total: +fd.get("total") || 0, cats, ratesDate: form?.dataset.ratesDate || store.priv._budget?.ratesDate || "" });
+      const methods = [...new Set(fd.getAll("pm").map((m) => m.trim()).filter(Boolean))];
+      await data.savePrivate("_budget", { home: fd.get("home"), rates, total: +fd.get("total") || 0, cats, methods, ratesDate: form?.dataset.ratesDate || store.priv._budget?.ratesDate || "" });
     });
   const form = document.querySelector(".sheet");
+  form.addEventListener("click", (e) => {
+    if (e.target.closest("[data-rm-pm]")) e.target.closest(".pmrow").remove();
+    if (e.target.closest("[data-add-pm]")) { form.querySelector("#pmlist").insertAdjacentHTML("beforeend", `<div class="pmrow"><input name="pm" placeholder="e.g. Cash"><button type="button" class="btn tiny danger" data-rm-pm aria-label="Remove">✕</button></div>`); form.querySelector("#pmlist .pmrow:last-child input").focus(); }
+  });
   form.querySelector("[data-fetch-rates]").onclick = async (ev) => {
     const btn = ev.currentTarget, note = form.querySelector("[data-rates-note]"), home = form.querySelector("[name=home]").value;
     btn.disabled = true; note.textContent = "Getting rates…";
@@ -1049,7 +1175,7 @@ function itemForm(item) {
     <div id="statusBox">${item.type !== "flight" ? statusSel(item.status) : ""}</div>
     <label>Note (Visible to Family)<input name="note" value="${esc(item.note || "")}"></label>
     <details class="privbox" ${Object.keys(pv).length ? "open" : ""}><summary>Private Details (Editors Only)</summary>
-      ${privKeys.map((k) => `<label>${esc(label(k))}<input name="priv.${k}" value="${esc(pv[k] || "")}"></label>`).join("")}
+      ${privKeys.map((k) => k === "paidWith" ? payField(pv.paidWith, "priv.paidWith") : `<label>${esc(label(k))}<input name="priv.${k}" value="${esc(pv[k] || "")}"></label>`).join("")}
       <label>Who Pays<select name="priv.share">${Object.entries(SHARE).map(([k, l]) => `<option value="${k}" ${(pv.share || "ours") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label></details>`,
     async (fd, form) => {
       const type = fd.get("type") || item.type;
@@ -1058,6 +1184,7 @@ function itemForm(item) {
       if (!out.who.length) throw new Error("Pick at least one person");
       if (out.end < out.start) throw new Error("'To' is before 'From'");
       let priv = {}; for (const [k, v] of fd.entries()) if (k.startsWith("priv.") && v) priv[k.slice(5)] = v;
+      delete priv.paidWithOther; const pw = readPay(fd, "priv.paidWith"); if (pw) priv.paidWith = pw; else delete priv.paidWith;
       let skipOverlap = false;
       if (isNew) {
         const dup = findDuplicate(out, priv);
@@ -1087,6 +1214,7 @@ function itemForm(item) {
     }, isNew ? null : () => data.deleteItem(item.id));
   const form = document.querySelector(".sheet");
   const sel = form.querySelector("select[name=type]");
+  wirePay(form);
   const switchType = (t, src) => {
     form.querySelector("#typeFields").innerHTML = fieldsFor(t, src);
     form.querySelector("#statusBox").innerHTML = t !== "flight" ? statusSel(src.status) : "";
@@ -1101,6 +1229,7 @@ function itemForm(item) {
     const p = r.private || {};
     for (const [k, v] of Object.entries(p)) {
       if (!v) continue;
+      if (k === "paidWith") { setPay(form, "priv.paidWith", v); continue; }
       if (!form.querySelector(`[name="priv.${k}"]`)) form.querySelector(".privbox").insertAdjacentHTML("beforeend", `<label>${esc(label(k))}<input name="priv.${k}"></label>`);
       setVal(form, "priv." + k, v);
     }

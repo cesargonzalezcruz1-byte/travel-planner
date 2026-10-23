@@ -255,6 +255,16 @@ function tripForm(t) {
 
 // ---------------------------------------------------------------- icons + type colours (same everywhere)
 const SV = (d, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}${extra}</svg>`;
+const I = {
+  pin: SV('<path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
+  clip: SV('<path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/>'),
+  trash: SV('<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>'),
+  file: SV('<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M9 13h6M9 17h4"/>'),
+  map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
+  star: SV('<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/>'),
+  eat: SV('<path d="M7 3v8M4 3v5a3 3 0 0 0 6 0V3M7 11v10M17 21V3c-2 1-3.5 3.5-3.5 7 0 2 1.5 3 3.5 3"/>'),
+  scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
+};
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
   stay: SV('<path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/>'),
@@ -893,8 +903,8 @@ function itemCard(i, date) {
                role === "Check-out" || role === "Drop-off" ? t.end : t.mid;
   const addr = i.type === "stay" ? i.address : i.type === "car" ? (role === "Drop-off" ? i.dropoff : i.pickup) : "";
   const mapQ = i.type === "stay" ? (i.address || i.name) : i.type === "car" ? `${i.company} ${addr}` : i.route.split("-").map((a) => a + " airport");
-  const mapLinks = Array.isArray(mapQ) ? mapQ.map((q) => `<a class="maplink" target="_blank" rel="noopener" href="${maps(q)}">📍 ${esc(q.replace(" airport", ""))}</a>`).join("")
-                                       : (i.status !== "tbc" && mapQ ? `<a class="maplink" target="_blank" rel="noopener" href="${maps(mapQ)}">📍 Open in Google Maps</a>` : "");
+  const mapLinks = Array.isArray(mapQ) ? mapQ.map((q) => `<a class="maplink" target="_blank" rel="noopener" href="${maps(q)}"><i class="ic16">${I.pin}</i>${esc(q.replace(" airport", ""))}</a>`).join("")
+                                       : (i.status !== "tbc" && mapQ ? `<a class="maplink" target="_blank" rel="noopener" href="${maps(mapQ)}"><i class="ic16">${I.pin}</i>Open in Google Maps</a>` : "");
   const pv = isEditor() ? store.priv[i.id] : null;
   const pvHtml = pv && Object.keys(pv).length ? `<dl class="priv">${Object.entries(pv).filter(([k, v]) => v && !["updatedBy", "updatedAt", "kind"].includes(k) && !(k === "share" && v === "ours")).map(([k, v]) => `<dt>${esc(label(k))}</dt><dd>${esc(k === "share" ? SHARE[v] || v : v)}</dd>`).join("")}</dl>` : "";
   const files = isEditor() ? store.files.filter((f) => f.itemId === i.id) : [];
@@ -907,15 +917,15 @@ function itemCard(i, date) {
     ${pvHtml}
     <div class="ilinks">${mapLinks}${files.map(fileLink).join("")}</div>
     ${isEditor() ? `<div class="iacts"><button class="btn small" data-edit-item="${i.id}">Edit</button>
-       <button class="btn small danger" data-del-item="${i.id}">🗑 Delete</button>
-       <label class="btn small">Attach File<input type="file" hidden data-attach-item="${i.id}" multiple></label></div>` : ""}
+       <button class="btn small danger" data-del-item="${i.id}"><i class="ic16">${I.trash}</i>Delete</button>
+       <label class="btn small"><i class="ic16">${I.clip}</i>Attach File<input type="file" hidden data-attach-item="${i.id}" multiple></label></div>` : ""}
   </article>`;
 }
 const LABELS = { confirmation: "Confirmation", tickets: "Tickets", seats: "Seats", cost: "Cost", paidWith: "Paid With", dueAtHotel: "Due at Hotel",
   cancel: "Cancellation", phone: "Phone", share: "Who Pays", host: "Host", checkIn: "Check-In", bags: "Bags", extras: "Extras", notes: "Notes" };
 const cap = (w) => String(w || "").replace(/^./, (c) => c.toUpperCase());
 const label = (k) => LABELS[k] || k;
-const fileLink = (f) => `<button class="filelink" data-file="${f.id}">📄 ${esc(f.name)}</button>`;
+const fileLink = (f) => `<button class="filelink" data-file="${f.id}"><i class="ic16">${I.file}</i>${esc(f.name)}</button>`;
 
 function renderDay() {
   const p = ui.person, date = ui.day, ds = days();
@@ -936,20 +946,29 @@ function renderDay() {
     if (i.type === "flight") {
       const codes = codesOf(i.route);
       const todays = i.start === i.end ? codes : date === i.start ? codes.slice(0, -1) : date === i.end ? codes.slice(-1) : [];
-      todays.forEach((c) => pins.push({ q: apt(c), name: c, kind: "Airport" + (i.number ? " · " + i.number : ""), glyph: "✈", color: COLOR.flight }));
+      todays.forEach((c) => pins.push({ q: apt(c), name: c, kind: "Airport" + (i.number ? " · " + i.number : ""), glyph: ICON.flight, color: COLOR.flight }));
     } else if (i.type === "stay") {
-      if (i.address || i.name) pins.push({ q: i.address || i.name, name: i.short || i.name, kind: i.status === "tbc" ? "Hotel (TBC)" : "Hotel", glyph: "🛏", color: COLOR.stay, hollow: i.status === "tbc" });
+      if (i.address || i.name) pins.push({ q: i.address || i.name, name: i.short || i.name, kind: i.status === "tbc" ? "Hotel (TBC)" : "Hotel", glyph: ICON.stay, color: COLOR.stay, hollow: i.status === "tbc" });
     } else if (i.type === "car") {
-      const at = (loc, what) => loc && pins.push({ q: [i.company, apt(loc)].filter(Boolean).join(" "), name: `${i.company || "Car"} ${loc}`, kind: what, glyph: "🚗", color: COLOR.car });
+      const at = (loc, what) => loc && pins.push({ q: [i.company, apt(loc)].filter(Boolean).join(" "), name: `${i.company || "Car"} ${loc}`, kind: what, glyph: ICON.car, color: COLOR.car });
       if (date === i.start) at(i.pickup, "Car Pick-Up" + (i.pickupTime ? " " + i.pickupTime : ""));
       if (date === i.end) at(i.dropoff, "Car Drop-Off" + (i.dropoffTime ? " " + i.dropoffTime : ""));
     }
   });
   ents.filter((e) => e.kind === "activity" && e.place).forEach((e) => {
     const ok = e.confirmed && e.status !== "recommended";
-    pins.push({ q: e.place, name: e.place, kind: ok ? "Confirmed Activity" : e.status === "recommended" ? "Recommended" : "Planned - Not Confirmed", glyph: ok ? "★" : "☆", color: COLOR.act, hollow: !ok });
+    pins.push({ q: e.place, name: e.place, kind: ok ? "Confirmed Activity" : e.status === "recommended" ? "Recommended" : "Planned - Not Confirmed", glyph: I.star, color: COLOR.act, hollow: !ok });
   });
+  // Google recommendations near today's stay: top 5 to do + top 5 to eat (all of the open tab when expanded), skipping ones already planned
+  const rlocs = dayLocations(p, date), rkey = rlocs.some((l) => l.key === ui.recLoc) ? ui.recLoc : rlocs[0]?.key, rrec = rkey && (store.trip.recs || {})[rkey];
+  const inPlan = (x) => ents.some((e) => e.kind === "activity" && (e.text === x.name || String(e.place || "").startsWith(x.name)));
+  const recPins = [];
+  if (rrec) [["do", COLOR.act, I.star, "Recommended"], ["eat", cssv("--food"), I.eat, "Place to Eat"]].forEach(([tab, color, glyph, kind]) =>
+    (rrec[tab] || []).slice(0, ui.recMore && (ui.recTab || "do") === tab ? 20 : 5).filter((x) => !inPlan(x)).forEach((x) =>
+      recPins.push({ q: [x.name, x.address].filter(Boolean).join(", "), name: x.name, kind: `${kind} · ★ ${x.rating.toFixed(1)}`, glyph, color, hollow: true, rec: true,
+        url: x.url, pos: x.lat != null ? { lat: x.lat, lng: x.lng, addr: x.address } : null })));
   const places = pins.filter((x) => !x.hollow).map((x) => [x.name, x.q]);
+  const mapPins = pins.concat(recPins);
   const dayFiles = isEditor() ? store.files.filter((f) => f.date === date || (f.itemId && its.some((i) => i.id === f.itemId)) || (f.entryId && ents.some((e) => e.id === f.entryId))) : [];
   const route = places.length >= 2 ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(places[0][1])}&destination=${encodeURIComponent(places.at(-1)[1])}${places.length > 2 ? "&waypoints=" + encodeURIComponent(places.slice(1, -1).map((x) => x[1]).join("|")) : ""}` : "";
   const entryLi = (e) => {
@@ -962,11 +981,11 @@ function renderDay() {
       <div class="etext">${mark}${fmt(e.text)}${isAct && !e.confirmed ? ` <span class="planned">planned</span>` : ""}${ratingBadge(e.id)}
         ${(e.endDate && e.endDate !== e.date) ? `<span class="muted small"> (${fmtDate(e.date)} – ${fmtDate(e.endDate)})</span>` : ""}
         ${e.who.length < PEOPLE().length ? `<span class="whos">${e.who.map((w) => `<span class="t-init">${w}</span>`).join(" ")}</span>` : ""}</div>
-      <div class="eacts">${e.place ? `<a class="maplink" target="_blank" rel="noopener" href="${maps(e.place)}">📍</a>` : ""}
+      <div class="eacts">${e.place ? `<a class="ibtn pin" target="_blank" rel="noopener" href="${maps(e.place)}" title="Open in Google Maps" aria-label="Open in Google Maps">${I.pin}</a>` : ""}
         ${isEditor() ? `${e.status === "recommended" ? `<button class="btn tiny" data-plan="${e.id}">Add to Plan</button>` : ""}
-        ${isAct ? `<label class="btn tiny" title="Attach a booking / ticket - marks it confirmed">📎<input type="file" hidden data-attach-entry="${e.id}"></label>` : ""}
+        ${isAct ? `<label class="ibtn" title="Attach a booking / ticket - marks it confirmed" aria-label="Attach a booking or ticket">${I.clip}<input type="file" hidden data-attach-entry="${e.id}"></label>` : ""}
         <button class="btn tiny" data-edit-entry="${e.id}">Edit</button>
-        <button class="btn tiny danger" data-del-entry="${e.id}" title="Delete">🗑</button>` : ""}</div>
+        <button class="ibtn danger" data-del-entry="${e.id}" title="Delete" aria-label="Delete">${I.trash}</button>` : ""}</div>
       ${efiles.length ? `<div class="efiles">${efiles.map(fileLink).join("")}</div>` : ""}</li>`; };
   root.innerHTML = `${header()}
   <div class="dayview">
@@ -989,10 +1008,10 @@ function renderDay() {
       ${isEditor() ? `<button class="btn small" data-new-entry="comment">+ Add Comment</button>` : ""}</section>
 
     <section><h3>Map</h3>
-      ${pins.length ? `${mapsReady() ? `<div class="daymap" id="daymap"></div><p class="daymap-msg muted small"></p>` : isEditor() ? `<p class="muted small">The embedded map isn't set up yet (needs a Google Maps key).</p>` : ""}
-      <div class="maplegend"><span><i style="background:${COLOR.flight}"></i>Flight</span><span><i style="background:${COLOR.stay}"></i>Stay</span><span><i style="background:${COLOR.car}"></i>Car</span><span><i style="background:${COLOR.act}"></i>Activity</span><span><i class="hollow" style="border-color:${COLOR.act}"></i>Recommended / Not Confirmed</span></div>
+      ${mapPins.length ? `${mapsReady() ? `<div class="daymap" id="daymap"></div><p class="daymap-msg muted small"></p>` : isEditor() ? `<p class="muted small">The embedded map isn't set up yet (needs a Google Maps key).</p>` : ""}
+      <div class="maplegend"><span><i style="background:${COLOR.flight}"></i>Flight</span><span><i style="background:${COLOR.stay}"></i>Stay</span><span><i style="background:${COLOR.car}"></i>Car</span><span><i style="background:${COLOR.act}"></i>Activity</span><span><i class="hollow" style="border-color:${COLOR.act}"></i>Recommended / Not Confirmed</span>${recPins.some((x) => x.glyph === I.eat) ? `<span><i class="hollow" style="border-color:${cssv("--food")}"></i>Place to Eat</span>` : ""}</div>
       <ul class="places">${pins.map((x) => `<li><a class="maplink" target="_blank" rel="noopener" href="${maps(x.q)}"><i class="pdot${x.hollow ? " hollow" : ""}" style="--pin:${x.color}">${x.glyph}</i> ${esc(x.name)} <span class="muted small">${esc(x.kind)}</span></a></li>`).join("")}</ul>` : `<p class="muted">No places for this day.</p>`}
-      ${route ? `<a class="btn small" target="_blank" rel="noopener" href="${route}">🗺 Day Route in Google Maps</a>` : ""}</section>
+      ${route ? `<a class="btn small" target="_blank" rel="noopener" href="${route}"><i class="ic16">${I.map}</i>Day Route in Google Maps</a>` : ""}</section>
 
     ${isEditor() ? (() => { const S = budgetSettings(), ex = expenses().filter((x) => x.date === date);
       return `<section class="bd-day"><h3>Spending</h3>${ex.length ? ex.map((x) => { const m = { amt: +x.amount || 0, cur: x.currency || S.home }, h = toHome(m, S);
@@ -1014,7 +1033,7 @@ function renderDay() {
     catch (x) { toast("Couldn't save: " + (x.code || x.message)); }
   }));
   const mapBox = root.querySelector("#daymap");
-  if (mapBox) drawDayMap(mapBox, pins, root.querySelector(".daymap-msg")).catch((x) => { mapBox.hidden = true; const m = root.querySelector(".daymap-msg"); if (m) m.textContent = "Map unavailable: " + x.message; });
+  if (mapBox) drawDayMap(mapBox, mapPins, root.querySelector(".daymap-msg")).catch((x) => { mapBox.hidden = true; const m = root.querySelector(".daymap-msg"); if (m) m.textContent = "Map unavailable: " + x.message; });
   root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => { ui.slide = +b.dataset.go > 0 ? "from-right" : "from-left"; routeTo(ui.tripId, ds[idx + +b.dataset.go], true); }));
   root.querySelectorAll("[data-edit-item]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.editItem))));
   root.querySelectorAll("[data-edit-entry]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.editEntry))));
@@ -1037,7 +1056,7 @@ function renderDay() {
 // ------------------------------------------------------------------ recommendations
 // Every stay location gets the best-rated things to do and places to eat from Google (Places API).
 // Results are cached on the trip (so the family sees them too); a new or changed location is looked up automatically.
-const REC_V = 1;
+const REC_V = 2;   // v2 adds coordinates for the map
 const recKey = (area) => area.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "x";
 const stayArea = (s) => areaOf(s) || s.short || s.name || "";
 function recLocations() {
@@ -1060,7 +1079,7 @@ function dayLocations(p, date) {
 const recState = { busy: new Set(), tried: new Set(), error: "" };
 const recScore = (x) => (x.rating * x.count + 4.2 * 150) / (x.count + 150);
 const tidy = (list) => list.filter((x) => x.rating && x.count >= 15).sort((a, b) => recScore(b) - recScore(a)).slice(0, 20)
-  .map(({ id, name, rating, count, address, type, url }) => ({ id, name, rating, count, address, type, url }));
+  .map(({ id, name, rating, count, address, type, url, lat, lng }) => ({ id, name, rating, count, address, type, url, lat, lng }));
 async function fetchRecs(loc) {
   recState.busy.add(loc.key); recState.tried.add(loc.key); if (ui.day) render();
   try {
@@ -1279,7 +1298,7 @@ function modal(html, onSubmit, onDelete) {
   m.querySelector("input,select,textarea")?.focus();
 }
 const whoBoxes = (who) => `<fieldset class="whobox"><legend>Who</legend>${PEOPLE().map((p) => `<label><input type="checkbox" name="who" value="${p}" ${who.includes(p) ? "checked" : ""}> ${p}</label>`).join("")}</fieldset>`;
-const PDF_BTN = `<div class="extract"><label class="btn small pdfbtn">📄 Fill from PDF or Photo<input type="file" hidden accept="application/pdf,image/*" data-extract></label>
+const PDF_BTN = `<div class="extract"><label class="btn small pdfbtn"><i class="ic16">${I.scan}</i>Fill from PDF or Photo<input type="file" hidden accept="application/pdf,image/*" data-extract></label>
   <span class="extract-status muted small">The file is read by AI, then attached. Check the details before saving.</span></div>`;
 function setVal(form, name, v) { const el = form.querySelector(`[name="${name}"]`); if (el && v !== undefined && v !== null && v !== "") el.value = v; }
 // After AI fill: red label + * on the fields that matter most (and any the AI was unsure of); cleared once the field is touched.

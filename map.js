@@ -59,7 +59,7 @@ export async function drawDayMap(holder, pins, msgEl) {
   lastSig = sig;
   markers.forEach((m) => (m.map = null)); markers = []; info.close();
   const gc = new Geocoder();
-  const pos = await Promise.all(pins.map((p) => geocode(gc, p.q).catch(() => null)));
+  const pos = await Promise.all(pins.map((p) => (p.pos ? p.pos : geocode(gc, p.q).catch(() => null))));
   if (sig !== lastSig) return;   // another day was opened meanwhile
   const bounds = new google.maps.LatLngBounds(); const seen = {}; const missing = [];
   pins.forEach((p, i) => {
@@ -70,7 +70,7 @@ export async function drawDayMap(holder, pins, msgEl) {
     el.innerHTML = `<span>${p.glyph}</span>`;
     const m = new AdvancedMarkerElement({ map, position, content: el, title: `${p.kind}: ${p.name}` });
     m.addListener("click", () => {
-      info.setContent(`<div class="mpop"><b>${esc(p.name)}</b><div class="k" style="color:${p.color}">${esc(p.kind)}</div>${at.addr ? `<div>${esc(at.addr)}</div>` : ""}<a target="_blank" rel="noopener" href="${link(p.q)}">Open in Google Maps</a></div>`);
+      info.setContent(`<div class="mpop"><b>${esc(p.name)}</b><div class="k" style="color:${p.color}">${esc(p.kind)}</div>${at.addr ? `<div>${esc(at.addr)}</div>` : ""}<a target="_blank" rel="noopener" href="${p.url || link(p.q)}">Open in Google Maps</a></div>`);
       info.open({ anchor: m, map });
     });
     markers.push(m); bounds.extend(position);

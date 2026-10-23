@@ -1,5 +1,5 @@
 // Offline support: cache the app shell + Firebase SDK. Trip data is cached by Firestore itself.
-const CACHE = "travel-planner-v14";
+const CACHE = "travel-planner-v15";
 const SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./data.js", "./firebase-config.js", "./map.js", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL))); self.skipWaiting(); });
@@ -14,7 +14,7 @@ self.addEventListener("fetch", (e) => {
   const sdk = url.hostname === "www.gstatic.com" && url.pathname.startsWith("/firebasejs/");
   if (!sameOrigin && !sdk) return; // Firestore/Auth/Storage traffic goes straight to the network
   // network first (so updates show up), fall back to cache when offline
-  e.respondWith(fetch(e.request).then((res) => {
+  e.respondWith(fetch(e.request, sameOrigin ? { cache: "no-cache" } : {}).then((res) => {   // no-cache: always check GitHub for a newer file
     const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return res;
   }).catch(() => caches.match(e.request).then((r) => r || caches.match("./index.html"))));
 });

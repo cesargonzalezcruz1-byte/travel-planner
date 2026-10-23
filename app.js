@@ -1,5 +1,12 @@
 import * as data from "./data.js";
 import { drawDayMap, mapsReady } from "./map.js";
+// Preview another date: add ?today=2027-01-14 to the address to see the app as it will look on that day
+(() => { const m = location.search.match(/[?&]today=(\d{4}-\d{2}-\d{2})/); if (!m) return;
+  const R = Date, off = new R(m[1] + "T12:00:00").getTime() - R.now();   // shift the clock, keep it ticking
+  window.Date = class extends R { constructor(...a) { super(...(a.length ? a : [R.now() + off])); } static now() { return R.now() + off; } };
+  window.__previewDate = m[1];
+})();
+
 const { store } = data;
 
 // ================================================================= helpers
@@ -293,7 +300,7 @@ const viewsFor = () => VIEWS.filter((v) => v[0] !== "budget" || isEditor());
 function header(opts = {}) {
   const t = store.trip || {}; const today = iso(new Date());
   const when = !t.start ? "" : t.start > today ? `In ${dayDiff(today, t.start)} days` : today <= t.end ? "On now" : "";
-  const sub = [t.start ? `${shortDate(t.start)} – ${shortDate(t.end)}` : "", when].filter(Boolean).join(" · ");
+  const sub = [window.__previewDate ? "Preview" : "", t.start ? `${shortDate(t.start)} – ${shortDate(t.end)}` : "", when].filter(Boolean).join(" · ");
   const me = ui.person, mc = pcolor(me);
   return `<header class="hero">
     <div class="hero-top">

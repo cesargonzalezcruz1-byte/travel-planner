@@ -485,7 +485,9 @@ function modal(html, onSubmit, onDelete) {
   m.querySelector("[data-cancel]").onclick = close;
   m.onclick = (e) => { if (e.target === m) close(); };
   if (onDelete) m.querySelector("[data-del]").onclick = async () => { if (confirm("Delete this for everyone?")) { try { await onDelete(); close(); } catch (x) { toast(x.message); } } };
-  m.querySelector("form").onsubmit = async (e) => { e.preventDefault(); const btn = e.target.querySelector("button.primary"); btn.disabled = true; try { await onSubmit(new FormData(e.target), e.target); close(); } catch (x) { btn.disabled = false; toast("Save failed: " + (x.code || x.message)); } };
+  m.querySelector("form").onsubmit = async (e) => { e.preventDefault(); const btn = e.target.querySelector("button.primary"); btn.disabled = true;
+    try { await onSubmit(new FormData(e.target), e.target); close(); }
+    catch (x) { if (x.keepPrevious) { close(); toast("Kept the previous booking - nothing changed"); return; } btn.disabled = false; if (!x.back) toast("Save failed: " + (x.code || x.message)); } };
   m.querySelector("input,select,textarea")?.focus();
 }
 const whoBoxes = (who) => `<fieldset class="whobox"><legend>Who</legend>${PEOPLE().map((p) => `<label><input type="checkbox" name="who" value="${p}" ${who.includes(p) ? "checked" : ""}> ${p}</label>`).join("")}</fieldset>`;
@@ -534,6 +536,46 @@ function wireExtract(form, hint, onResult) {
     } finally { st.classList.remove("busy"); }
   };
 }
+// ---- duplicate check: same confirmation number, or same type + dates + key details for any of the same people
+const norm = (v) => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+function findDuplicate(out, priv) {
+  const key = (i) => i.type === "flight" ? [norm(i.number) || norm(i.route) + norm(i.dep)]
+    : i.type === "stay" ? [norm(i.name), norm(i.short)].filter(Boolean) : [norm(i.company) + norm(i.pickup)];
+  const conf = norm(priv.confirmation);
+  return store.items.find((i) => {
+    if (i.type !== out.type || i.id === out.id) return false;
+    if (conf && norm(store.priv[i.id]?.confirmation) === conf) return true;
+    const sameWho = (i.who || []).some((w) => out.who.includes(w));
+    const k1 = key(i), k2 = key(out);
+    return sameWho && i.start === out.start && i.end === out.end && k1.some((k) => k && k2.includes(k));
+  });
+}
+function bookingLines(i, pv = {}) {   // plain-text lines describing a booking
+  const what = i.type === "flight" ? [i.route, i.airline, i.number, i.dep && "Dep " + i.dep, i.arr && "Arr " + i.arr]
+    : i.type === "stay" ? [i.name || i.short, i.address, i.checkin && "Check-In " + i.checkin, i.checkout && "Check-Out " + i.checkout]
+    : [i.company, i.vehicle, i.pickup && "Pick-Up " + i.pickup + (i.pickupTime ? " " + i.pickupTime : ""), i.dropoff && "Drop-Off " + i.dropoff + (i.dropoffTime ? " " + i.dropoffTime : "")];
+  return [fmtDate(i.start) + (i.end !== i.start ? " → " + fmtDate(i.end) : ""), (i.who || []).join(", "), ...what,
+    pv.confirmation && "Confirmation " + pv.confirmation, pv.cost && "Cost " + pv.cost].filter(Boolean);
+}
+const linesHtml = (lines, other) => lines.map((t, k) => `<div class="${other.includes(t) ? "" : "diff"}">${k === 0 ? `<b>${esc(t)}</b>` : esc(t)}</div>`).join("");
+function askDuplicate(prev, prevPriv, next, nextPriv, sameConf) {
+  const A = bookingLines(prev, prevPriv), B = bookingLines(next, nextPriv);
+  const raw = (x) => (x === prev ? linesHtml(A, B) : linesHtml(B, A));
+  const same = A.join("|") === B.join("|");
+  return new Promise((done) => {
+    const d = document.createElement("div"); d.className = "modal dupmodal";
+    d.innerHTML = `<div class="sheet dup"><h3>Possible Duplicate</h3>
+      <p>${sameConf ? "A booking with the <b>same confirmation number</b> is already in this trip." : `This ${esc(next.type)} has the same dates and details as one already in this trip.`}</p>
+      <div class="dupcols"><div class="dupbox"><h4>Previous</h4>${raw(prev)}</div>
+        <div class="dupbox new"><h4>New</h4>${raw(next)}</div></div>
+      ${same ? `<p class="small"><b>The details are identical.</b></p>` : `<p class="small"><span class="diff">Red</span> = different from the other one.</p>`}
+      <p class="muted small">Replace updates the previous booking with the new details (blank new fields keep the old values; attached files stay).</p>
+      <div class="row end"><button class="btn" data-a="back">Back to Editing</button><span class="grow"></span>
+        <button class="btn" data-a="keep">Keep Previous</button><button class="btn primary" data-a="replace">Replace</button></div></div>`;
+    document.body.appendChild(d);
+    d.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => { d.remove(); done(b.dataset.a); }));
+  });
+}
 function itemForm(item) {
   const isNew = !item.id; const pv = (item.id && store.priv[item.id]) || {};
   const typeSel = isNew ? `<label>Type<select name="type">${["flight", "stay", "car"].map((t) => `<option value="${t}" ${t === item.type ? "selected" : ""}>${cap(t)}</option>`).join("")}</select></label>` : "";
@@ -554,9 +596,22 @@ function itemForm(item) {
       FIELDS[type].forEach(([k]) => (out[k] = fd.get(k) ?? ""));
       if (!out.who.length) throw new Error("Pick at least one person");
       if (out.end < out.start) throw new Error("'To' is before 'From'");
-      const priv = {}; for (const [k, v] of fd.entries()) if (k.startsWith("priv.") && v) priv[k.slice(5)] = v;
+      let priv = {}; for (const [k, v] of fd.entries()) if (k.startsWith("priv.") && v) priv[k.slice(5)] = v;
+      if (isNew) {
+        const dup = findDuplicate(out, priv);
+        if (dup) {
+          const pv = store.priv[dup.id] || {};
+          const choice = await askDuplicate(dup, pv, out, priv, !!priv.confirmation && norm(pv.confirmation) === norm(priv.confirmation));
+          if (choice === "back") throw Object.assign(new Error("back"), { back: true });
+          if (choice === "keep") throw Object.assign(new Error("keep"), { keepPrevious: true });
+          for (const [k, v] of Object.entries(dup)) if (k !== "id" && (out[k] === "" || out[k] === undefined)) out[k] = v;
+          out.id = dup.id; priv = { ...pv, ...priv };
+        }
+      }
       const id = await data.saveItem(out, priv);
-      if (form._pendingFile) { toast("Attaching file…"); await data.uploadFile(form._pendingFile, { itemId: id }); toast("Saved with file attached"); }
+      const already = form._pendingFile && store.files.some((f) => f.itemId === id && f.name === form._pendingFile.name);
+      if (form._pendingFile && !already) { toast("Attaching file…"); await data.uploadFile(form._pendingFile, { itemId: id }); toast("Saved with file attached"); }
+      else if (already) toast("Saved - " + form._pendingFile.name + " was already attached");
     }, isNew ? null : () => data.deleteItem(item.id));
   const form = document.querySelector(".sheet");
   const sel = form.querySelector("select[name=type]");

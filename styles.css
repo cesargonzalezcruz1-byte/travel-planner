@@ -167,3 +167,13 @@ section h3{margin:0 0 10px;color:var(--darkred);font-size:16px}
 .sheet label.verify input,.sheet label.verify textarea,.sheet label.verify select{border-color:#C62828;box-shadow:0 0 0 1px #C62828}
 .whobox.verify{border-color:#C62828}
 .verify-key{color:#C62828}
+
+/* duplicate check */
+.dupmodal{z-index:60;align-items:center}
+.sheet.dup{max-width:640px}
+.dupcols{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.dupbox{border:2px solid #bbb;border-radius:10px;padding:8px 10px;font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+.dupbox.new{border-color:var(--blue)}
+.dupbox h4{margin:0 0 4px;font-size:14px}
+@media (max-width:520px){.dupcols{grid-template-columns:1fr}}
+.dupbox .diff,.dup .diff{color:#C62828;font-weight:700}

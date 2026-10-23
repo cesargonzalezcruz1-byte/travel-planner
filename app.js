@@ -817,17 +817,28 @@ function renderJourney() {
   const today = iso(new Date());
   const p = ui.person, ord = { flight: 0, car: 1, stay: 2 };
   const its = itemsFor(p).slice().sort((a, b) => a.start.localeCompare(b.start) || ord[a.type] - ord[b.type]);
-  const actText = (date) => entriesFor(p, date).find((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed)?.text || "";
+  // every confirmed activity of a day (multi-day ones included)
+  const actsOn = (date) => entriesFor(p, date).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed).map((e) => e.text);
+  const dayChip = (d) => { const a = actsOn(d);
+    return `<button class="jday${d === today ? " today" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jacts">${a.map((t) => `<span class="ja"><span class="jdot"></span>${fmt(t)}</span>`).join("")}</span>` : ""}</button>`; };
+  const chips = (ds) => { let out = "", run = [];
+    const flush = () => { if (run.length) out += `<div class="jempties">${run.map(dayChip).join("")}</div>`; run = []; };
+    ds.forEach((d) => { if (actsOn(d).length) { flush(); out += dayChip(d); } else run.push(d); }); flush(); return out; };
+  // nights belong to their stay; days with no stay (flight days, the last day) go under the flight/car before them
+  const covered = new Set(), extra = {};
+  its.filter((i) => i.type === "stay").forEach((i) => { for (let d = i.start; d < i.end; d = addDays(d, 1)) covered.add(d); });
+  const legs = its.filter((i) => i.type !== "stay");
+  for (const d of days()) if (!covered.has(d)) { const l = legs.filter((i) => i.start <= d).at(-1); if (l) (extra[l.id] = extra[l.id] || []).push(d); }
   const stops = its.map((i) => {
     if (i.type === "stay") {
       const N = dayDiff(i.start, i.end); const inner = [];
-      for (let d = addDays(i.start, 1); d < i.end; d = addDays(d, 1)) inner.push(d);
+      for (let d = i.start; d < i.end; d = addDays(d, 1)) if (d >= store.trip.start && d <= store.trip.end) inner.push(d);
       return `<li class="jrow station${i.status === "tbc" ? " tbc" : ""}">
         <span class="jnode k-stay">${ICON.stay}</span>
         <div class="jbody">
           <button class="jcard${i.start <= today && today < i.end ? " today" : ""}" data-day="${i.start}"><b>${esc(i.name)}${i.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>
             <small>${shortDate(i.start)} – ${shortDate(i.end)} · ${N} night${N === 1 ? "" : "s"}${i.address ? " · " + esc(i.address) : ""}</small></button>
-          ${inner.length ? `<div class="jdays">${inner.map((d) => { const a = actText(d); return `<button class="jday${d === today ? " today" : ""}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a ? `<span class="jdot"></span><span class="jt">${esc(a)}</span>` : ""}</button>`; }).join("")}</div>` : ""}
+          ${inner.length ? `<div class="jdays">${chips(inner)}</div>` : ""}
         </div></li>`;
     }
     const isF = i.type === "flight", k = isF ? "flight" : "car";
@@ -838,7 +849,7 @@ function renderJourney() {
       <span class="jnode k-${k}">${ICON[k]}</span>
       <div class="jbody"><button class="jleg k-${k}${i.status === "tbc" ? " tbc" : ""}${i.start === today ? " today" : ""}" data-day="${i.start}">
         <span class="jl-top"><b>${esc(title)}</b><span class="jl-date">${WD3(i.start)} ${D(i.start).getDate()}</span></span>
-        <small>${esc(sub)}</small></button></div></li>`;
+        <small>${esc(sub)}</small></button>${extra[i.id] ? `<div class="jdays">${chips(extra[i.id])}</div>` : ""}</div></li>`;
   }).join("");
   const t = store.trip;
   root.innerHTML = `${header({ views: true })}

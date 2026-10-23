@@ -456,3 +456,12 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .ov-day{align-items:center;padding:0;text-align:center}
 .ov-dn{justify-content:center}
 .ov-dots{justify-content:center}
+/* journey: all confirmed activities per day */
+.jdays{flex-direction:column;flex-wrap:nowrap;align-items:stretch}
+.jday{height:auto;min-height:34px;padding:4px 12px 4px 4px;align-items:flex-start;text-align:left;border-radius:17px;width:100%;color:var(--ink)}
+.jday.noact{width:auto;align-self:flex-start}
+.jday .jd{flex-shrink:0}
+.jacts{display:flex;flex-direction:column;gap:2px;padding-top:4px;min-width:0}
+.ja{display:flex;align-items:baseline;gap:6px;font-size:12.5px;font-weight:700;line-height:1.3}
+.ja .jdot{transform:translateY(-1px)}
+.jempties{display:flex;flex-wrap:wrap;gap:6px}

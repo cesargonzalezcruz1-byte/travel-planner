@@ -137,6 +137,18 @@ export async function saveItem(item, priv) {
   if (priv) await fb.fsM.setDoc(fb.fsM.doc(col("private"), id), clean(priv));
   return id;
 }
+// Editors-only records kept in the "private" collection: activity costs, expenses (id x-...), budget settings (id _budget)
+export async function savePrivate(id, obj) {
+  id = id || uid("x");
+  const data = clean({ ...obj, updatedBy: store.email, updatedAt: now() });
+  if (DEMO) { mem().priv[id] = data; demoLoad(store.tripId); emit(); return id; }
+  await fb.fsM.setDoc(fb.fsM.doc(col("private"), id), data);
+  return id;
+}
+export async function deletePrivate(id) {
+  if (DEMO) { delete mem().priv[id]; demoLoad(store.tripId); emit(); return; }
+  await fb.fsM.deleteDoc(fb.fsM.doc(col("private"), id));
+}
 // Re-point files attached to one booking to another (used when a booking replaces an overlapping one)
 export async function moveFiles(fromId, toId) {
   const fs = store.files.filter((f) => f.itemId === fromId);
@@ -156,8 +168,9 @@ export async function saveEntry(entry) {
   return id;
 }
 export async function deleteEntry(id) {
-  if (DEMO) { const t = mem(); t.entries = t.entries.filter((x) => x.id !== id); demoLoad(store.tripId); emit(); return; }
+  if (DEMO) { const t = mem(); t.entries = t.entries.filter((x) => x.id !== id); delete t.priv[id]; demoLoad(store.tripId); emit(); return; }
   await fb.fsM.deleteDoc(fb.fsM.doc(col("entries"), id));
+  if (store.priv[id]) await fb.fsM.deleteDoc(fb.fsM.doc(col("private"), id));
 }
 
 // ------------------------------------------------------------------ files (editors)

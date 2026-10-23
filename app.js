@@ -20,7 +20,7 @@ const ALL_CODES = () => (store.trip?.travellers || []).concat(store.trip?.extend
 const NAME = (code) => (store.trip?.travellers || []).concat(store.trip?.extended || []).find((t) => t.code === code)?.name || code;
 
 let ui = { person: localStorage.getItem("tp.person") || "", day: null, tripId: null, swap: {}, view: "overview" };
-try { const v = localStorage.getItem("tp.view"); ui.view = ["overview", "timeline", "journey"].includes(v) ? v : "overview"; } catch (e) { ui.view = "overview"; }
+try { const v = localStorage.getItem("tp.view"); ui.view = ["overview", "timeline", "journey", "budget"].includes(v) ? v : "overview"; } catch (e) { ui.view = "overview"; }
 try { ui.swap = JSON.parse(localStorage.getItem("tp.swap") || "{}"); } catch (e) { /* private mode */ }
 // routes:  #/  (trips)   #/t/<tripId>   #/t/<tripId>/<YYYY-MM-DD>
 function parseRoute() {
@@ -108,8 +108,9 @@ function render() {
   if (!PEOPLE().includes(ui.person)) ui.person = PEOPLE()[0];
   if (!ui.person) return renderEmpty();
   applyTheme();
-  if (ui.day) renderDay(); else if (ui.view === "journey") renderJourney(); else if (ui.view === "timeline") renderTimeline(); else renderOverview();
-  if (ui.slide) { root.querySelector(".ov,.tl,.journey,.dayview")?.classList.add(ui.slide); ui.slide = null; }
+  if (ui.view === "budget" && !isEditor()) ui.view = "overview";
+  if (ui.day) renderDay(); else if (ui.view === "journey") renderJourney(); else if (ui.view === "timeline") renderTimeline(); else if (ui.view === "budget") renderBudget(); else renderOverview();
+  if (ui.slide) { root.querySelector(".ov,.tl,.journey,.dayview,.bd")?.classList.add(ui.slide); ui.slide = null; }
 }
 
 function renderLogin(err = "") {
@@ -254,6 +255,10 @@ const ICON = {
   dots: SV('<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>'),
   chat: SV('<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>'),
   chev: SV('<path d="M9 6l6 6-6 6"/>'),
+  wallet: SV('<path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3v3a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5"/><path d="M17 14h.01"/>'),
+  food: SV('<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>'),
+  bus: SV('<path d="M8 6v6M15 6v6M2 12h19.6M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/><circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/>'),
+  bag: SV('<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>'),
   grid: SV('<path d="M3 4h18v16H3zM3 10h18M3 15h18M9 4v16"/>'),
   list: SV('<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
   route: SV('<circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/>'),
@@ -283,7 +288,8 @@ function applyTheme() {
 }
 
 // ---------------------------------------------------------------- header: trip title, initials (traveller menu), view icons, + and ⋯
-const VIEWS = [["overview", "Overview", "grid"], ["timeline", "Timeline", "list"], ["journey", "Journey", "route"]];
+const VIEWS = [["overview", "Overview", "grid"], ["timeline", "Timeline", "list"], ["journey", "Journey", "route"], ["budget", "Budget", "wallet"]];
+const viewsFor = () => VIEWS.filter((v) => v[0] !== "budget" || isEditor());
 function header(opts = {}) {
   const t = store.trip || {}; const today = iso(new Date());
   const when = !t.start ? "" : t.start > today ? `In ${dayDiff(today, t.start)} days` : today <= t.end ? "On now" : "";
@@ -299,7 +305,7 @@ function header(opts = {}) {
     </div>
     <div class="hero-bar">
       ${!opts.views && ui.day ? `<button class="iconbtn" data-itinerary data-back aria-label="Back to ${VIEWS.find((v) => v[0] === ui.view)?.[1] || "Overview"}" title="Back to ${VIEWS.find((v) => v[0] === ui.view)?.[1] || "Overview"}">${ICON.home}</button>` : ""}
-      ${opts.views ? `<nav class="vseg" aria-label="View">${VIEWS.map(([k, l, ic]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}" aria-label="${l}" title="${l}">${ICON[ic]}${ui.view === k ? `<span>${l}</span>` : ""}</button>`).join("")}</nav>` : `<span class="hero-hint">${esc(NAME(me))}'s day</span>`}
+      ${opts.views ? `<nav class="vseg${viewsFor().length > 3 ? " icons" : ""}" aria-label="View">${viewsFor().map(([k, l, ic]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}" aria-label="${l}" title="${l}">${ICON[ic]}${ui.view === k && viewsFor().length <= 3 ? `<span>${l}</span>` : ""}</button>`).join("")}</nav>` : `<span class="hero-hint">${esc(NAME(me))}'s day</span>`}
       <span class="grow"></span>
       ${isEditor() ? `<button class="iconbtn" data-act="add" aria-label="Add booking" title="Add booking">${ICON.plus}</button>` : ""}
       <details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
@@ -318,6 +324,136 @@ function wireHeader() {
   root.querySelectorAll("[data-itinerary]").forEach((b) => (b.onclick = () => routeTo(ui.tripId, null)));
   // close an open menu when tapping elsewhere
   document.onclick = (e) => root.querySelectorAll("details.more[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+}
+
+// ---------------------------------------------------------------- budget & spending (editors only - costs live in the private collection)
+const BCATS = [["flight", "Flights", "flight"], ["stay", "Stays", "stay"], ["car", "Cars", "car"], ["act", "Activities", "act"],
+  ["food", "Food & Drink", "food"], ["transport", "Transport", "bus"], ["shopping", "Shopping", "bag"], ["other", "Other", "dots"]];
+const CURRENCIES = ["AUD", "USD", "MXN", "CAD", "NZD", "EUR", "GBP"];
+const SHARE = { ours: "Us", split: "Shared - split TBC", theirs: "Family (not ours)" };
+const budgetSettings = () => { const s = store.priv._budget || {}; return { home: s.home || "AUD", rates: s.rates || { USD: 1.5 }, total: +s.total || 0, cats: s.cats || {} }; };
+function parseMoney(str, home) {
+  const s = String(str ?? "").trim(); if (!s) return null;
+  const tags = [[/AU\$|A\$|\bAUD\b/i, "AUD"], [/US\$|\bUSD\b/i, "USD"], [/MX\$|\bMXN\b/i, "MXN"], [/CA\$|C\$|\bCAD\b/i, "CAD"], [/NZ\$|\bNZD\b/i, "NZD"], [/€|\bEUR\b/i, "EUR"], [/£|\bGBP\b/i, "GBP"]];
+  const cur = (tags.find(([re]) => re.test(s)) || [null, home])[1];
+  const m = s.replace(/,/g, "").match(/-?\d+(\.\d+)?/); if (!m) return null;
+  return { amt: parseFloat(m[0]), cur };
+}
+const toHome = (m, S) => (!m ? null : m.cur === S.home ? m.amt : S.rates[m.cur] ? m.amt * S.rates[m.cur] : null);
+const money = (n, cur, dp = 0) => { try { return new Intl.NumberFormat("en-AU", { style: "currency", currency: cur, minimumFractionDigits: dp, maximumFractionDigits: dp }).format(n || 0); } catch (e) { return `${cur} ${(n || 0).toFixed(dp)}`; } };
+const expenses = () => Object.entries(store.priv).filter(([, v]) => v && v.kind === "expense").map(([id, v]) => ({ id, ...v })).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+function budgetData() {
+  const S = budgetSettings(), rows = [];
+  for (const i of store.items) {
+    const pv = store.priv[i.id] || {}, m = parseMoney(pv.cost, S.home), due = parseMoney(pv.dueAtHotel, S.home);
+    rows.push({ src: "item", id: i.id, cat: KIND[i.type], date: i.start, end: i.end, who: i.who || [], tbc: i.status === "tbc",
+      name: i.type === "flight" ? `${codesOf(i.route).join(" → ")} ${i.number || ""}`.trim() : i.type === "stay" ? i.name : `${i.company || "Car"}${i.vehicle ? " · " + i.vehicle.replace(/\s*\(.*\)$/, "") : ""}`,
+      m, home: toHome(m, S), due: toHome(due, S), share: pv.share || "ours", paidWith: pv.paidWith || "" });
+  }
+  for (const e of store.entries.filter((x) => x.kind === "activity" && x.status !== "recommended")) {
+    const pv = store.priv[e.id] || {}; const m = parseMoney(pv.cost, S.home); if (!m) continue;
+    rows.push({ src: "entry", id: e.id, cat: "act", date: e.date, name: e.text, who: e.who || [], m, home: toHome(m, S), share: pv.share || "ours", planned: !e.confirmed });
+  }
+  for (const x of expenses()) {
+    const m = { amt: +x.amount || 0, cur: x.currency || S.home };
+    rows.push({ src: "expense", id: x.id, cat: x.cat || "other", date: x.date, name: x.text || "Expense", who: x.who || [], m, home: toHome(m, S), share: "ours", paidWith: x.paidWith || "" });
+  }
+  const cats = Object.fromEntries(BCATS.map(([k]) => [k, { booked: 0, spent: 0, shared: 0, due: 0 }]));
+  let noCost = 0, unknownRate = new Set();
+  for (const r of rows) {
+    if (r.src === "item" && !r.m && !r.tbc) noCost++;
+    if (r.m && r.home === null) unknownRate.add(r.m.cur);
+    const c = cats[r.cat] || cats.other, v = r.home || 0;
+    if (r.share === "theirs") continue;
+    if (r.share === "split") { c.shared += v; continue; }
+    if (r.src === "expense") c.spent += v; else c.booked += v;
+    if (r.due) c.due += r.due;
+  }
+  const sum = (k) => Object.values(cats).reduce((a, c) => a + c[k], 0);
+  return { S, rows, cats, booked: sum("booked"), spent: sum("spent"), shared: sum("shared"), due: sum("due"), noCost, unknownRate: [...unknownRate],
+    toBook: store.items.filter((i) => i.status === "tbc").length };
+}
+function renderBudget() {
+  const B = budgetData(), S = B.S, total = B.booked + B.spent, cur = S.home;
+  const pct = S.total ? Math.min(100, Math.round(total / S.total * 100)) : 0;
+  const maxCat = Math.max(1, ...BCATS.map(([k]) => Math.max(B.cats[k].booked + B.cats[k].spent, +S.cats[k] || 0)));
+  const catRows = BCATS.map(([k, l, ic]) => {
+    const c = B.cats[k], t = c.booked + c.spent, tgt = +S.cats[k] || 0; if (!t && !tgt && !c.shared) return "";
+    const w = (x) => Math.max(0, Math.min(100, x / (tgt || maxCat) * 100));
+    return `<li class="bc-row c-${k}"><span class="ic sm">${ICON[ic]}</span>
+      <div class="bc-main"><div class="bc-top"><b>${l}</b><span>${money(t, cur)}${tgt ? `<small> / ${money(tgt, cur)}</small>` : ""}</span></div>
+        <div class="bar${tgt && t > tgt ? " over" : ""}"><i style="width:${w(c.booked)}%"></i><i class="sp" style="width:${w(c.spent)}%"></i></div>
+        <small class="muted">${[c.booked && `Booked ${money(c.booked, cur)}`, c.spent && `Spent ${money(c.spent, cur)}`, c.shared && `Shared TBC ${money(c.shared, cur)}`, c.due && `Due at property ${money(c.due, cur)}`].filter(Boolean).join(" · ")}</small></div></li>`;
+  }).join("");
+  const exp = B.rows.filter((r) => r.src === "expense");
+  const byDay = {}; exp.forEach((r) => (byDay[r.date] = byDay[r.date] || []).push(r));
+  const expHtml = Object.keys(byDay).sort().reverse().map((d) => `<h4 class="bd-date">${d ? `${WD[D(d).getDay()]} ${longDate(d)}` : "No date"}<span>${money(byDay[d].reduce((a, r) => a + (r.home || 0), 0), cur, 2)}</span></h4>
+      ${byDay[d].map((r) => `<button class="bl-row c-${r.cat}" data-exp="${r.id}"><span class="dot"></span><span class="bl-name">${esc(r.name)}${r.paidWith ? `<small>${esc(r.paidWith)}</small>` : ""}</span><span class="bl-amt">${money(r.m.amt, r.m.cur, 2)}${r.m.cur !== cur && r.home !== null ? `<small>${money(r.home, cur, 2)}</small>` : ""}</span></button>`).join("")}`).join("");
+  const bk = B.rows.filter((r) => r.src !== "expense").sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const bkHtml = bk.map((r) => `<button class="bl-row c-${r.cat}${!r.m ? " missing" : ""}" data-${r.src === "item" ? "bk" : "bact"}="${r.id}"><span class="dot"></span>
+      <span class="bl-name">${esc(r.name)}<small>${r.date ? shortDate(r.date) + (r.end && r.end !== r.date ? " – " + shortDate(r.end) : "") : ""}${r.share !== "ours" ? " · " + SHARE[r.share] : ""}${r.planned ? " · not confirmed" : ""}${r.tbc ? " · to book" : ""}</small></span>
+      <span class="bl-amt">${r.m ? money(r.m.amt, r.m.cur, 2) : (r.tbc ? "To book" : "Add cost")}${r.m && r.m.cur !== cur && r.home !== null ? `<small>${money(r.home, cur, 2)}</small>` : ""}${r.due ? `<small>+ ${money(r.due, cur, 2)} due</small>` : ""}</span></button>`).join("");
+  root.innerHTML = `${header({ views: true })}
+    <div class="bd">
+      <section class="bd-sum">
+        <div class="bd-total"><small>Trip cost so far</small><b>${money(total, cur)}</b>
+          <span>${money(B.booked, cur)} booked · ${money(B.spent, cur)} spent</span></div>
+        ${S.total ? `<div class="bar big${total > S.total ? " over" : ""}"><i style="width:${pct}%"></i></div><p class="bd-target">${pct}% of ${money(S.total, cur)} budget · ${total > S.total ? `${money(total - S.total, cur)} over` : `${money(S.total - total, cur)} left`}</p>` : `<p class="bd-target">No total budget set yet - add one in Budget Settings.</p>`}
+        <div class="bd-chips">
+          ${B.due ? `<span>Still to pay at properties <b>${money(B.due, cur)}</b></span>` : ""}
+          ${B.shared ? `<span>Family shares to settle <b>${money(B.shared, cur)}</b></span>` : ""}
+          ${B.noCost ? `<span class="warn">${B.noCost} booking${B.noCost > 1 ? "s" : ""} without a cost</span>` : ""}
+          ${B.toBook ? `<span>${B.toBook} still to book</span>` : ""}
+          ${B.unknownRate.length ? `<span class="warn">Add an exchange rate for ${B.unknownRate.join(", ")}</span>` : ""}
+        </div>
+        <div class="bd-acts"><button class="btn primary" data-add-exp>+ Add Expense</button><button class="btn" data-bsettings>Budget Settings</button></div>
+      </section>
+      <section><h3>By Category</h3><ul class="bc">${catRows || `<li class="muted">No costs yet.</li>`}</ul>
+        <p class="muted small">All amounts in ${cur}${Object.keys(S.rates).length ? ` · ${Object.entries(S.rates).map(([c, r]) => `1 ${c} = ${r} ${cur}`).join(" · ")}` : ""}</p></section>
+      <section><h3>Spending</h3>${expHtml || `<p class="muted">Nothing logged yet. Use <b>+ Add Expense</b> for meals, tickets, fuel, shopping…</p>`}</section>
+      <section><h3>Bookings</h3>${bkHtml || `<p class="muted">No bookings yet.</p>`}</section>
+    </div>`;
+  wireHeader(); wireBudget();
+}
+function wireBudget() {
+  root.querySelectorAll("[data-add-exp]").forEach((b) => (b.onclick = () => expenseForm({ date: b.dataset.addExp || (ui.day || defaultExpenseDate()) })));
+  root.querySelectorAll("[data-exp]").forEach((b) => (b.onclick = () => expenseForm({ id: b.dataset.exp, ...store.priv[b.dataset.exp] })));
+  root.querySelectorAll("[data-bk]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.bk))));
+  root.querySelectorAll("[data-bact]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.bact))));
+  root.querySelectorAll("[data-bsettings]").forEach((b) => (b.onclick = budgetForm));
+}
+const defaultExpenseDate = () => { const t = iso(new Date()), tr = store.trip; return tr && t >= tr.start && t <= tr.end ? t : tr?.start || t; };
+function expenseForm(x) {
+  const S = budgetSettings(), isNew = !x.id;
+  const curs = [...new Set([S.home, ...Object.keys(S.rates), ...CURRENCIES])];
+  modal(`<h3>${isNew ? "Add Expense" : "Edit Expense"}</h3>
+    <label>What For<input name="text" value="${esc(x.text || "")}" placeholder="e.g. Dinner at Hartwood" required></label>
+    <div class="row"><label>Amount<input name="amount" type="number" step="0.01" min="0" inputmode="decimal" value="${x.amount ?? ""}" required></label>
+      <label>Currency<select name="currency">${curs.map((c) => `<option ${c === (x.currency || S.home) ? "selected" : ""}>${c}</option>`).join("")}</select></label></div>
+    <div class="row"><label>Category<select name="cat">${BCATS.map(([k, l]) => `<option value="${k}" ${k === (x.cat || "food") ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label>Date<input type="date" name="date" value="${x.date || defaultExpenseDate()}"></label></div>
+    <label>Paid With<input name="paidWith" value="${esc(x.paidWith || "")}" placeholder="e.g. Amex 2008, cash"></label>
+    ${whoBoxes(x.who || PEOPLE())}`,
+    async (fd) => {
+      const amount = parseFloat(fd.get("amount")); if (!(amount >= 0)) throw new Error("Enter an amount");
+      await data.savePrivate(x.id || null, { kind: "expense", text: fd.get("text").trim(), amount, currency: fd.get("currency"), cat: fd.get("cat"), date: fd.get("date"), paidWith: fd.get("paidWith").trim(), who: fd.getAll("who") });
+    }, isNew ? null : () => data.deletePrivate(x.id));
+}
+function budgetForm() {
+  const S = budgetSettings();
+  const rateRows = CURRENCIES.filter((c) => c !== S.home).map((c) => `<label>1 ${c} =<input name="rate.${c}" type="number" step="0.0001" min="0" value="${S.rates[c] ?? ""}" placeholder="rate"></label>`).join("");
+  modal(`<h3>Budget Settings</h3>
+    <label>Home Currency<select name="home">${CURRENCIES.map((c) => `<option ${c === S.home ? "selected" : ""}>${c}</option>`).join("")}</select></label>
+    <fieldset class="pbox"><legend>Exchange Rates (in home currency)</legend><div class="rates">${rateRows}</div>
+      <p class="muted small">Update these before relying on totals. Costs in other currencies are converted with them.</p></fieldset>
+    <label>Total Budget<input name="total" type="number" step="1" min="0" value="${S.total || ""}" placeholder="optional"></label>
+    <fieldset class="pbox"><legend>Budget per Category (Optional)</legend><div class="rates">
+      ${BCATS.map(([k, l]) => `<label>${l}<input name="cat.${k}" type="number" step="1" min="0" value="${S.cats[k] || ""}"></label>`).join("")}</div></fieldset>`,
+    async (fd) => {
+      const rates = {}, cats = {};
+      for (const [k, v] of fd.entries()) { if (k.startsWith("rate.") && v) rates[k.slice(5)] = +v; if (k.startsWith("cat.") && v) cats[k.slice(4)] = +v; }
+      await data.savePrivate("_budget", { home: fd.get("home"), rates, total: +fd.get("total") || 0, cats });
+    });
 }
 
 // ---------------------------------------------------------------- Overview (the spreadsheet, phone-sized)
@@ -435,9 +571,9 @@ window.addEventListener("resize", () => { if (ui.view === "overview" && !ui.day)
       if (j < 0 || j >= ds.length) return;
       ui.slide = dx < 0 ? "from-right" : "from-left"; window.scrollTo(0, 0); routeTo(ui.tripId, ds[j], true); return;
     }
-    const k = VIEWS.findIndex((v) => v[0] === ui.view), n = k + (dx < 0 ? 1 : -1);
-    if (n < 0 || n >= VIEWS.length) return;
-    ui.view = VIEWS[n][0]; ui.slide = dx < 0 ? "from-right" : "from-left";
+    const V = viewsFor(), k = V.findIndex((v) => v[0] === ui.view), n = k + (dx < 0 ? 1 : -1);
+    if (n < 0 || n >= V.length) return;
+    ui.view = V[n][0]; ui.slide = dx < 0 ? "from-right" : "from-left";
     try { localStorage.setItem("tp.view", ui.view); } catch (err) { /* ignore */ }
     sessionStorage.removeItem("tp.wscroll"); window.scrollTo(0, 0); render();
   }, { passive: true });
@@ -570,7 +706,7 @@ function itemCard(i, date) {
   const mapLinks = Array.isArray(mapQ) ? mapQ.map((q) => `<a class="maplink" target="_blank" rel="noopener" href="${maps(q)}">📍 ${esc(q.replace(" airport", ""))}</a>`).join("")
                                        : (i.status !== "tbc" && mapQ ? `<a class="maplink" target="_blank" rel="noopener" href="${maps(mapQ)}">📍 Open in Google Maps</a>` : "");
   const pv = isEditor() ? store.priv[i.id] : null;
-  const pvHtml = pv && Object.keys(pv).length ? `<dl class="priv">${Object.entries(pv).filter(([, v]) => v).map(([k, v]) => `<dt>${esc(label(k))}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : "";
+  const pvHtml = pv && Object.keys(pv).length ? `<dl class="priv">${Object.entries(pv).filter(([k, v]) => v && !["updatedBy", "updatedAt", "kind"].includes(k) && !(k === "share" && v === "ours")).map(([k, v]) => `<dt>${esc(label(k))}</dt><dd>${esc(k === "share" ? SHARE[v] || v : v)}</dd>`).join("")}</dl>` : "";
   const files = isEditor() ? store.files.filter((f) => f.itemId === i.id) : [];
   const k = KIND[i.type];
   return `<article class="icard k-${k}">
@@ -586,7 +722,7 @@ function itemCard(i, date) {
   </article>`;
 }
 const LABELS = { confirmation: "Confirmation", tickets: "Tickets", seats: "Seats", cost: "Cost", paidWith: "Paid With", dueAtHotel: "Due at Hotel",
-  cancel: "Cancellation", phone: "Phone", host: "Host", checkIn: "Check-In", bags: "Bags", extras: "Extras", notes: "Notes" };
+  cancel: "Cancellation", phone: "Phone", share: "Who Pays", host: "Host", checkIn: "Check-In", bags: "Bags", extras: "Extras", notes: "Notes" };
 const cap = (w) => String(w || "").replace(/^./, (c) => c.toUpperCase());
 const label = (k) => LABELS[k] || k;
 const fileLink = (f) => `<button class="filelink" data-file="${f.id}">📄 ${esc(f.name)}</button>`;
@@ -669,12 +805,18 @@ function renderDay() {
       <ul class="places">${pins.map((x) => `<li><a class="maplink" target="_blank" rel="noopener" href="${maps(x.q)}"><i class="pdot${x.hollow ? " hollow" : ""}" style="--pin:${x.color}">${x.glyph}</i> ${esc(x.name)} <span class="muted small">${esc(x.kind)}</span></a></li>`).join("")}</ul>` : `<p class="muted">No places for this day.</p>`}
       ${route ? `<a class="btn small" target="_blank" rel="noopener" href="${route}">🗺 Day Route in Google Maps</a>` : ""}</section>
 
+    ${isEditor() ? (() => { const S = budgetSettings(), ex = expenses().filter((x) => x.date === date);
+      return `<section class="bd-day"><h3>Spending</h3>${ex.length ? ex.map((x) => { const m = { amt: +x.amount || 0, cur: x.currency || S.home }, h = toHome(m, S);
+        return `<button class="bl-row c-${x.cat || "other"}" data-exp="${x.id}"><span class="dot"></span><span class="bl-name">${esc(x.text || "Expense")}${x.paidWith ? `<small>${esc(x.paidWith)}</small>` : ""}</span><span class="bl-amt">${money(m.amt, m.cur, 2)}${m.cur !== S.home && h !== null ? `<small>${money(h, S.home, 2)}</small>` : ""}</span></button>`; }).join("")
+        + `<p class="bd-daytot">Day total <b>${money(ex.reduce((a, x) => a + (toHome({ amt: +x.amount || 0, cur: x.currency || S.home }, S) || 0), 0), S.home, 2)}</b></p>` : `<p class="muted">Nothing spent yet.</p>`}
+        <button class="btn small" data-add-exp="${date}">+ Add Expense</button></section>`; })() : ""}
     ${isEditor() ? `<section><h3>Documents</h3>
       ${dayFiles.length ? `<div class="files">${dayFiles.map((f) => `<div class="frow">${fileLink(f)}<button class="btn tiny" data-del-file="${f.id}">Remove</button></div>`).join("")}</div>` : `<p class="muted">No documents for this day.</p>`}
       <label class="btn small">Upload for This Day<input type="file" hidden data-attach-day="${date}" multiple></label></section>` : ""}
   </div>`;
   wireHeader();
   root.querySelector("[data-back]").onclick = () => routeTo(ui.tripId, null);
+  if (isEditor()) wireBudget();
   const mapBox = root.querySelector("#daymap");
   if (mapBox) drawDayMap(mapBox, pins, root.querySelector(".daymap-msg")).catch((x) => { mapBox.hidden = true; const m = root.querySelector(".daymap-msg"); if (m) m.textContent = "Map unavailable: " + x.message; });
   root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => { ui.slide = +b.dataset.go > 0 ? "from-right" : "from-left"; routeTo(ui.tripId, ds[idx + +b.dataset.go], true); }));
@@ -861,7 +1003,7 @@ function itemForm(item) {
   const isNew = !item.id; const pv = (item.id && store.priv[item.id]) || {};
   const typeSel = isNew ? `<label>Type<select name="type">${["flight", "stay", "car"].map((t) => `<option value="${t}" ${t === item.type ? "selected" : ""}>${cap(t)}</option>`).join("")}</select></label>` : "";
   const fieldsFor = (type, src = item) => FIELDS[type].map(([k, l]) => `<label>${l}<input name="${k}" value="${esc(src[k] || "")}"></label>`).join("");
-  const privKeys = [...new Set([...PRIV_KEYS, ...Object.keys(pv)])];
+  const privKeys = [...new Set([...PRIV_KEYS, ...Object.keys(pv)])].filter((k) => !["share", "updatedBy", "updatedAt", "kind"].includes(k));
   const statusSel = (st) => `<label>Status<select name="status"><option value="booked" ${st !== "tbc" ? "selected" : ""}>Booked</option><option value="tbc" ${st === "tbc" ? "selected" : ""}>TBC</option></select></label>`;
   modal(`<h3>${isNew ? "Add Booking" : "Edit " + cap(item.type)}</h3>${PDF_BTN}${typeSel}
     ${whoBoxes(item.who || [ui.person])}
@@ -870,7 +1012,8 @@ function itemForm(item) {
     <div id="statusBox">${item.type !== "flight" ? statusSel(item.status) : ""}</div>
     <label>Note (Visible to Family)<input name="note" value="${esc(item.note || "")}"></label>
     <details class="privbox" ${Object.keys(pv).length ? "open" : ""}><summary>Private Details (Editors Only)</summary>
-      ${privKeys.map((k) => `<label>${esc(label(k))}<input name="priv.${k}" value="${esc(pv[k] || "")}"></label>`).join("")}</details>`,
+      ${privKeys.map((k) => `<label>${esc(label(k))}<input name="priv.${k}" value="${esc(pv[k] || "")}"></label>`).join("")}
+      <label>Who Pays<select name="priv.share">${Object.entries(SHARE).map(([k, l]) => `<option value="${k}" ${(pv.share || "ours") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label></details>`,
     async (fd, form) => {
       const type = fd.get("type") || item.type;
       const out = { ...item, type, who: fd.getAll("who"), start: fd.get("start"), end: fd.get("end"), note: fd.get("note"), status: fd.get("status") || item.status || "booked" };
@@ -936,18 +1079,23 @@ function entryForm(e) {
       <label>Type<select name="status"><option value="planned" ${e.status !== "recommended" ? "selected" : ""}>In the Plan</option><option value="recommended" ${e.status === "recommended" ? "selected" : ""}>Recommended Idea</option></select></label>
       <label class="check"><input type="checkbox" name="confirmed" ${e.confirmed ? "checked" : ""}> Confirmed - Show It in the Itinerary</label>` : ""}
     <div class="row"><label>From<input type="date" name="date" value="${e.date}" required></label><label>To<input type="date" name="endDate" value="${e.endDate || e.date}"></label></div>
-    ${whoBoxes(e.who)}`,
+    ${whoBoxes(e.who)}
+    ${e.kind === "activity" && isEditor() ? `<details class="privbox" ${store.priv[e.id]?.cost ? "open" : ""}><summary>Cost (Editors Only)</summary>
+      <label>Cost<input name="pcost" value="${esc(store.priv[e.id]?.cost || "")}" placeholder="e.g. USD 240 or AU$95"></label>
+      <label>Who Pays<select name="pshare">${Object.entries(SHARE).map(([k, l]) => `<option value="${k}" ${(store.priv[e.id]?.share || "ours") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label></details>` : ""}`,
     async (fd, form) => {
       const out = { ...e, text: fd.get("text").trim(), place: fd.get("place") ?? e.place ?? "", status: fd.get("status") || "planned", confirmed: e.kind === "activity" ? (fd.get("confirmed") === "on" || !!form._pendingFile) && fd.get("status") !== "recommended" : true,
                     date: fd.get("date"), endDate: fd.get("endDate") || fd.get("date"), who: fd.getAll("who") };
       if (!out.who.length) throw new Error("Pick at least one person");
       const id = await data.saveEntry(out);
+      const pc = (fd.get("pcost") || "").trim(), had = store.priv[id] || store.priv[e.id];
+      if (pc || had?.cost) await data.savePrivate(id, { ...(had || {}), cost: pc, share: fd.get("pshare") || "ours" });
       if (form._pendingFile) { toast("Attaching file…"); await data.uploadFile(form._pendingFile, { entryId: id, date: out.date }); toast("Saved and confirmed, with file attached"); }
     }, isNew ? null : () => data.deleteEntry(e.id));
   const form = document.querySelector(".sheet");
   wireExtract(form, () => "activity", (r) => {
     const txt = [r.text || r.name, r.time ? "at " + r.time : ""].filter(Boolean).join(" ");
-    setVal(form, "text", txt); setVal(form, "place", r.place || r.address); setVal(form, "date", r.start || r.date); setVal(form, "endDate", r.end || r.start || r.date);
+    setVal(form, "text", txt); setVal(form, "place", r.place || r.address); setVal(form, "pcost", r.private?.cost); setVal(form, "date", r.start || r.date); setVal(form, "endDate", r.end || r.start || r.date);
     if (Array.isArray(r.who) && r.who.length) form.querySelectorAll("input[name=who]").forEach((cb) => (cb.checked = r.who.includes(cb.value)));
     return "activity";
   });

@@ -109,6 +109,7 @@ function render() {
   if (!ui.person) return renderEmpty();
   applyTheme();
   if (ui.day) renderDay(); else if (ui.view === "journey") renderJourney(); else if (ui.view === "timeline") renderTimeline(); else renderOverview();
+  if (ui.slide) { root.querySelector(".ov,.tl,.journey")?.classList.add(ui.slide); ui.slide = null; }
 }
 
 function renderLogin(err = "") {
@@ -416,6 +417,24 @@ function drawOverviewShapes() {
   svg.querySelectorAll("[data-day]").forEach((el) => (el.onclick = () => openDay(el.dataset.day)));
 }
 window.addEventListener("resize", () => { if (ui.view === "overview" && !ui.day) drawOverviewShapes(); });
+// swipe left / right on the itinerary to move between Overview, Timeline and Journey (phones)
+(() => {
+  let x0 = 0, y0 = 0, t0 = 0, ok = false;
+  document.addEventListener("touchstart", (e) => {
+    const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now();
+    ok = e.touches.length === 1 && !!ui.tripId && !ui.day && !document.querySelector(".modal") && !e.target.closest(".seg,.vseg,.daymap,.pop,input,textarea,select");
+  }, { passive: true });
+  document.addEventListener("touchend", (e) => {
+    if (!ok) return; ok = false;
+    const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+    if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6 || Date.now() - t0 > 700) return;
+    const k = VIEWS.findIndex((v) => v[0] === ui.view), n = k + (dx < 0 ? 1 : -1);
+    if (n < 0 || n >= VIEWS.length) return;
+    ui.view = VIEWS[n][0]; ui.slide = dx < 0 ? "from-right" : "from-left";
+    try { localStorage.setItem("tp.view", ui.view); } catch (err) { /* ignore */ }
+    sessionStorage.removeItem("tp.wscroll"); window.scrollTo(0, 0); render();
+  }, { passive: true });
+})();
 
 const pillHtml = (s) => `<span class="pill k-${s.k}${s.tbc ? " tbc" : ""}"><span class="ic">${ICON[s.k]}</span><span class="pt"><b>${s.rich ? fmt(s.title) : esc(s.title)}</b>${s.sub ? `<small>${esc(s.sub)}</small>` : ""}</span>${s.tbc ? `<span class="tbctag">TBC</span>` : ""}</span>`;
 

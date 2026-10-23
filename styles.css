@@ -347,3 +347,9 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .themecard .tsw{display:flex;gap:3px}
 .themecard .tsw i{flex:1;height:18px;border-radius:6px}
 .themecard .tsw i:first-child{flex:1.6}
+
+/* swipe between views */
+@keyframes from-right{from{transform:translateX(40px);opacity:0}to{transform:none;opacity:1}}
+@keyframes from-left{from{transform:translateX(-40px);opacity:0}to{transform:none;opacity:1}}
+.from-right{animation:from-right .22s ease-out} .from-left{animation:from-left .22s ease-out}
+@media (prefers-reduced-motion:reduce){.from-right,.from-left{animation:none}}

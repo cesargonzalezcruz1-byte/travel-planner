@@ -466,8 +466,8 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .ja .jdot{transform:translateY(-1px)}
 .jempties{display:flex;flex-wrap:wrap;gap:6px}
 .ddots{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;margin-top:6px}
-.dd{min-width:44px;height:26px;padding:0 10px;border-radius:13px;border:2px solid var(--pc);background:transparent;color:var(--ink);font-size:11.5px;font-weight:800;letter-spacing:.03em;cursor:pointer;transition:background .15s,color .15s;display:inline-flex;align-items:center;justify-content:center}
-.dd.on{background:var(--pc);color:var(--pi)}
+.dd{min-width:44px;height:26px;padding:0 10px;border-radius:13px;border:2px solid var(--pc);background:transparent;color:var(--muted);font-size:11.5px;font-weight:800;letter-spacing:.03em;cursor:pointer;transition:background .15s,color .15s;display:inline-flex;align-items:center;justify-content:center}
+.dd.on{background:var(--pc);color:#fff}
 .dd:disabled{cursor:default}
 .dd:not(:disabled):not(.on):hover{background:color-mix(in srgb,var(--pc) 15%,transparent)}
 

@@ -1,5 +1,6 @@
 import * as data from "./data.js";
-import { drawDayMap, mapsReady } from "./map.js";
+import { drawDayMap, mapsReady, searchPlaces } from "./map.js";
+import { buildAlbum } from "./album.js";
 // Preview another date: add ?today=2027-01-14 to the address to see the app as it will look on that day
 (() => { const m = location.search.match(/[?&]today=(\d{4}-\d{2}-\d{2})/); if (!m) return;
   const R = Date, off = new R(m[1] + "T12:00:00").getTime() - R.now();   // shift the clock, keep it ticking
@@ -120,6 +121,7 @@ function render() {
   if (ui.view === "budget" && !isEditor()) ui.view = "overview";
   if (ui.day) renderDay(); else if (ui.view === "journey") renderJourney(); else if (ui.view === "timeline") renderTimeline(); else if (ui.view === "budget") renderBudget(); else renderOverview();
   if (ui.slide) { root.querySelector(".ov,.tl,.journey,.dayview,.bd")?.classList.add(ui.slide); ui.slide = null; }
+  if (isEditor() && store.trip) setTimeout(ensureRecs, 0);
 }
 
 function renderLogin(err = "") {
@@ -320,6 +322,7 @@ function header(opts = {}) {
       <details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span>
         ${isEditor() ? `<button data-act="settings">Trip Setup</button><button data-act="import">Import Trip Data</button><button data-act="export">Download Backup</button>` : ""}
+        <button data-act="album">Export Album (Word)</button>
         <button data-act="signout">Sign Out</button></div></details>
     </div>
   </header>
@@ -980,7 +983,7 @@ function renderDay() {
     <section><h3>Activities</h3>${isEditor() ? `<p class="muted small">Tick ☑ to confirm - only confirmed activities show in the itinerary. Attaching a booking confirms it.</p>` : ""}<ul class="entries">${acts.map(entryLi).join("") || `<li class="muted">Nothing planned yet.</li>`}</ul>
       ${isEditor() ? `<button class="btn small" data-new-entry="activity">+ Add Activity</button>` : ""}</section>
 
-    ${recs.length ? `<section><h3>Recommended</h3><ul class="entries">${recs.map(entryLi).join("")}</ul></section>` : ""}
+    ${recsHtml(p, date, recs.map(entryLi).join(""))}
 
     <section><h3>Comments</h3><ul class="entries">${coms.map(entryLi).join("") || `<li class="muted">No comments.</li>`}</ul>
       ${isEditor() ? `<button class="btn small" data-new-entry="comment">+ Add Comment</button>` : ""}</section>
@@ -1004,7 +1007,7 @@ function renderDay() {
   wireHeader();
   root.querySelector("[data-back]").onclick = () => routeTo(ui.tripId, null);
   if (isEditor()) wireBudget();
-  wireJournal(date);
+  wireJournal(date); wireRecs(p, date, others);
   root.querySelectorAll("[data-with]").forEach((b) => (b.onclick = async () => {
     const o = b.dataset.with, next = !together(p, o, date), auto = autoTogether(p, o, date);
     try { await data.setTogether(date, p, o, next === auto ? null : next); toast(`${NAME(o)} ${next ? "with" : "not with"} ${NAME(p)} on ${shortDate(date)}`); }
@@ -1031,6 +1034,86 @@ function renderDay() {
   root.querySelectorAll("[data-attach-item]").forEach((inp) => (inp.onchange = () => upload(inp.files, { itemId: inp.dataset.attachItem })));
   root.querySelectorAll("[data-attach-day]").forEach((inp) => (inp.onchange = () => upload(inp.files, { date: inp.dataset.attachDay })));
 }
+// ------------------------------------------------------------------ recommendations
+// Every stay location gets the best-rated things to do and places to eat from Google (Places API).
+// Results are cached on the trip (so the family sees them too); a new or changed location is looked up automatically.
+const REC_V = 1;
+const recKey = (area) => area.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "x";
+const stayArea = (s) => areaOf(s) || s.short || s.name || "";
+function recLocations() {
+  const m = new Map();
+  store.items.filter((i) => i.type === "stay" && stayArea(i)).forEach((s) => { const area = stayArea(s), key = recKey(area); if (!m.has(key)) m.set(key, { key, area, near: s.address || s.name }); });
+  return [...m.values()];
+}
+function dayLocations(p, date) {
+  const st = itemsFor(p).filter((i) => i.type === "stay" && i.start <= date && date <= i.end && stayArea(i));
+  const night = st.find((i) => i.start <= date && date < i.end), left = st.find((i) => i.end === date && i !== night);
+  const out = []; [night, left].filter(Boolean).forEach((s) => { const k = recKey(stayArea(s)); if (!out.some((o) => o.key === k)) out.push({ key: k, area: stayArea(s) }); });
+  return out;
+}
+const recState = { busy: new Set(), tried: new Set(), error: "" };
+const recScore = (x) => (x.rating * x.count + 4.2 * 150) / (x.count + 150);
+const tidy = (list) => list.filter((x) => x.rating && x.count >= 15).sort((a, b) => recScore(b) - recScore(a)).slice(0, 20)
+  .map(({ id, name, rating, count, address, type, url }) => ({ id, name, rating, count, address, type, url }));
+async function fetchRecs(loc) {
+  recState.busy.add(loc.key); recState.tried.add(loc.key); if (ui.day) render();
+  try {
+    const [todo, eat] = await Promise.all([searchPlaces(`top things to do in ${loc.area}`, loc.near), searchPlaces(`best restaurants in ${loc.area}`, loc.near)]);
+    await data.saveRecs(loc.key, { v: REC_V, area: loc.area, fetchedAt: new Date().toISOString(), do: tidy(todo), eat: tidy(eat) });
+    recState.error = "";
+  } catch (e) {
+    console.warn("recs", e);
+    recState.error = /not (been )?(used|enabled)|PERMISSION|403|ApiNotActivated|REQUEST_DENIED/i.test(String(e.message || e)) ? "Google Places isn't switched on for the Maps key yet." : "Couldn't get recommendations: " + (e.message || e);
+  } finally { recState.busy.delete(loc.key); if (ui.day) render(); }
+}
+let recQueue = Promise.resolve();
+function ensureRecs() {
+  if (!isEditor() || !store.trip || !mapsReady() || recState.error) return;
+  const have = store.trip.recs || {};
+  recLocations().filter((l) => (!have[l.key] || have[l.key].v !== REC_V) && !recState.tried.has(l.key) && !recState.busy.has(l.key))
+    .forEach((l) => { recState.tried.add(l.key); recQueue = recQueue.then(() => fetchRecs(l)); });
+}
+function recsHtml(p, date, notesHtml) {
+  const locs = dayLocations(p, date);
+  if (!locs.length && !notesHtml) return "";
+  if (!locs.some((l) => l.key === ui.recLoc)) ui.recLoc = locs[0]?.key;
+  const loc = locs.find((l) => l.key === ui.recLoc), rec = loc && (store.trip.recs || {})[loc.key];
+  const tab = ui.recTab || "do", list = rec ? rec[tab] || [] : [];
+  const added = (x) => store.entries.some((e) => e.kind === "activity" && e.date <= date && date <= (e.endDate || e.date) && (e.text === x.name || String(e.place || "").startsWith(x.name)));
+  const shown = ui.recMore ? list : list.slice(0, 5);
+  const row = (x, i) => `<li class="rec">
+      <span class="rnum">${i + 1}</span>
+      <div class="rmain"><a class="rname" href="${esc(x.url || maps(x.name + " " + x.address))}" target="_blank" rel="noopener">${esc(x.name)}</a>
+        <div class="rsub"><span class="rstar">★ ${x.rating.toFixed(1)}</span><span class="muted">(${x.count.toLocaleString("en-AU")})</span>${x.type ? `<span class="muted">· ${esc(x.type)}</span>` : ""}</div></div>
+      ${isEditor() ? (added(x) ? `<span class="radded">✓ In plan</span>` : `<button class="btn tiny" data-rec-add="${esc(x.id)}">+ Plan</button>`) : ""}</li>`;
+  const busy = loc && recState.busy.has(loc.key);
+  return `<section class="recs"><h3>Recommended${loc ? ` <span class="muted small">near ${esc(loc.area)}</span>` : ""}</h3>
+    ${locs.length > 1 ? `<div class="seg-mini rlocs">${locs.map((l) => `<button class="${l.key === ui.recLoc ? "on" : ""}" data-rec-loc="${l.key}">${esc(l.area)}</button>`).join("")}</div>` : ""}
+    ${notesHtml ? `<p class="rlabel">From Our Notes</p><ul class="entries">${notesHtml}</ul>` : ""}
+    ${loc ? `<div class="seg-mini rtabs"><button class="${tab === "do" ? "on" : ""}" data-rec-tab="do">Things to Do</button><button class="${tab === "eat" ? "on" : ""}" data-rec-tab="eat">Places to Eat</button></div>
+      ${list.length ? `<ol class="reclist">${shown.map(row).join("")}</ol>
+        ${list.length > 5 ? `<button class="lnk" data-rec-more>${ui.recMore ? "Show top 5" : `Show all ${list.length}`}</button>` : ""}`
+      : `<p class="muted small">${busy ? "Finding the best-rated places…" : rec ? "Nothing found for this location." : isEditor() ? (recState.error || (mapsReady() ? "Looking these up…" : "Needs the Google Maps key.")) : "Recommendations will appear once Cesar or Debora opens the app."}</p>`}
+      <p class="rfoot muted small">${rec ? `Google ratings · updated ${shortDate(iso(new Date(rec.fetchedAt)))}` : ""}${isEditor() && rec ? ` · <button class="lnk" data-rec-refresh ${busy ? "disabled" : ""}>${busy ? "Updating…" : "Refresh"}</button>` : ""}</p>
+      ${isEditor() && recState.error && rec ? `<p class="jwarn small">${esc(recState.error)}</p>` : ""}` : ""}
+  </section>`;
+}
+function wireRecs(p, date, others) {
+  const sec = root.querySelector("section.recs"); if (!sec) return;
+  const keep = () => { const y = window.scrollY; render(); window.scrollTo(0, y); };
+  sec.querySelectorAll("[data-rec-loc]").forEach((b) => (b.onclick = () => { ui.recLoc = b.dataset.recLoc; ui.recMore = false; keep(); }));
+  sec.querySelectorAll("[data-rec-tab]").forEach((b) => (b.onclick = () => { ui.recTab = b.dataset.recTab; ui.recMore = false; keep(); }));
+  sec.querySelector("[data-rec-more]")?.addEventListener("click", () => { ui.recMore = !ui.recMore; keep(); });
+  sec.querySelector("[data-rec-refresh]")?.addEventListener("click", () => { const l = recLocations().find((x) => x.key === ui.recLoc); if (l) { recState.error = ""; recQueue = recQueue.then(() => fetchRecs(l)); } });
+  sec.querySelectorAll("[data-rec-add]").forEach((b) => (b.onclick = async () => {
+    const rec = store.trip.recs?.[ui.recLoc], x = rec && (rec[ui.recTab || "do"] || []).find((r) => r.id === b.dataset.recAdd); if (!x) return;
+    b.disabled = true;
+    try { await data.saveEntry({ kind: "activity", status: "planned", confirmed: false, date, endDate: date, text: x.name, place: [x.name, x.address].filter(Boolean).join(", "),
+      who: [p, ...others.filter((o) => together(p, o, date))] }); toast(`${x.name} added to the plan`); }
+    catch (e) { b.disabled = false; toast("Couldn't add: " + (e.code || e.message)); }
+  }));
+}
+
 // ------------------------------------------------------------------ journal
 // The family can read and write here (and only here): comments, a discussion thread and activity ratings, per day.
 const DEVICE = (() => { try { let d = localStorage.getItem("tp.device"); if (!d) { d = Math.random().toString(36).slice(2, 10); localStorage.setItem("tp.device", d); } return d; } catch { return "nodevice"; } })();
@@ -1427,6 +1510,23 @@ const actions = {
   export: () => {
     const blob = new Blob([JSON.stringify(data.exportAll(), null, 1)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `trip-backup-${iso(new Date())}.json`; a.click();
+  },
+  album: () => {
+    const t = store.trip;
+    modal(`<h2>Export Album</h2><p class="muted small">A Word document with a page per day: where you stayed, what you did and the journal. No costs or confirmation numbers.</p>
+      <div class="row2"><label>From<input type="date" name="from" value="${t.start}" min="${t.start}" max="${t.end}" required></label>
+      <label>To<input type="date" name="to" value="${t.end}" min="${t.start}" max="${t.end}" required></label></div>`, async (fd) => {
+      const from = fd.get("from"), to = fd.get("to");
+      if (from > to) { toast("'From' must be before 'To'"); throw Object.assign(new Error(""), { back: true }); }
+      toast("Building the album…");
+      const docx = await import("https://cdn.jsdelivr.net/npm/docx@9.5.1/+esm");
+      const doc = buildAlbum(docx, { trip: t, items: store.items, entries: store.entries, journal: store.journal }, { from, to });
+      const blob = await docx.Packer.toBlob(doc);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = `${(t.title || "Trip").replace(/&/g, "and").replace(/[^\w\- ]+/g, "").replace(/\s+/g, " ").trim()} Album ${from}${to !== from ? " to " + to : ""}.docx`; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    });
+    const b = document.querySelector(".modal button.primary"); if (b) b.textContent = "Download";
   },
   import: () => {
     const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";

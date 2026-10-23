@@ -140,6 +140,11 @@ export async function saveItem(item, priv) {
   if (priv) await fb.fsM.setDoc(fb.fsM.doc(col("private"), id), clean(priv));
   return id;
 }
+// ------------------------------------------------------------------ recommendations (Google Places, cached on the trip so the family sees them too)
+export async function saveRecs(key, rec) {
+  if (DEMO) { const t = mem().trip; t.recs = { ...(t.recs || {}), [key]: clean(rec) }; demoLoad(store.tripId); emit(); return; }
+  await fb.fsM.setDoc(fb.fsM.doc(fb.db, "trips", store.tripId), { recs: { [key]: clean(rec) } }, { merge: true });
+}
 // ------------------------------------------------------------------ journal (editors and family)
 export async function saveJournal(post) {
   const id = post.id || uid("j");

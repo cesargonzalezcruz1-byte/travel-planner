@@ -509,3 +509,22 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .jwarn{background:#FFF4E5;color:#7A4B00;border-radius:10px;padding:8px 10px}
 .rbadge{display:inline-flex;align-items:baseline;gap:2px;margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--soft);color:var(--ink2);font-size:12px;font-weight:700;white-space:nowrap}
 .rbadge small{font-weight:500;color:var(--muted)}
+
+/* ---------- recommendations (Google Places, per stay location) ---------- */
+.recs h3 .small{font-weight:600;margin-left:4px}
+.recs .seg-mini{margin:2px 0 10px}
+.rlocs{margin-right:8px}
+.rlabel{margin:4px 0 2px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.reclist{list-style:none;margin:0;padding:0}
+.rec{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.rec:last-child{border-bottom:0}
+.rnum{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--act-t);color:var(--act-x, var(--ink));font-size:12px;font-weight:800}
+.rmain{flex:1;min-width:0}
+.rname{display:block;font-weight:700;color:var(--ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rname:hover{text-decoration:underline}
+.rsub{display:flex;flex-wrap:wrap;gap:0 6px;font-size:12.5px;margin-top:1px}
+.rstar{color:#E59A0B;font-weight:800}
+.radded{font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap}
+.rfoot{margin:8px 0 0}
+.rfoot .lnk{font-size:inherit;padding:0}
+.modal .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}

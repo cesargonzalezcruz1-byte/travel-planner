@@ -1,6 +1,7 @@
 // Embedded Google Map for the day screen: one pin per place, coloured by kind.
 // Needs MAPS_API_KEY in firebase-config.js (Maps JavaScript API + Geocoding API enabled, key restricted to the site).
 import { MAPS_API_KEY, MAP_ID } from "./firebase-config.js";
+// Also used for recommendations: Places API (New) enabled on the same key.
 
 let loading = null, authFailed = false;
 window.gm_authFailure = () => { authFailed = true; document.querySelectorAll(".daymap-msg").forEach((m) => (m.textContent = "Google Maps rejected the key - check the key's website restriction and that Maps JavaScript API is enabled.")); };
@@ -77,4 +78,17 @@ export async function drawDayMap(holder, pins, msgEl) {
   if (markers.length === 1) { map.setCenter(bounds.getCenter()); map.setZoom(13); }
   else if (markers.length) map.fitBounds(bounds, 48);
   if (msgEl) msgEl.textContent = missing.length ? `Couldn't find on the map: ${missing.join(", ")}` : "";
+}
+
+// Best-rated places near a location (Places API (New) - must be enabled for the key). Returns plain objects.
+const PLACE_FIELDS = ["id", "displayName", "rating", "userRatingCount", "formattedAddress", "primaryTypeDisplayName", "googleMapsURI", "location"];
+export async function searchPlaces(textQuery, near) {
+  if (authFailed) throw new Error("Google Maps rejected the key");
+  await load();
+  const { Place } = await google.maps.importLibrary("places");
+  let bias;
+  if (near) { const { Geocoder } = await google.maps.importLibrary("geocoding"); const g = await geocode(new Geocoder(), near).catch(() => null); if (g) bias = { center: { lat: g.lat, lng: g.lng }, radius: 25000 }; }
+  const { places } = await Place.searchByText({ textQuery, fields: PLACE_FIELDS, maxResultCount: 20, language: "en", ...(bias ? { locationBias: bias } : {}) });
+  return (places || []).map((p) => ({ id: p.id, name: p.displayName || "", rating: p.rating || 0, count: p.userRatingCount || 0, address: p.formattedAddress || "",
+    type: p.primaryTypeDisplayName || "", url: p.googleMapsURI || "", lat: p.location?.lat?.() ?? null, lng: p.location?.lng?.() ?? null }));
 }

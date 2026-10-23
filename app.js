@@ -911,7 +911,7 @@ function itemCard(i, date) {
   const k = KIND[i.type];
   return `<article class="icard k-${k}">
     <div class="ihead"><span class="ic">${ICON[k]}</span><span class="tag">${role}</span>${i.status === "tbc" ? `<span class="tbctag">TBC</span>` : ""}
-      <span class="who">${i.who.map((w) => `<span class="t-init">${w}</span>`).join(" ")}</span></div>
+      <span class="who idots" role="img" aria-label="${esc(i.who.map(NAME).join(", "))}">${ALL_CODES().filter((c) => i.who.includes(c)).concat(i.who.filter((c) => !ALL_CODES().includes(c))).map((w) => `<i class="tdot" style="--pc:${pcolor(w)}" title="${esc(NAME(w))}"></i>`).join("")}</span></div>
     <div class="ibody">${fmt(body)}</div>
     ${i.note ? `<div class="inote">${fmt(i.note)}</div>` : ""}
     ${pvHtml}
@@ -992,7 +992,7 @@ function renderDay() {
     <div class="dayhead${date === iso(new Date()) ? " today" : ""}">
       <button class="nav" data-go="-1" ${idx === 0 ? "disabled" : ""}>‹</button>
       <div><div class="wd">${date === iso(new Date()) ? "Today · " : ""}${WD[D(date).getDay()]}</div><div class="dt">${longDate(date)}</div>${others.length ? `<div class="ddots" role="group" aria-label="Travelling with">${others.map((o) => { const on = together(p, o, date);
-        return `<button class="dd${on ? " on" : ""}" style="--pc:${pcolor(o)}" ${isEditor() ? `data-with="${o}"` : "disabled"} aria-pressed="${on}" aria-label="${esc(NAME(o))}: ${on ? "travelling with " + esc(NAME(p)) : "not with " + esc(NAME(p))}" title="${esc(NAME(o))}${on ? " - together" : " - apart"}${isEditor() ? " (tap to change)" : ""}"><i></i></button>`; }).join("")}</div>` : ""}</div>
+        return `<button class="dd${on ? " on" : ""}" ${isEditor() ? `data-with="${o}"` : "disabled"} aria-pressed="${on}" aria-label="${esc(NAME(o))}: ${on ? "travelling with " + esc(NAME(p)) : "not with " + esc(NAME(p))}" title="${esc(NAME(o))}${on ? " - together" : " - apart"}${isEditor() ? " (tap to change)" : ""}" style="--pc:${pcolor(o)};--pi:${inkOn(pcolor(o))}">${esc(o)}</button>`; }).join("")}</div>` : ""}</div>
       <button class="nav" data-go="1" ${idx === ds.length - 1 ? "disabled" : ""}>›</button>
     </div>
     

@@ -465,12 +465,11 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .ja{display:flex;align-items:baseline;gap:6px;font-size:12.5px;font-weight:700;line-height:1.3}
 .ja .jdot{transform:translateY(-1px)}
 .jempties{display:flex;flex-wrap:wrap;gap:6px}
-.ddots{display:flex;justify-content:center;gap:2px;margin-top:2px}
-.dd{width:30px;height:30px;border:0;background:transparent;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:15px}
+.ddots{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;margin-top:6px}
+.dd{min-width:44px;height:26px;padding:0 10px;border-radius:13px;border:2px solid var(--pc);background:transparent;color:var(--ink);font-size:11.5px;font-weight:800;letter-spacing:.03em;cursor:pointer;transition:background .15s,color .15s;display:inline-flex;align-items:center;justify-content:center}
+.dd.on{background:var(--pc);color:var(--pi)}
 .dd:disabled{cursor:default}
-.dd:not(:disabled):hover{background:var(--soft)}
-.dd i{width:14px;height:14px;border-radius:7px;border:2.5px solid var(--pc);box-sizing:border-box;background:transparent;transition:background .15s}
-.dd.on i{background:var(--pc)}
+.dd:not(:disabled):not(.on):hover{background:color-mix(in srgb,var(--pc) 15%,transparent)}
 
 /* ---------- journal (day view, editable by the family too) ---------- */
 .journal{--star:#F5A524}
@@ -548,3 +547,5 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .mpin span svg{width:15px;height:15px;display:block}
 .pdot svg{width:13px;height:13px;display:block}
 .mpin:not(.hollow) span svg,.pdot:not(.hollow) svg{stroke-width:2.4}
+.idots{display:inline-flex;gap:5px;align-items:center}
+.tdot{width:11px;height:11px;border-radius:50%;background:var(--pc);box-shadow:0 0 0 1.5px var(--card)}

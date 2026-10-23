@@ -114,12 +114,12 @@ function renderLogin(err = "") {
     <h1 class="title-red">Travel Planner</h1>
     <p class="muted">Family itinerary</p>
     <form id="famForm" class="card">
-      <label>Family password</label>
+      <label>Family Password</label>
       <input id="famPw" type="password" autocomplete="current-password" required placeholder="Enter the family password">
-      <button class="btn primary" type="submit">Open itinerary</button>
+      <button class="btn primary" type="submit">Open Itinerary</button>
     </form>
     <div class="or">or</div>
-    <button id="gBtn" class="btn">Sign in with Google (editors)</button>
+    <button id="gBtn" class="btn">Sign In with Google (Editors)</button>
     <p class="err">${esc(err)}</p>
   </div>`;
   $("#famForm").onsubmit = async (e) => {
@@ -135,16 +135,16 @@ function renderLogin(err = "") {
 }
 function renderNoAccess() {
   root.innerHTML = `<div class="login"><h1 class="title-red">Travel Planner</h1>
-    <p>${esc(store.email)} isn't set up as an editor.</p><button class="btn" id="out">Sign out</button></div>`;
+    <p>${esc(store.email)} isn't set up as an editor.</p><button class="btn" id="out">Sign Out</button></div>`;
   $("#out").onclick = data.signOut;
 }
 function renderEmpty() {
   const known = store.trips.find((t) => t.id === ui.tripId);
   root.innerHTML = `${header()}<div class="empty card">
-    ${!store.tripsLoaded || known ? `<h2>Loading trip…</h2>` : store.trip && !PEOPLE().length ? `<h2>No travellers yet</h2>
-      ${isEditor() ? `<p>Add the travellers in the trip setup.</p><button class="btn primary" data-act="settings">Trip setup</button>` : ""}`
-      : `<h2>Trip not found</h2><p>It may have been deleted.</p>`}
-    <p><button class="btn" data-home>← All trips</button></p></div>`;
+    ${!store.tripsLoaded || known ? `<h2>Loading Trip…</h2>` : store.trip && !PEOPLE().length ? `<h2>No Travellers Yet</h2>
+      ${isEditor() ? `<p>Add the travellers in the trip setup.</p><button class="btn primary" data-act="settings">Trip Setup</button>` : ""}`
+      : `<h2>Trip Not Found</h2><p>It may have been deleted.</p>`}
+    <p><button class="btn" data-home>← All Trips</button></p></div>`;
   wireHeader();
 }
 
@@ -157,7 +157,7 @@ function renderHome() {
     const days = t.start && t.end ? dayDiff(t.start, t.end) + 1 : 0;
     const status = t.start <= today && today <= t.end ? `<span class="tstat now">On now</span>` : t.start > today ? `<span class="tstat">in ${dayDiff(today, t.start)} days</span>` : `<span class="tstat past">Past</span>`;
     return `<article class="tripcard" data-open="${esc(t.id)}" role="button" tabindex="0">
-      <div class="tc-top"><h3>${esc(t.title || "Untitled trip")}</h3>${status}</div>
+      <div class="tc-top"><h3>${esc(t.title || "Untitled Trip")}</h3>${status}</div>
       <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
       <div class="tc-people">${(t.travellers || []).map((p) => `<span class="pchip"><b>${esc(p.code)}</b> ${esc(p.name || "")}</span>`).join("")}</div>
       ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
@@ -165,14 +165,14 @@ function renderHome() {
   };
   root.innerHTML = `<header class="top"><div class="brand"><span class="title-red">Travel Planner</span>
       <span class="role ${store.role}">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span></div>
-    <div class="menu">${isEditor() ? `<button class="btn small primary" data-act="newtrip">+ New trip</button>` : ""}
+    <div class="menu">${isEditor() ? `<button class="btn small primary" data-act="newtrip">+ New Trip</button>` : ""}
       <details class="more"><summary class="btn small">⋯</summary><div class="pop">
-        ${isEditor() ? `<button data-act="import">Import a trip file</button>` : ""}<button data-act="signout">Sign out</button></div></details></div></header>
+        ${isEditor() ? `<button data-act="import">Import a Trip File</button>` : ""}<button data-act="signout">Sign Out</button></div></details></div></header>
   <div class="home">
-    ${!store.tripsLoaded ? `<p class="muted">Loading trips…</p>` : !trips.length ? `<div class="empty card"><h2>No trips yet</h2>
-       ${isEditor() ? `<p>Create your first trip: name, dates and who's travelling.</p><button class="btn primary" data-act="newtrip">+ New trip</button>` : `<p>Nothing has been planned yet.</p>`}</div>` : ""}
+    ${!store.tripsLoaded ? `<p class="muted">Loading trips…</p>` : !trips.length ? `<div class="empty card"><h2>No Trips Yet</h2>
+       ${isEditor() ? `<p>Create your first trip: name, dates and who's travelling.</p><button class="btn primary" data-act="newtrip">+ New Trip</button>` : `<p>Nothing has been planned yet.</p>`}</div>` : ""}
     ${upcoming.length ? `<h2 class="hsec">Upcoming</h2><div class="trips">${upcoming.map(card).join("")}</div>` : ""}
-    ${past.length ? `<h2 class="hsec">Past trips</h2><div class="trips">${past.map(card).join("")}</div>` : ""}
+    ${past.length ? `<h2 class="hsec">Past Trips</h2><div class="trips">${past.map(card).join("")}</div>` : ""}
   </div>`;
   wireHeader();
   root.querySelectorAll("[data-open]").forEach((el) => {
@@ -188,17 +188,17 @@ function tripForm(t) {
   const row = (p, kind) => `<div class="prow" data-kind="${kind}">
       <input class="pcode" placeholder="Initials" maxlength="6" value="${esc(p.code || "")}" required>
       <input class="pname" placeholder="Name" value="${esc(p.name || "")}" ${kind === "t" ? "required" : ""}>
-      <input class="pfull" placeholder="Full name (as on bookings)" value="${esc(p.fullName || "")}">
+      <input class="pfull" placeholder="Full Name (as on Bookings)" value="${esc(p.fullName || "")}">
       <button type="button" class="btn tiny danger" data-rm title="Remove">✕</button></div>`;
-  modal(`<h3>${isNew ? "New trip" : "Trip setup"}</h3>
-    <label>Trip name<input name="title" value="${esc(t.title)}" placeholder="e.g. Japan 2027" required></label>
+  modal(`<h3>${isNew ? "New Trip" : "Trip Setup"}</h3>
+    <label>Trip Name<input name="title" value="${esc(t.title)}" placeholder="e.g. Japan 2027" required></label>
     <div class="row"><label>Start<input type="date" name="start" value="${t.start || ""}" required></label><label>End<input type="date" name="end" value="${t.end || ""}" required></label></div>
-    <fieldset class="pbox"><legend>Travellers (each gets their own itinerary)</legend>
+    <fieldset class="pbox"><legend>Travellers (Each Gets Their Own Itinerary)</legend>
       <div id="trav">${(t.travellers || []).map((p) => row(p, "t")).join("")}</div>
-      <button type="button" class="btn tiny" data-addp="t">+ Add traveller</button></fieldset>
-    <fieldset class="pbox"><legend>Others joining sometimes (optional)</legend>
+      <button type="button" class="btn tiny" data-addp="t">+ Add Traveller</button></fieldset>
+    <fieldset class="pbox"><legend>Others Joining Sometimes (Optional)</legend>
       <div id="ext">${(t.extended || []).map((p) => row(p, "e")).join("")}</div>
-      <button type="button" class="btn tiny" data-addp="e">+ Add person</button></fieldset>
+      <button type="button" class="btn tiny" data-addp="e">+ Add Person</button></fieldset>
     <p class="muted small">Initials are how people appear in the itinerary (e.g. CGC). Full names help the AI match names on bookings.</p>`,
     async (fd, form) => {
       const read = (kind) => [...form.querySelectorAll(`.prow[data-kind="${kind}"]`)].map((r) => ({
@@ -231,14 +231,14 @@ function tripForm(t) {
 function header() {
   const ppl = PEOPLE().map((p) => `<button class="chip ${p === ui.person ? "on" : ""}" data-person="${p}"><b>${p}</b><span>${esc(NAME(p))}</span></button>`).join("");
   return `<header class="top">
-    <div class="brand"><button class="btn small" data-home title="All trips">☰ Trips</button><span class="title-red">${esc(store.trip?.title || "Travel Planner")}</span>
+    <div class="brand"><button class="btn small" data-home title="All Trips">☰ Trips</button><span class="title-red">${esc(store.trip?.title || "Travel Planner")}</span>
       <span class="role ${store.role}">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span></div>
     <nav class="people">${ppl}</nav>
     <div class="menu">
       ${isEditor() ? `<button class="btn small" data-act="add">+ Booking</button>` : ""}
       <details class="more"><summary class="btn small">⋯</summary><div class="pop">
-        ${isEditor() ? `<button data-act="settings">Trip setup</button><button data-act="import">Import trip data</button><button data-act="export">Download backup</button>` : ""}
-        <button data-act="signout">Sign out</button></div></details>
+        ${isEditor() ? `<button data-act="settings">Trip Setup</button><button data-act="import">Import Trip Data</button><button data-act="export">Download Backup</button>` : ""}
+        <button data-act="signout">Sign Out</button></div></details>
     </div></header>
     ${store.error ? `<div class="banner err">${esc(store.error)}</div>` : ""}`;
 }
@@ -372,11 +372,12 @@ function itemCard(i, date) {
     <div class="ilinks">${mapLinks}${files.map(fileLink).join("")}</div>
     ${isEditor() ? `<div class="iacts"><button class="btn small" data-edit-item="${i.id}">Edit</button>
        <button class="btn small danger" data-del-item="${i.id}">🗑 Delete</button>
-       <label class="btn small">Attach file<input type="file" hidden data-attach-item="${i.id}" multiple></label></div>` : ""}
+       <label class="btn small">Attach File<input type="file" hidden data-attach-item="${i.id}" multiple></label></div>` : ""}
   </article>`;
 }
-const LABELS = { confirmation: "Confirmation", tickets: "Tickets", seats: "Seats", cost: "Cost", paidWith: "Paid with", dueAtHotel: "Due at hotel",
-  cancel: "Cancellation", phone: "Phone", host: "Host", checkIn: "Check-in", bags: "Bags", extras: "Extras", notes: "Notes" };
+const LABELS = { confirmation: "Confirmation", tickets: "Tickets", seats: "Seats", cost: "Cost", paidWith: "Paid With", dueAtHotel: "Due at Hotel",
+  cancel: "Cancellation", phone: "Phone", host: "Host", checkIn: "Check-In", bags: "Bags", extras: "Extras", notes: "Notes" };
+const cap = (w) => String(w || "").replace(/^./, (c) => c.toUpperCase());
 const label = (k) => LABELS[k] || k;
 const fileLink = (f) => `<button class="filelink" data-file="${f.id}">📄 ${esc(f.name)}</button>`;
 
@@ -406,7 +407,7 @@ function renderDay() {
         ${(e.endDate && e.endDate !== e.date) ? `<span class="muted small"> (${fmtDate(e.date)} – ${fmtDate(e.endDate)})</span>` : ""}
         ${e.who.length < PEOPLE().length ? `<span class="whos">${e.who.map((w) => `<span class="t-init">${w}</span>`).join(" ")}</span>` : ""}</div>
       <div class="eacts">${e.place ? `<a class="maplink" target="_blank" rel="noopener" href="${maps(e.place)}">📍</a>` : ""}
-        ${isEditor() ? `${e.status === "recommended" ? `<button class="btn tiny" data-plan="${e.id}">Add to plan</button>` : ""}
+        ${isEditor() ? `${e.status === "recommended" ? `<button class="btn tiny" data-plan="${e.id}">Add to Plan</button>` : ""}
         ${isAct ? `<label class="btn tiny" title="Attach a booking / ticket - marks it confirmed">📎<input type="file" hidden data-attach-entry="${e.id}"></label>` : ""}
         <button class="btn tiny" data-edit-entry="${e.id}">Edit</button>
         <button class="btn tiny danger" data-del-entry="${e.id}" title="Delete">🗑</button>` : ""}</div>
@@ -422,23 +423,23 @@ function renderDay() {
     <div class="withrow"><span class="muted">With ${esc(NAME(p))} tonight:</span>
       ${others.map((o) => together(p, o, date) ? `<span class="pill yes">☑ <span class="t-init">${o}</span> ${esc(NAME(o))}</span>` : `<span class="pill no">☐ ${o}</span>`).join("")}</div>
 
-    <section><h3>Travel & stays</h3>${its.length ? its.map((i) => itemCard(i, date)).join("") : `<p class="muted">No flights, hotels or cars today.</p>`}</section>
+    <section><h3>Travel & Stays</h3>${its.length ? its.map((i) => itemCard(i, date)).join("") : `<p class="muted">No flights, hotels or cars today.</p>`}</section>
 
     <section><h3>Activities</h3>${isEditor() ? `<p class="muted small">Tick ☑ to confirm - only confirmed activities show in the itinerary. Attaching a booking confirms it.</p>` : ""}<ul class="entries">${acts.map(entryLi).join("") || `<li class="muted">Nothing planned yet.</li>`}</ul>
-      ${isEditor() ? `<button class="btn small" data-new-entry="activity">+ Add activity</button>` : ""}</section>
+      ${isEditor() ? `<button class="btn small" data-new-entry="activity">+ Add Activity</button>` : ""}</section>
 
     ${recs.length ? `<section><h3>Recommended</h3><ul class="entries">${recs.map(entryLi).join("")}</ul></section>` : ""}
 
     <section><h3>Comments</h3><ul class="entries">${coms.map(entryLi).join("") || `<li class="muted">No comments.</li>`}</ul>
-      ${isEditor() ? `<button class="btn small" data-new-entry="comment">+ Add comment</button>` : ""}</section>
+      ${isEditor() ? `<button class="btn small" data-new-entry="comment">+ Add Comment</button>` : ""}</section>
 
     <section><h3>Places</h3>
       ${places.length ? `<ul class="places">${places.map(([n, q]) => `<li><a class="maplink" target="_blank" rel="noopener" href="${maps(q)}">📍 ${fmt(n)}</a></li>`).join("")}</ul>` : `<p class="muted">No places for this day.</p>`}
-      ${route ? `<a class="btn small" target="_blank" rel="noopener" href="${route}">🗺 Day route in Google Maps</a>` : ""}</section>
+      ${route ? `<a class="btn small" target="_blank" rel="noopener" href="${route}">🗺 Day Route in Google Maps</a>` : ""}</section>
 
     ${isEditor() ? `<section><h3>Documents</h3>
       ${dayFiles.length ? `<div class="files">${dayFiles.map((f) => `<div class="frow">${fileLink(f)}<button class="btn tiny" data-del-file="${f.id}">Remove</button></div>`).join("")}</div>` : `<p class="muted">No documents for this day.</p>`}
-      <label class="btn small">Upload for this day<input type="file" hidden data-attach-day="${date}" multiple></label></section>` : ""}
+      <label class="btn small">Upload for This Day<input type="file" hidden data-attach-day="${date}" multiple></label></section>` : ""}
   </div>`;
   wireHeader();
   root.querySelector("[data-back]").onclick = () => routeTo(ui.tripId, null);
@@ -469,9 +470,9 @@ async function upload(files, where) {
 
 // ---------------------------------------------------------------- forms
 const FIELDS = {
-  flight: [["route", "Route (e.g. BNE-LAX)"], ["airline", "Airline"], ["number", "Flight number"], ["dep", "Departs"], ["arr", "Arrives"]],
-  stay: [["name", "Hotel name"], ["short", "Short name (for the grid)"], ["address", "Address"], ["checkin", "Check-in time"], ["checkout", "Check-out time"]],
-  car: [["company", "Company"], ["vehicle", "Vehicle"], ["pickup", "Pick-up location"], ["dropoff", "Drop-off location"], ["pickupTime", "Pick-up time"], ["dropoffTime", "Drop-off time"]],
+  flight: [["route", "Route (e.g. BNE-LAX)"], ["airline", "Airline"], ["number", "Flight Number"], ["dep", "Departs"], ["arr", "Arrives"]],
+  stay: [["name", "Hotel Name"], ["short", "Short Name (for the Grid)"], ["address", "Address"], ["checkin", "Check-In Time"], ["checkout", "Check-Out Time"]],
+  car: [["company", "Company"], ["vehicle", "Vehicle"], ["pickup", "Pick-Up Location"], ["dropoff", "Drop-Off Location"], ["pickupTime", "Pick-Up Time"], ["dropoffTime", "Drop-Off Time"]],
 };
 const PRIV_KEYS = ["confirmation", "tickets", "seats", "cost", "paidWith", "dueAtHotel", "cancel", "phone", "notes"];
 function modal(html, onSubmit, onDelete) {
@@ -488,7 +489,7 @@ function modal(html, onSubmit, onDelete) {
   m.querySelector("input,select,textarea")?.focus();
 }
 const whoBoxes = (who) => `<fieldset class="whobox"><legend>Who</legend>${PEOPLE().map((p) => `<label><input type="checkbox" name="who" value="${p}" ${who.includes(p) ? "checked" : ""}> ${p}</label>`).join("")}</fieldset>`;
-const PDF_BTN = `<div class="extract"><label class="btn small pdfbtn">📄 Fill from PDF or photo<input type="file" hidden accept="application/pdf,image/*" data-extract></label>
+const PDF_BTN = `<div class="extract"><label class="btn small pdfbtn">📄 Fill from PDF or Photo<input type="file" hidden accept="application/pdf,image/*" data-extract></label>
   <span class="extract-status muted small">The file is read by AI, then attached. Check the details before saving.</span></div>`;
 function setVal(form, name, v) { const el = form.querySelector(`[name="${name}"]`); if (el && v !== undefined && v !== null && v !== "") el.value = v; }
 // After AI fill: red label + * on the fields that matter most (and any the AI was unsure of); cleared once the field is touched.
@@ -535,17 +536,17 @@ function wireExtract(form, hint, onResult) {
 }
 function itemForm(item) {
   const isNew = !item.id; const pv = (item.id && store.priv[item.id]) || {};
-  const typeSel = isNew ? `<label>Type<select name="type">${["flight", "stay", "car"].map((t) => `<option ${t === item.type ? "selected" : ""}>${t}</option>`).join("")}</select></label>` : "";
+  const typeSel = isNew ? `<label>Type<select name="type">${["flight", "stay", "car"].map((t) => `<option value="${t}" ${t === item.type ? "selected" : ""}>${cap(t)}</option>`).join("")}</select></label>` : "";
   const fieldsFor = (type, src = item) => FIELDS[type].map(([k, l]) => `<label>${l}<input name="${k}" value="${esc(src[k] || "")}"></label>`).join("");
   const privKeys = [...new Set([...PRIV_KEYS, ...Object.keys(pv)])];
   const statusSel = (st) => `<label>Status<select name="status"><option value="booked" ${st !== "tbc" ? "selected" : ""}>Booked</option><option value="tbc" ${st === "tbc" ? "selected" : ""}>TBC</option></select></label>`;
-  modal(`<h3>${isNew ? "Add booking" : "Edit " + item.type}</h3>${PDF_BTN}${typeSel}
+  modal(`<h3>${isNew ? "Add Booking" : "Edit " + cap(item.type)}</h3>${PDF_BTN}${typeSel}
     ${whoBoxes(item.who || [ui.person])}
     <div class="row"><label>From<input type="date" name="start" value="${item.start || ""}" required></label><label>To<input type="date" name="end" value="${item.end || ""}" required></label></div>
     <div id="typeFields">${fieldsFor(item.type || "stay")}</div>
     <div id="statusBox">${item.type !== "flight" ? statusSel(item.status) : ""}</div>
-    <label>Note (visible to family)<input name="note" value="${esc(item.note || "")}"></label>
-    <details class="privbox" ${Object.keys(pv).length ? "open" : ""}><summary>Private details (editors only)</summary>
+    <label>Note (Visible to Family)<input name="note" value="${esc(item.note || "")}"></label>
+    <details class="privbox" ${Object.keys(pv).length ? "open" : ""}><summary>Private Details (Editors Only)</summary>
       ${privKeys.map((k) => `<label>${esc(label(k))}<input name="priv.${k}" value="${esc(pv[k] || "")}"></label>`).join("")}</details>`,
     async (fd, form) => {
       const type = fd.get("type") || item.type;
@@ -582,11 +583,11 @@ function itemForm(item) {
 }
 function entryForm(e) {
   const isNew = !e.id;
-  modal(`<h3>${isNew ? "Add" : "Edit"} ${e.kind}</h3>${e.kind === "activity" ? PDF_BTN : ""}
+  modal(`<h3>${isNew ? "Add" : "Edit"} ${cap(e.kind)}</h3>${e.kind === "activity" ? PDF_BTN : ""}
     <label>${e.kind === "comment" ? "Comment" : "Activity"}<textarea name="text" rows="3" required>${esc(e.text)}</textarea></label>
     ${e.kind === "activity" ? `<label>Place (for Google Maps)<input name="place" value="${esc(e.place || "")}" placeholder="e.g. Gran Cenote Tulum"></label>
-      <label>Type<select name="status"><option value="planned" ${e.status !== "recommended" ? "selected" : ""}>In the plan</option><option value="recommended" ${e.status === "recommended" ? "selected" : ""}>Recommended idea</option></select></label>
-      <label class="check"><input type="checkbox" name="confirmed" ${e.confirmed ? "checked" : ""}> Confirmed - show it in the itinerary</label>` : ""}
+      <label>Type<select name="status"><option value="planned" ${e.status !== "recommended" ? "selected" : ""}>In the Plan</option><option value="recommended" ${e.status === "recommended" ? "selected" : ""}>Recommended Idea</option></select></label>
+      <label class="check"><input type="checkbox" name="confirmed" ${e.confirmed ? "checked" : ""}> Confirmed - Show It in the Itinerary</label>` : ""}
     <div class="row"><label>From<input type="date" name="date" value="${e.date}" required></label><label>To<input type="date" name="endDate" value="${e.endDate || e.date}"></label></div>
     ${whoBoxes(e.who)}`,
     async (fd, form) => {

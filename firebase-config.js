@@ -19,5 +19,5 @@ export const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/12.19.0";
 export const AI_MODELS = ["gemini-3.6-flash", "gemini-3-flash", "gemini-2.5-flash"];
 export const AI_LOCATION = "global";
 // Embedded day map (Google Maps JavaScript API + Geocoding API). Browser key restricted to the site. Empty = map hidden.
-export const MAPS_API_KEY = "";
+export const MAPS_API_KEY = "AIzaSyCXZELvt-h-Di79tJGlsXMXvFXSNDcZlWo";
 export const MAP_ID = "";   // optional Map ID from Google Cloud (Map Management); blank uses Google's demo map style

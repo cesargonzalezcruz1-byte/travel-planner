@@ -319,7 +319,7 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .ov-bg{grid-column:1/-1;border-radius:10px;background:var(--card)}
 .ov-bg.alt{background:var(--row-alt)} .ov-bg.wk{background:var(--row-wk)}
 .ov-bg.today{background:var(--today-bg);box-shadow:inset 0 0 0 2px var(--today)}
-.ov-day{grid-column:1;z-index:1;border:0;background:transparent;color:var(--ink);text-align:left;padding:0 0 0 5px;display:flex;flex-direction:column;justify-content:center;cursor:pointer}
+.ov-day{grid-column:1;z-index:2;border:0;background:transparent;color:var(--ink);text-align:left;padding:0 0 0 5px;display:flex;flex-direction:column;justify-content:center;cursor:pointer}
 .ov-dn{display:flex;align-items:baseline;gap:4px}
 .ov-dn b{font-size:14px;font-weight:800;line-height:1.05}
 .ov-dn small{font-size:9px;font-weight:700;color:var(--muted)} .ov-dn small.wk{color:var(--wk-ink)} .ov-dn small.mon{color:var(--ink);font-weight:800}
@@ -439,8 +439,6 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 
 /* today highlight (colour per theme: plum / green / glowing green) */
 .ov-day.today .ov-dn b,.ov-day.today .ov-dn small{color:var(--today-ink)}
-.ov-day.today .ov-dn b{background:var(--today);color:#fff;border-radius:8px;padding:1px 5px;margin-left:-5px}
-:root[data-theme="midnight"] .ov-day.today .ov-dn b{color:#0F0F14}
 :root[data-theme="midnight"] .dcard.today .dnum{color:#0F0F14}
 .jcard.today{border-color:var(--today);box-shadow:0 0 0 2px var(--today)}
 .jday.today{background:var(--today-bg);border-color:var(--today)} .jday.today .jd{background:var(--today)}
@@ -450,5 +448,8 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .dayhead.today .wd{color:var(--today-ink)}
 .chart .today-col{fill:var(--today-bg)}
 :root[data-theme="midnight"] .tbadge.now{color:#0F0F14}
-.ov-today{grid-column:1/-1;z-index:3;border:2px solid var(--today);border-radius:10px;pointer-events:none}
 .ov-bg.today{box-shadow:none}
+/* overview: today = the day cell only (date + traveller dots), framed with a little room around the content */
+.ov-today{grid-column:1/2;z-index:1;margin:-3px 1px -3px -3px;background:var(--today-bg);border:2px solid var(--today);border-radius:13px;pointer-events:none}
+.ov-day.today{padding-left:6px}
+.ov-day.today .ov-dn b{color:var(--today-ink)}

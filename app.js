@@ -646,7 +646,7 @@ function renderOverview() {
     const wd = D(d).getDay(), wk = wd === 0 || wd === 6, first = k === 0 || D(d).getDate() === 1;
     const dots = others.filter((o) => together(p, o, d)).map((o) => `<i style="background:${pcolor(o)}" title="With ${esc(NAME(o))}"></i>`).join("");
     if (d === today) cells.push(`<div class="ov-today" style="grid-row:${k + 1}" aria-hidden="true"></div>`);
-    cells.push(`<div class="ov-bg${wk ? " wk" : k % 2 ? "" : " alt"}${d === today ? " today" : ""}" style="grid-row:${k + 1}"></div>
+    cells.push(`<div class="ov-bg${wk ? " wk" : k % 2 ? "" : " alt"}" style="grid-row:${k + 1}"></div>
       <button class="ov-day${d === today ? " today" : ""}" data-day="${d}" style="grid-row:${k + 1}" aria-label="${WD[wd]} ${longDate(d)}${d === today ? " (today)" : ""}"><span class="ov-dn"><b>${D(d).getDate()}</b><small class="${first ? "mon" : wk ? "wk" : ""}">${first ? MON[D(d).getMonth()].toUpperCase() : WD3(d)}</small></span><span class="ov-dots">${dots}</span></button>`);
   });
   const its = itemsFor(p).filter((i) => i.end >= store.trip.start && i.start <= store.trip.end).sort((a, b) => a.start.localeCompare(b.start));

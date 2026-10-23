@@ -190,11 +190,12 @@ function renderGrid() {
   place("car", COL.cdrop, COL.cpick, "cdrop", "cpick", ["car-a", "car-b"]);
   // stripes for empty runs
   const rows = ds.map((d) => R(d));
+  const slotOf = (c) => (c === COL.flight ? "flight" : c <= COL.hin ? "stay" : "car");
   const stripeRuns = (isEmpty, c1, c2) => {
     let s = null;
     rows.concat([null]).forEach((r) => {
       if (r !== null && isEmpty(r)) { if (s === null) s = r; }
-      else if (s !== null) { cell(s, (r ?? rows.at(-1) + 1) - 1, c1, c2, "stripe", ""); s = null; }
+      else if (s !== null) { cell(s, (r ?? rows.at(-1) + 1) - 1, c1, c2, "stripe", "", `data-slot="${slotOf(c1)}" data-r1="${s}"`); s = null; }
     });
   };
   stripeRuns((r) => !used.flight.has(r), COL.flight, COL.flight);
@@ -222,6 +223,15 @@ function renderGrid() {
     <div class="gridwrap"><div class="grid" style="grid-template-rows:var(--head-h) repeat(${ds.length}, var(--row-h))">${cells.join("")}</div></div>
     <p class="hint">Tap a day to see its activities, places and documents.</p>`;
   wireHeader();
+  root.querySelectorAll(".grid [data-slot]").forEach((el) => {
+    el.onclick = (ev) => {
+      const box = el.getBoundingClientRect(); const rowPx = box.height / (parseInt(el.style.gridRow.split("/")[1]) - parseInt(el.dataset.r1));
+      const k = Math.min(ds.length - 1, +el.dataset.r1 - 2 + Math.floor((ev.clientY - box.top) / rowPx));
+      const date = ds[Math.max(0, k)];
+      if (!isEditor()) return openDay(date);
+      itemForm({ type: el.dataset.slot, who: [ui.person, ...others.filter((o) => together(ui.person, o, date))], start: date, end: el.dataset.slot === "flight" ? date : addDays(date, 1), status: "booked" });
+    };
+  });
   root.querySelectorAll(".grid [data-day]").forEach((el) => {
     el.onclick = () => openDay(el.dataset.day);
     el.onkeydown = (e) => { if (e.key === "Enter") openDay(el.dataset.day); };
@@ -354,49 +364,97 @@ function modal(html, onSubmit, onDelete) {
   m.querySelector("[data-cancel]").onclick = close;
   m.onclick = (e) => { if (e.target === m) close(); };
   if (onDelete) m.querySelector("[data-del]").onclick = async () => { if (confirm("Delete this for everyone?")) { await onDelete(); close(); } };
-  m.querySelector("form").onsubmit = async (e) => { e.preventDefault(); try { await onSubmit(new FormData(e.target)); close(); } catch (x) { toast("Save failed: " + (x.code || x.message)); } };
+  m.querySelector("form").onsubmit = async (e) => { e.preventDefault(); const btn = e.target.querySelector("button.primary"); btn.disabled = true; try { await onSubmit(new FormData(e.target), e.target); close(); } catch (x) { btn.disabled = false; toast("Save failed: " + (x.code || x.message)); } };
   m.querySelector("input,select,textarea")?.focus();
 }
 const whoBoxes = (who) => `<fieldset class="whobox"><legend>Who</legend>${PEOPLE().map((p) => `<label><input type="checkbox" name="who" value="${p}" ${who.includes(p) ? "checked" : ""}> ${p}</label>`).join("")}</fieldset>`;
+const PDF_BTN = `<div class="extract"><label class="btn small pdfbtn">📄 Fill from PDF or photo<input type="file" hidden accept="application/pdf,image/*" data-extract></label>
+  <span class="extract-status muted small">The file is read by AI, then attached. Check the details before saving.</span></div>`;
+function setVal(form, name, v) { const el = form.querySelector(`[name="${name}"]`); if (el && v !== undefined && v !== null && v !== "") el.value = v; }
+function wireExtract(form, hint, onResult) {
+  const inp = form.querySelector("[data-extract]"); const st = form.querySelector(".extract-status");
+  if (!inp) return;
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    if (f.size > 15 * 1024 * 1024) { st.textContent = "That file is over 15 MB - try a smaller PDF or a screenshot."; return; }
+    form.dataset.pending = "1"; form._pendingFile = f;
+    st.textContent = `Reading ${f.name}…`; st.classList.add("busy");
+    try {
+      const r = await data.extractFromFile(f, hint(), { travellers: store.trip?.travellers || [], extended: store.trip?.extended || [], start: store.trip?.start, end: store.trip?.end });
+      onResult(r || {});
+      st.textContent = `✓ Filled from ${f.name} - please check, then Save (the file will be attached).`;
+    } catch (x) {
+      st.textContent = `Couldn't read it automatically (${x.code || x.message}). Fill in by hand - ${f.name} will still be attached.`;
+    } finally { st.classList.remove("busy"); }
+  };
+}
 function itemForm(item) {
   const isNew = !item.id; const pv = (item.id && store.priv[item.id]) || {};
   const typeSel = isNew ? `<label>Type<select name="type">${["flight", "stay", "car"].map((t) => `<option ${t === item.type ? "selected" : ""}>${t}</option>`).join("")}</select></label>` : "";
-  const fieldsFor = (type) => FIELDS[type].map(([k, l]) => `<label>${l}<input name="${k}" value="${esc(item[k] || "")}"></label>`).join("");
+  const fieldsFor = (type, src = item) => FIELDS[type].map(([k, l]) => `<label>${l}<input name="${k}" value="${esc(src[k] || "")}"></label>`).join("");
   const privKeys = [...new Set([...PRIV_KEYS, ...Object.keys(pv)])];
-  modal(`<h3>${isNew ? "Add booking" : "Edit " + item.type}</h3>${typeSel}
+  const statusSel = (st) => `<label>Status<select name="status"><option value="booked" ${st !== "tbc" ? "selected" : ""}>Booked</option><option value="tbc" ${st === "tbc" ? "selected" : ""}>TBC</option></select></label>`;
+  modal(`<h3>${isNew ? "Add booking" : "Edit " + item.type}</h3>${PDF_BTN}${typeSel}
     ${whoBoxes(item.who || [ui.person])}
     <div class="row"><label>From<input type="date" name="start" value="${item.start || ""}" required></label><label>To<input type="date" name="end" value="${item.end || ""}" required></label></div>
     <div id="typeFields">${fieldsFor(item.type || "stay")}</div>
-    ${item.type !== "flight" ? `<label>Status<select name="status"><option value="booked" ${item.status !== "tbc" ? "selected" : ""}>Booked</option><option value="tbc" ${item.status === "tbc" ? "selected" : ""}>TBC</option></select></label>` : ""}
+    <div id="statusBox">${item.type !== "flight" ? statusSel(item.status) : ""}</div>
     <label>Note (visible to family)<input name="note" value="${esc(item.note || "")}"></label>
     <details class="privbox" ${Object.keys(pv).length ? "open" : ""}><summary>Private details (editors only)</summary>
       ${privKeys.map((k) => `<label>${esc(label(k))}<input name="priv.${k}" value="${esc(pv[k] || "")}"></label>`).join("")}</details>`,
-    async (fd) => {
+    async (fd, form) => {
       const type = fd.get("type") || item.type;
       const out = { ...item, type, who: fd.getAll("who"), start: fd.get("start"), end: fd.get("end"), note: fd.get("note"), status: fd.get("status") || item.status || "booked" };
       FIELDS[type].forEach(([k]) => (out[k] = fd.get(k) ?? ""));
       if (!out.who.length) throw new Error("Pick at least one person");
       if (out.end < out.start) throw new Error("'To' is before 'From'");
       const priv = {}; for (const [k, v] of fd.entries()) if (k.startsWith("priv.") && v) priv[k.slice(5)] = v;
-      await data.saveItem(out, priv);
+      const id = await data.saveItem(out, priv);
+      if (form._pendingFile) { toast("Attaching file…"); await data.uploadFile(form._pendingFile, { itemId: id }); toast("Saved with file attached"); }
     }, isNew ? null : () => data.deleteItem(item.id));
-  const sel = document.querySelector(".sheet select[name=type]");
-  if (sel) sel.onchange = () => { document.querySelector("#typeFields").innerHTML = fieldsFor(sel.value); };
+  const form = document.querySelector(".sheet");
+  const sel = form.querySelector("select[name=type]");
+  const switchType = (t, src) => {
+    form.querySelector("#typeFields").innerHTML = fieldsFor(t, src);
+    form.querySelector("#statusBox").innerHTML = t !== "flight" ? statusSel(src.status) : "";
+  };
+  if (sel) sel.onchange = () => switchType(sel.value, item);
+  wireExtract(form, () => (sel ? sel.value : item.type), (r) => {
+    let t = sel ? sel.value : item.type;
+    if (sel && r.type && ["flight", "stay", "car"].includes(r.type) && r.type !== t) { t = r.type; sel.value = t; switchType(t, {}); }
+    FIELDS[t].forEach(([k]) => setVal(form, k, r[k]));
+    setVal(form, "start", r.start); setVal(form, "end", r.end || r.start); setVal(form, "note", r.note);
+    if (Array.isArray(r.who) && r.who.length) form.querySelectorAll("input[name=who]").forEach((cb) => (cb.checked = r.who.includes(cb.value)));
+    const p = r.private || {};
+    for (const [k, v] of Object.entries(p)) {
+      if (!v) continue;
+      if (!form.querySelector(`[name="priv.${k}"]`)) form.querySelector(".privbox").insertAdjacentHTML("beforeend", `<label>${esc(label(k))}<input name="priv.${k}"></label>`);
+      setVal(form, "priv." + k, v);
+    }
+    form.querySelector(".privbox").open = true;
+  });
 }
 function entryForm(e) {
   const isNew = !e.id;
-  modal(`<h3>${isNew ? "Add" : "Edit"} ${e.kind}</h3>
+  modal(`<h3>${isNew ? "Add" : "Edit"} ${e.kind}</h3>${e.kind === "activity" ? PDF_BTN : ""}
     <label>${e.kind === "comment" ? "Comment" : "Activity"}<textarea name="text" rows="3" required>${esc(e.text)}</textarea></label>
     ${e.kind === "activity" ? `<label>Place (for Google Maps)<input name="place" value="${esc(e.place || "")}" placeholder="e.g. Gran Cenote Tulum"></label>
       <label>Status<select name="status"><option value="confirmed" ${e.status !== "recommended" ? "selected" : ""}>Confirmed</option><option value="recommended" ${e.status === "recommended" ? "selected" : ""}>Recommended</option></select></label>` : ""}
     <div class="row"><label>From<input type="date" name="date" value="${e.date}" required></label><label>To<input type="date" name="endDate" value="${e.endDate || e.date}"></label></div>
     ${whoBoxes(e.who)}`,
-    async (fd) => {
+    async (fd, form) => {
       const out = { ...e, text: fd.get("text").trim(), place: fd.get("place") ?? e.place ?? "", status: fd.get("status") || "confirmed",
                     date: fd.get("date"), endDate: fd.get("endDate") || fd.get("date"), who: fd.getAll("who") };
       if (!out.who.length) throw new Error("Pick at least one person");
       await data.saveEntry(out);
+      if (form._pendingFile) { toast("Attaching file…"); await data.uploadFile(form._pendingFile, { date: out.date }); toast("Saved with file attached"); }
     }, isNew ? null : () => data.deleteEntry(e.id));
+  const form = document.querySelector(".sheet");
+  wireExtract(form, () => "activity", (r) => {
+    const txt = [r.text || r.name, r.time ? "at " + r.time : ""].filter(Boolean).join(" ");
+    setVal(form, "text", txt); setVal(form, "place", r.place || r.address); setVal(form, "date", r.start || r.date); setVal(form, "endDate", r.end || r.start || r.date);
+    if (Array.isArray(r.who) && r.who.length) form.querySelectorAll("input[name=who]").forEach((cb) => (cb.checked = r.who.includes(cb.value)));
+  });
 }
 
 // ---------------------------------------------------------------- menu actions

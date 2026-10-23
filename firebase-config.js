@@ -14,4 +14,7 @@ export const FAMILY_EMAIL = "family@travelplanner.app";
 export const EDITORS = ["cesar.gonzalez.cruz1@gmail.com", "deb777deb@gmail.com"];
 // Trip shown by the app
 export const TRIP_ID = "usmx-2026";
-export const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2";
+export const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/12.19.0";
+// AI that reads booking PDFs (Firebase AI Logic, Agent Platform Gemini API). First model that works is used.
+export const AI_MODELS = ["gemini-3.6-flash", "gemini-3-flash", "gemini-2.5-flash"];
+export const AI_LOCATION = "global";

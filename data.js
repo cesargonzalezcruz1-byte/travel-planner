@@ -1,5 +1,5 @@
 // Data layer: Firebase (Auth + Firestore + Storage) or an in-memory demo store for local testing.
-import { firebaseConfig, FAMILY_EMAIL, EDITORS, TRIP_ID, FIREBASE_SDK } from "./firebase-config.js";
+import { firebaseConfig, FAMILY_EMAIL, EDITORS, TRIP_ID, FIREBASE_SDK, AI_MODELS, AI_LOCATION } from "./firebase-config.js";
 
 const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
 export const DEMO = isLocal && new URLSearchParams(location.search).has("demo");
@@ -35,7 +35,7 @@ export async function init(onAuth) {
   try {
     db = fsM.initializeFirestore(app, { localCache: fsM.persistentLocalCache({ tabManager: fsM.persistentMultipleTabManager() }) });
   } catch (e) { db = fsM.getFirestore(app); }
-  fb = { authM, fsM, stM, auth, db, storage: stM.getStorage(app) };
+  fb = { app, authM, fsM, stM, auth, db, storage: stM.getStorage(app) };
   try { await authM.getRedirectResult(auth); } catch (e) { /* ignore */ }
   authM.onAuthStateChanged(auth, (user) => {
     stopSubscriptions();
@@ -179,4 +179,68 @@ export function exportAll() {
     privateItems: Object.entries(store.priv).map(([id, v]) => ({ id, ...v })),
     files: store.files.map(({ demoUrl, ...f }) => f),
   };
+}
+
+// ------------------------------------------------------------------ AI: read a booking PDF / photo (editors)
+const EXTRACT_SCHEMA = {
+  type: "object",
+  properties: {
+    type: { type: "string", enum: ["flight", "stay", "car", "activity"], description: "What the document books" },
+    who: { type: "array", items: { type: "string" }, description: "Traveller codes on the booking" },
+    start: { type: "string", description: "First date YYYY-MM-DD (flight departure / check-in / pick-up / activity date)" },
+    end: { type: "string", description: "Last date YYYY-MM-DD (flight arrival date / check-out / drop-off)" },
+    route: { type: "string", description: "Flight: airport codes joined with '-', e.g. LAX-IAH-TQO" },
+    airline: { type: "string" }, number: { type: "string", description: "Flight numbers, e.g. UA1306/1600" },
+    dep: { type: "string", description: "Departure time HH:MM (24h)" }, arr: { type: "string", description: "Arrival time HH:MM (24h); add (dd-Mon) if next day" },
+    name: { type: "string", description: "Hotel / property / activity name" }, short: { type: "string", description: "Short hotel name, max 14 characters" },
+    address: { type: "string" }, checkin: { type: "string", description: "HH:MM" }, checkout: { type: "string", description: "HH:MM" },
+    company: { type: "string", description: "Car rental company" }, vehicle: { type: "string", description: "Short vehicle description, e.g. 7-seat SUV" },
+    pickup: { type: "string", description: "Short pick-up location, e.g. LAX or MIA" }, dropoff: { type: "string" },
+    pickupTime: { type: "string" }, dropoffTime: { type: "string" },
+    text: { type: "string", description: "Activity: short description, e.g. 'Xcaret full day + evening show'" },
+    place: { type: "string", description: "Activity: place name for Google Maps" }, time: { type: "string" },
+    note: { type: "string", description: "One short practical note for the family (no confirmation numbers)" },
+    private: { type: "object", properties: {
+      confirmation: { type: "string" }, tickets: { type: "string" }, seats: { type: "string" }, cost: { type: "string", description: "Total paid with currency" },
+      paidWith: { type: "string" }, cancel: { type: "string", description: "Cancellation rule in one line" }, phone: { type: "string" }, notes: { type: "string" } } },
+  },
+  required: ["type"],
+};
+let aiModel = null;
+async function getModel(tryIndex = 0) {
+  const aiM = await import(`${FIREBASE_SDK}/firebase-ai.js`);
+  const Backend = aiM.AgentPlatformBackend || aiM.VertexAIBackend;
+  const ai = aiM.getAI(fb.app, { backend: new Backend(AI_LOCATION) });
+  return aiM.getGenerativeModel(ai, { model: AI_MODELS[tryIndex],
+    generationConfig: { responseMimeType: "application/json", responseJsonSchema: EXTRACT_SCHEMA, temperature: 0 } });
+}
+const toBase64 = (file) => new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = bad; r.readAsDataURL(file); });
+export async function extractFromFile(file, hint, ctx) {
+  if (DEMO) {
+    await new Promise((r) => setTimeout(r, 600));
+    return { type: hint === "activity" ? "activity" : "stay", who: ctx.travellers.map((t) => t.code), start: "2027-01-14", end: "2027-01-15",
+             name: "Demo Hotel Orlando", short: "Demo Hotel", address: "1 Demo Way, Orlando, FL", checkin: "15:00", checkout: "11:00",
+             text: "Demo activity from " + file.name, place: "Epic Universe", note: "Filled from " + file.name,
+             private: { confirmation: "DEMO123", cost: "AU$100.00", cancel: "Free cancellation until 1 day before" } };
+  }
+  const people = ctx.travellers.map((t) => `${t.code} = ${t.name}`).concat((ctx.extended || []).map((t) => `${t.code} = ${t.name}`)).join("; ");
+  const prompt = `You read travel booking confirmations for a family trip (${ctx.start} to ${ctx.end}).
+Traveller codes: ${people}. Full names: CGC = Cesar Gonzalez Cruz, CGM = Chloe Gonzalez Mondragon, DBMV = Debora Beatriz Mondragon Velazquez,
+RGA = Raul Gonzalez Apaolaza, MCN = Margarita Cruz de Gonzalez. Put in "who" only codes of CGC, CGM, DBMV who are on the booking
+(if the booking says e.g. "2 adults, 1 child" for Cesar, assume CGC, DBMV, CGM).
+The user expects a "${hint}" booking but set "type" to what the document really is.
+Dates as YYYY-MM-DD, times as 24h HH:MM. Fill only fields you can read in the document; leave others out. Keep texts short.`;
+  const parts = [{ text: prompt }, { inlineData: { mimeType: file.type || "application/pdf", data: await toBase64(file) } }];
+  let lastErr;
+  for (let i = 0; i < AI_MODELS.length; i++) {
+    try {
+      if (!aiModel || aiModel._i !== i) { aiModel = await getModel(i); aiModel._i = i; }
+      const res = await aiModel.generateContent(parts);
+      return JSON.parse(res.response.text());
+    } catch (e) {
+      lastErr = e; aiModel = null;
+      if (!/not.?found|404|unsupported|model/i.test(String(e.message || e))) break;   // only fall back on a model problem
+    }
+  }
+  throw lastErr;
 }

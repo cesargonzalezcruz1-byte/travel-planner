@@ -500,7 +500,7 @@ function dailyChart(B) {
         : `<rect x="${x}" y="${y0 - h}" width="${bw}" height="${h}" style="fill:${catVar(k)}"></rect>`; });
     const tip = `${WD[D(d).getDay()].slice(0, 3)} ${shortDate(d)}: ${money(tot[i], cur)}${ks.length ? " · " + ks.map((k) => `${catLabel(k)} ${money(out[i][k], cur)}`).join(" · ") : ""}`;
     const lab = i === 0 || D(d).getDate() === 1 || D(d).getDay() === 1 ? `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" class="ax">${D(d).getDate()}${i === 0 || D(d).getDate() === 1 ? " " + MON[D(d).getMonth()] : ""}</text>` : "";
-    return `<g>${segs}<rect x="${L + 2 + i * cw}" y="${T}" width="${cw}" height="${ph}" fill="transparent" data-tip="${esc(tip)}" data-day="${d}"></rect>${lab}</g>`;
+    return `<g>${d === iso(new Date()) ? `<rect x="${L + 2 + i * cw}" y="${T}" width="${cw}" height="${ph}" rx="3" class="today-col"></rect>` : ""}${segs}<rect x="${L + 2 + i * cw}" y="${T}" width="${cw}" height="${ph}" fill="transparent" data-tip="${esc((d === iso(new Date()) ? "Today · " : "") + tip)}" data-day="${d}"></rect>${lab}</g>`;
   }).join("");
   const used = CHART_ORDER.filter((k) => out.some((o) => o[k] > 0));
   return `<figure class="chart"><figcaption>${spentOnly ? "Spending by day" : "Cost by day"}
@@ -638,8 +638,9 @@ function renderOverview() {
   ds.forEach((d, k) => {
     const wd = D(d).getDay(), wk = wd === 0 || wd === 6, first = k === 0 || D(d).getDate() === 1;
     const dots = others.filter((o) => together(p, o, d)).map((o) => `<i style="background:${pcolor(o)}" title="With ${esc(NAME(o))}"></i>`).join("");
+    if (d === today) cells.push(`<div class="ov-today" style="grid-row:${k + 1}" aria-hidden="true"></div>`);
     cells.push(`<div class="ov-bg${wk ? " wk" : k % 2 ? "" : " alt"}${d === today ? " today" : ""}" style="grid-row:${k + 1}"></div>
-      <button class="ov-day" data-day="${d}" style="grid-row:${k + 1}" aria-label="${WD[wd]} ${longDate(d)}"><span class="ov-dn"><b>${D(d).getDate()}</b><small class="${first ? "mon" : wk ? "wk" : ""}">${first ? MON[D(d).getMonth()].toUpperCase() : WD3(d)}</small></span><span class="ov-dots">${dots}</span></button>`);
+      <button class="ov-day${d === today ? " today" : ""}" data-day="${d}" style="grid-row:${k + 1}" aria-label="${WD[wd]} ${longDate(d)}${d === today ? " (today)" : ""}"><span class="ov-dn"><b>${D(d).getDate()}</b><small class="${first ? "mon" : wk ? "wk" : ""}">${first ? MON[D(d).getMonth()].toUpperCase() : WD3(d)}</small></span><span class="ov-dots">${dots}</span></button>`);
   });
   const its = itemsFor(p).filter((i) => i.end >= store.trip.start && i.start <= store.trip.end).sort((a, b) => a.start.localeCompare(b.start));
   // flights: one rounded block per flight in the Flight column
@@ -679,6 +680,7 @@ function renderOverview() {
   wireHeader(); wireDays();
   const back = sessionStorage.getItem("tp.wscroll");
   if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
+  else if (ds.includes(today) && !ui.ovScrolled) { ui.ovScrolled = true; const el = root.querySelector(".ov-day.today"); if (el) window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + scrollY - 200)); }
 }
 function drawOverviewShapes() {
   const svg = root.querySelector(".ov-svg"); if (!svg || !ui.ovShapes) return;
@@ -805,6 +807,7 @@ function renderTimeline() {
 
 // ---------------------------------------------------------------- Journey view (stays as stations, flights / cars as connectors)
 function renderJourney() {
+  const today = iso(new Date());
   const p = ui.person, ord = { flight: 0, car: 1, stay: 2 };
   const its = itemsFor(p).slice().sort((a, b) => a.start.localeCompare(b.start) || ord[a.type] - ord[b.type]);
   const actText = (date) => entriesFor(p, date).find((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed)?.text || "";
@@ -815,9 +818,9 @@ function renderJourney() {
       return `<li class="jrow station${i.status === "tbc" ? " tbc" : ""}">
         <span class="jnode k-stay">${ICON.stay}</span>
         <div class="jbody">
-          <button class="jcard" data-day="${i.start}"><b>${esc(i.name)}${i.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>
+          <button class="jcard${i.start <= today && today < i.end ? " today" : ""}" data-day="${i.start}"><b>${esc(i.name)}${i.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>
             <small>${shortDate(i.start)} – ${shortDate(i.end)} · ${N} night${N === 1 ? "" : "s"}${i.address ? " · " + esc(i.address) : ""}</small></button>
-          ${inner.length ? `<div class="jdays">${inner.map((d) => { const a = actText(d); return `<button class="jday" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a ? `<span class="jdot"></span><span class="jt">${esc(a)}</span>` : ""}</button>`; }).join("")}</div>` : ""}
+          ${inner.length ? `<div class="jdays">${inner.map((d) => { const a = actText(d); return `<button class="jday${d === today ? " today" : ""}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a ? `<span class="jdot"></span><span class="jt">${esc(a)}</span>` : ""}</button>`; }).join("")}</div>` : ""}
         </div></li>`;
     }
     const isF = i.type === "flight", k = isF ? "flight" : "car";
@@ -826,7 +829,7 @@ function renderJourney() {
       : [i.vehicle && i.vehicle.replace(/\s*\(.*\)$/, ""), `until ${shortDate(i.end)}`, i.dropoff && i.dropoff !== i.pickup ? "return " + i.dropoff : ""].filter(Boolean).join(" · ");
     return `<li class="jrow leg">
       <span class="jnode k-${k}">${ICON[k]}</span>
-      <div class="jbody"><button class="jleg k-${k}${i.status === "tbc" ? " tbc" : ""}" data-day="${i.start}">
+      <div class="jbody"><button class="jleg k-${k}${i.status === "tbc" ? " tbc" : ""}${i.start === today ? " today" : ""}" data-day="${i.start}">
         <span class="jl-top"><b>${esc(title)}</b><span class="jl-date">${WD3(i.start)} ${D(i.start).getDate()}</span></span>
         <small>${esc(sub)}</small></button></div></li>`;
   }).join("");
@@ -836,6 +839,7 @@ function renderJourney() {
       ${t ? `<li class="jrow station end"><span class="jnode k-home">${ICON.home}</span><div class="jbody"><div class="jcard plain"><b>End of Trip</b><small>${WD[D(t.end).getDay()]} ${longDate(t.end)}</small></div></div></li>` : ""}</ol>`;
   wireHeader(); wireDays();
   const back = sessionStorage.getItem("tp.wscroll"); if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
+  else if (!ui.jScrolled) { const el = root.querySelector(".jday.today, .jleg.today, .jcard.today"); if (el) { ui.jScrolled = true; window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + scrollY - 200)); } }
 }
 function wireDays() {
   root.querySelectorAll("[data-add-on]").forEach((b) => (b.onclick = (ev) => {
@@ -943,9 +947,9 @@ function renderDay() {
       ${efiles.length ? `<div class="efiles">${efiles.map(fileLink).join("")}</div>` : ""}</li>`; };
   root.innerHTML = `${header()}
   <div class="dayview">
-    <div class="dayhead">
+    <div class="dayhead${date === iso(new Date()) ? " today" : ""}">
       <button class="nav" data-go="-1" ${idx === 0 ? "disabled" : ""}>‹</button>
-      <div><div class="wd">${WD[D(date).getDay()]}</div><div class="dt">${longDate(date)}</div></div>
+      <div><div class="wd">${date === iso(new Date()) ? "Today · " : ""}${WD[D(date).getDay()]}</div><div class="dt">${longDate(date)}</div></div>
       <button class="nav" data-go="1" ${idx === ds.length - 1 ? "disabled" : ""}>›</button>
     </div>
     

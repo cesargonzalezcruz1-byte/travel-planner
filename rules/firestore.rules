@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Editors: Cesar and Debora, signed in with their (verified) Google accounts
+    function isEditor() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['cesar.gonzalez.cruz1@gmail.com', 'deb777deb@gmail.com'];
+    }
+    // Family: the shared family login (password set in the Firebase console)
+    function isFamily() {
+      return request.auth != null && request.auth.token.email == 'family@travelplanner.app';
+    }
+
+    match /trips/{tripId} {
+      allow read: if isEditor() || isFamily();
+      allow write: if isEditor();
+
+      // Itinerary the family can see: bookings (no confirmation numbers) and day activities/comments
+      match /items/{id}   { allow read: if isEditor() || isFamily(); allow write: if isEditor(); }
+      match /entries/{id} { allow read: if isEditor() || isFamily(); allow write: if isEditor(); }
+
+      // Editors only: confirmation numbers, costs, tickets, and the list of uploaded documents
+      match /private/{id} { allow read, write: if isEditor(); }
+      match /files/{id}   { allow read, write: if isEditor(); }
+    }
+
+    // Everything else is locked
+    match /{document=**} { allow read, write: if false; }
+  }
+}

@@ -44,7 +44,7 @@ button,input,select,textarea{font:inherit}
 .gridwrap{overflow:auto;max-height:calc(100vh - 120px);margin:10px;width:fit-content;max-width:calc(100% - 20px);border:3px solid var(--blue);border-radius:6px;background:var(--blue)}
 .grid{display:grid;gap:2px;background:var(--blue);width:max-content;
   --c-day:118px;--c-tick:34px;--c-flight:200px;--c-half:112px;--c-act:210px;--c-com:330px}
-.cell{background:#fff;display:flex;align-items:center;justify-content:center;text-align:center;white-space:pre-line;font-size:12px;line-height:1.25;padding:3px 5px;overflow:hidden}
+.cell{background:#fff;display:flex;align-items:center;justify-content:center;text-align:center;white-space:pre-line;font-size:12px;line-height:1.25;padding:3px 5px;overflow:hidden;position:relative}
 .cell.head{background:var(--head);color:#fff;font-weight:700;position:sticky;top:0;z-index:5}
 .cell.head.rot span{writing-mode:vertical-rl;transform:rotate(180deg);font-size:11px}
 .cell .txt{max-width:100%;overflow:hidden}
@@ -181,3 +181,16 @@ section h3{margin:0 0 10px;color:var(--darkred);font-size:16px}
 .dv.on:not(.same)::before{content:"✓ ";color:var(--blue)}
 .linkbtn{background:none;border:0;font:inherit;font-weight:700;color:var(--blue);text-decoration:underline;cursor:pointer}
 .row.wrap{flex-wrap:wrap;gap:8px}
+
+/* overlapping bookings */
+.ovcols{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.ovcols h4{margin:0 0 6px;font-size:14px}
+.ovcard{border:2px solid #bbb;border-radius:10px;padding:8px 10px;font-size:13px;line-height:1.4;margin-bottom:6px;overflow-wrap:anywhere;background:#fff}
+.ovcard.new{border-color:var(--blue);background:#E8F0FF}
+.ovcard .who{color:var(--blue);font-weight:700}
+.ovhelp{padding-left:18px;margin:6px 0 10px}
+@media (max-width:520px){.ovcols{grid-template-columns:1fr}}
+.cell .swap{position:absolute;top:3px;right:3px;z-index:2}
+.cell .swap,.swap.static{display:inline-block;font:700 11px/1 system-ui,sans-serif;padding:3px 6px;box-shadow:0 1px 3px #0004;border:1.5px solid #000;border-radius:999px;background:#fff;color:#000;cursor:pointer;white-space:nowrap}
+.swap.static{cursor:default;box-shadow:none}
+.cell .swap:hover{background:#000;color:#fff}

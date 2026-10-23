@@ -137,7 +137,14 @@ export async function saveItem(item, priv) {
   if (priv) await fb.fsM.setDoc(fb.fsM.doc(col("private"), id), clean(priv));
   return id;
 }
+// Re-point files attached to one booking to another (used when a booking replaces an overlapping one)
+export async function moveFiles(fromId, toId) {
+  const fs = store.files.filter((f) => f.itemId === fromId);
+  if (DEMO) { mem().files.forEach((f) => { if (f.itemId === fromId) f.itemId = toId; }); demoLoad(store.tripId); emit(); return; }
+  for (const f of fs) await fb.fsM.updateDoc(fb.fsM.doc(col("files"), f.id), { itemId: toId });
+}
 export async function deleteItem(id) {
+  for (const f of store.files.filter((x) => x.itemId === id)) await deleteFile(f);   // its attached documents go with it
   if (DEMO) { const t = mem(); t.items = t.items.filter((x) => x.id !== id); delete t.priv[id]; demoLoad(store.tripId); emit(); return; }
   await fb.fsM.deleteDoc(fb.fsM.doc(col("items"), id)); await fb.fsM.deleteDoc(fb.fsM.doc(col("private"), id));
 }

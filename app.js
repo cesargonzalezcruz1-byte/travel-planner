@@ -19,7 +19,8 @@ const PEOPLE = () => (store.trip?.travellers || []).map((t) => t.code);
 const ALL_CODES = () => (store.trip?.travellers || []).concat(store.trip?.extended || []).map((t) => t.code).filter(Boolean);
 const NAME = (code) => (store.trip?.travellers || []).concat(store.trip?.extended || []).find((t) => t.code === code)?.name || code;
 
-let ui = { person: localStorage.getItem("tp.person") || "", day: null, tripId: null };
+let ui = { person: localStorage.getItem("tp.person") || "", day: null, tripId: null, swap: {} };
+try { ui.swap = JSON.parse(localStorage.getItem("tp.swap") || "{}"); } catch (e) { /* private mode */ }
 // routes:  #/  (trips)   #/t/<tripId>   #/t/<tripId>/<YYYY-MM-DD>
 function parseRoute() {
   const m = location.hash.match(/^#\/t\/([^/]+)(?:\/(\d{4}-\d{2}-\d{2}))?/);
@@ -270,21 +271,35 @@ function renderGrid() {
   // flights
   const used = { flight: new Set(), hout: new Set(), hin: new Set(), cdrop: new Set(), cpick: new Set() };
   const its = itemsFor(p).sort((a, b) => a.start.localeCompare(b.start));
+  // overlapping bookings of the same type: show one at a time, with a swap button
+  const shown = new Map(), hidden = new Set();
+  ["flight", "stay", "car"].forEach((type) => {
+    for (const g of overlapGroups(its.filter((i) => i.type === type))) {
+      if (g.length < 2) { shown.set(g[0].id, ""); continue; }
+      const key = g.map((i) => i.id).sort().join("|"); const k = (ui.swap[key] || 0) % g.length;
+      g.forEach((i, n) => (n === k ? shown.set(i.id, `<button class="swap" data-swap="${key}" data-n="${g.length}" title="${g.length} overlapping bookings - tap to switch">⇄ ${k + 1}/${g.length}</button>`) : hidden.add(i.id)));
+    }
+  });
+  const swapBtn = (i) => shown.get(i.id) || "";
   its.filter((i) => i.type === "flight").forEach((i) => {
+    if (hidden.has(i.id)) return;
     const r1 = R(i.start), r2 = R(i.end); for (let r = r1; r <= r2; r++) used.flight.add(r);
-    cell(r1, r2, COL.flight, COL.flight, "flight block", fmt(texts(i).block), `data-day="${i.start}"`);
+    cell(r1, r2, COL.flight, COL.flight, "flight block", fmt(texts(i).block) + swapBtn(i), `data-day="${i.start}"`);
   });
   // stays & cars
   const place = (type, cOut, cIn, kOut, kIn, fills) => {
     its.filter((i) => i.type === type).forEach((i, n) => {
       const fill = fills[n % 2] + (i.status === "tbc" ? " tbc" : ""); const t = texts(i);
       const rs = R(i.start), re = R(i.end);
-      if (rs >= 2) { cell(rs, rs, cIn, cIn, `${fill} b-start`, fmt(t.start), `data-day="${i.start}"`); used[kIn].add(rs); }
-      if (re - rs > 1) {
-        cell(rs + 1, re - 1, cOut, cIn, `${fill} b-mid`, fmt(t.mid), `data-day="${addDays(i.start, 1)}"`);
+      if (hidden.has(i.id)) return;   // shown via the swap button; its rows stay empty (striped) in this view
+      const hasMid = re - rs > 1; let sw = swapBtn(i);
+      const put = (badge, ...a) => { a[5] = fmt(a[5]) + (badge ? sw : ""); if (badge) sw = ""; cell(...a); };
+      if (hasMid) {
+        put(true, rs + 1, re - 1, cOut, cIn, `${fill} b-mid`, t.mid, `data-day="${addDays(i.start, 1)}"`);
         for (let r = rs + 1; r < re; r++) { used[kOut].add(r); used[kIn].add(r); }
       }
-      if (re <= ds.length + 1) { cell(re, re, cOut, cOut, `${fill} b-end`, fmt(t.end), `data-day="${i.end}"`); used[kOut].add(re); }
+      if (rs >= 2) { put(!!sw, rs, rs, cIn, cIn, `${fill} b-start`, t.start, `data-day="${i.start}"`); used[kIn].add(rs); }
+      if (re <= ds.length + 1) { put(!!sw, re, re, cOut, cOut, `${fill} b-end`, t.end, `data-day="${i.end}"`); used[kOut].add(re); }
     });
   };
   place("stay", COL.hout, COL.hin, "hout", "hin", ["hotel-a", "hotel-b"]);
@@ -333,6 +348,12 @@ function renderGrid() {
       itemForm({ type: el.dataset.slot, who: [ui.person, ...others.filter((o) => together(ui.person, o, date))], start: date, end: el.dataset.slot === "flight" ? date : addDays(date, 1), status: "booked" });
     };
   });
+  root.querySelectorAll(".grid [data-swap]").forEach((b) => (b.onclick = (ev) => {
+    ev.stopPropagation(); const k = b.dataset.swap;
+    ui.swap[k] = ((ui.swap[k] || 0) + 1) % +b.dataset.n;
+    try { localStorage.setItem("tp.swap", JSON.stringify(ui.swap)); } catch (e) { /* ignore */ }
+    sessionStorage.setItem("tp.scroll", $(".gridwrap").scrollTop); render();
+  }));
   root.querySelectorAll(".grid [data-day]").forEach((el) => {
     el.onclick = () => openDay(el.dataset.day);
     el.onkeydown = (e) => { if (e.key === "Enter") openDay(el.dataset.day); };
@@ -536,6 +557,43 @@ function wireExtract(form, hint, onResult) {
     } finally { st.classList.remove("busy"); }
   };
 }
+// ---- overlap: same type, at least one same person, dates overlap (stays/cars: nights overlap; flights: same day)
+const overlaps = (a, b) => a.type === "flight" ? a.start <= b.end && b.start <= a.end : a.start < b.end && b.start < a.end;
+function overlapGroups(list) {   // connected groups of mutually overlapping bookings
+  const groups = [];
+  for (const i of list) {
+    const hit = groups.filter((g) => g.some((j) => overlaps(i, j)));
+    const merged = [i, ...hit.flat()]; hit.forEach((g) => groups.splice(groups.indexOf(g), 1)); groups.push(merged);
+  }
+  return groups.map((g) => g.sort((a, b) => a.start.localeCompare(b.start) || (a.updatedAt || "").localeCompare(b.updatedAt || "")));
+}
+const findOverlaps = (out) => store.items.filter((i) => i.type === out.type && i.id !== out.id && (i.who || []).some((w) => out.who.includes(w)) && overlaps(i, out));
+function cardLines(i, pv = {}) {
+  const what = i.type === "flight" ? [i.route, [i.airline, i.number].filter(Boolean).join(" "), i.dep && "Dep " + i.dep + (i.arr ? " · Arr " + i.arr : "")]
+    : i.type === "stay" ? [i.name || i.short, i.address, i.checkin && "Check-In " + i.checkin + (i.checkout ? " · Check-Out " + i.checkout : "")]
+    : [i.company, i.vehicle, i.pickup && "Pick-Up " + i.pickup + (i.pickupTime ? " " + i.pickupTime : ""), i.dropoff && "Drop-Off " + i.dropoff + (i.dropoffTime ? " " + i.dropoffTime : "")];
+  return `<div><b>${fmtDate(i.start)}${i.end !== i.start ? " → " + fmtDate(i.end) : ""}</b></div><div class="who">${esc((i.who || []).join(", "))}</div>`
+    + [...what, pv.confirmation && "Confirmation " + pv.confirmation].filter(Boolean).map((t) => `<div>${esc(t)}</div>`).join("");
+}
+function askOverlap(existing, next) {
+  const span = (a, b) => { const s = a.start > b.start ? a.start : b.start, e = a.end < b.end ? a.end : b.end;
+    return next.type === "flight" ? fmtDate(s) + (e !== s ? " → " + fmtDate(e) : "") : (e === addDays(s, 1) ? "the night of " + fmtDate(s) : fmtDate(s) + " → " + fmtDate(e)); };
+  const noun = { flight: "flight", stay: "stay", car: "car hire" }[next.type];
+  return new Promise((done) => {
+    const d = document.createElement("div"); d.className = "modal dupmodal";
+    d.innerHTML = `<div class="sheet dup"><h3>Overlapping Booking</h3>
+      <p>This ${noun} overlaps ${existing.length > 1 ? `<b>${existing.length}</b> bookings` : "a booking"} already in the trip, for
+        ${existing.map((e) => `<b>${span(e, next)}</b> (${esc(e.who.filter((w) => next.who.includes(w)).join(", "))})`).join(" and ")}.</p>
+      <div class="ovcols"><div><h4>Already Booked</h4>${existing.map((e) => `<div class="ovcard">${cardLines(e, store.priv[e.id])}</div>`).join("")}</div>
+        <div><h4>New</h4><div class="ovcard new">${cardLines(next)}</div></div></div>
+      <ul class="small ovhelp"><li><b>Replace</b> - remove the booking${existing.length > 1 ? "s" : ""} on the left and keep the new one (attached files move to the new booking).</li>
+        <li><b>Keep Both</b> - save both. The itinerary shows one at a time with a <span class="swap static">⇄</span> button to switch between them.</li></ul>
+      <div class="row end wrap"><button class="btn" data-a="back">Back to Editing</button><span class="grow"></span>
+        <button class="btn" data-a="both">Keep Both</button><button class="btn primary" data-a="replace">Replace</button></div></div>`;
+    document.body.appendChild(d);
+    d.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => { d.remove(); done(b.dataset.a); }));
+  });
+}
 // ---- duplicate check: same confirmation number, or same type + dates + key details for any of the same people
 const norm = (v) => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 function findDuplicate(out, priv) {
@@ -607,6 +665,7 @@ function itemForm(item) {
       if (!out.who.length) throw new Error("Pick at least one person");
       if (out.end < out.start) throw new Error("'To' is before 'From'");
       let priv = {}; for (const [k, v] of fd.entries()) if (k.startsWith("priv.") && v) priv[k.slice(5)] = v;
+      let skipOverlap = false;
       if (isNew) {
         const dup = findDuplicate(out, priv);
         if (dup) {
@@ -616,8 +675,19 @@ function itemForm(item) {
           if (choice.a === "merge") { Object.assign(out, choice.item, { id: dup.id }); priv = choice.priv; }
           // "both": fall through and save the new one separately
         }
+        skipOverlap = !!dup;
+      }
+      let replaced = [];
+      if (!skipOverlap) {
+        const ov = findOverlaps(out);
+        if (ov.length) {
+          const a = await askOverlap(ov, out);
+          if (a === "back") throw Object.assign(new Error("back"), { back: true });
+          if (a === "replace") replaced = ov;
+        }
       }
       const id = await data.saveItem(out, priv);
+      for (const o of replaced) { await data.moveFiles(o.id, id); await data.deleteItem(o.id); }
       const already = form._pendingFile && store.files.some((f) => f.itemId === id && f.name === form._pendingFile.name);
       if (form._pendingFile && !already) { toast("Attaching file…"); await data.uploadFile(form._pendingFile, { itemId: id }); toast("Saved with file attached"); }
       else if (already) toast("Saved - " + form._pendingFile.name + " was already attached");

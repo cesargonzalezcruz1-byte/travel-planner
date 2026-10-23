@@ -487,7 +487,7 @@ function modal(html, onSubmit, onDelete) {
   if (onDelete) m.querySelector("[data-del]").onclick = async () => { if (confirm("Delete this for everyone?")) { try { await onDelete(); close(); } catch (x) { toast(x.message); } } };
   m.querySelector("form").onsubmit = async (e) => { e.preventDefault(); const btn = e.target.querySelector("button.primary"); btn.disabled = true;
     try { await onSubmit(new FormData(e.target), e.target); close(); }
-    catch (x) { if (x.keepPrevious) { close(); toast("Kept the previous booking - nothing changed"); return; } btn.disabled = false; if (!x.back) toast("Save failed: " + (x.code || x.message)); } };
+    catch (x) { btn.disabled = false; if (!x.back) toast("Save failed: " + (x.code || x.message)); } };
   m.querySelector("input,select,textarea")?.focus();
 }
 const whoBoxes = (who) => `<fieldset class="whobox"><legend>Who</legend>${PEOPLE().map((p) => `<label><input type="checkbox" name="who" value="${p}" ${who.includes(p) ? "checked" : ""}> ${p}</label>`).join("")}</fieldset>`;
@@ -550,30 +550,40 @@ function findDuplicate(out, priv) {
     return sameWho && i.start === out.start && i.end === out.end && k1.some((k) => k && k2.includes(k));
   });
 }
-function bookingLines(i, pv = {}) {   // plain-text lines describing a booking
-  const what = i.type === "flight" ? [i.route, i.airline, i.number, i.dep && "Dep " + i.dep, i.arr && "Arr " + i.arr]
-    : i.type === "stay" ? [i.name || i.short, i.address, i.checkin && "Check-In " + i.checkin, i.checkout && "Check-Out " + i.checkout]
-    : [i.company, i.vehicle, i.pickup && "Pick-Up " + i.pickup + (i.pickupTime ? " " + i.pickupTime : ""), i.dropoff && "Drop-Off " + i.dropoff + (i.dropoffTime ? " " + i.dropoffTime : "")];
-  return [fmtDate(i.start) + (i.end !== i.start ? " → " + fmtDate(i.end) : ""), (i.who || []).join(", "), ...what,
-    pv.confirmation && "Confirmation " + pv.confirmation, pv.cost && "Cost " + pv.cost].filter(Boolean);
-}
-const linesHtml = (lines, other) => lines.map((t, k) => `<div class="${other.includes(t) ? "" : "diff"}">${k === 0 ? `<b>${esc(t)}</b>` : esc(t)}</div>`).join("");
+// Side-by-side chooser: one row per field, tap the Previous or New value to keep (defaults: the one that has data, New if both differ)
 function askDuplicate(prev, prevPriv, next, nextPriv, sameConf) {
-  const A = bookingLines(prev, prevPriv), B = bookingLines(next, nextPriv);
-  const raw = (x) => (x === prev ? linesHtml(A, B) : linesHtml(B, A));
-  const same = A.join("|") === B.join("|");
+  const rows = [["start", "From"], ["end", "To"], ["who", "Who"], ...FIELDS[next.type], ["status", "Status"], ["note", "Note"]]
+    .map(([k, l]) => ({ k, l, a: prev[k], b: next[k] }))
+    .concat([...new Set([...PRIV_KEYS, ...Object.keys(prevPriv), ...Object.keys(nextPriv)])].map((k) => ({ k: "priv." + k, l: label(k), a: prevPriv[k], b: nextPriv[k] })));
+  const show = (k, v) => Array.isArray(v) ? v.join(", ") : (k === "start" || k === "end") && v ? fmtDate(v) : k === "status" && v ? (v === "tbc" ? "TBC" : "Booked") : String(v ?? "");
+  const vis = rows.filter((r) => show(r.k, r.a) || show(r.k, r.b));
+  vis.forEach((r) => { r.same = show(r.k, r.a) === show(r.k, r.b); r.pick = r.same || !show(r.k, r.b) ? "a" : "b"; if (!show(r.k, r.a)) r.pick = "b"; });
+  const diffs = vis.filter((r) => !r.same).length;
   return new Promise((done) => {
     const d = document.createElement("div"); d.className = "modal dupmodal";
     d.innerHTML = `<div class="sheet dup"><h3>Possible Duplicate</h3>
-      <p>${sameConf ? "A booking with the <b>same confirmation number</b> is already in this trip." : `This ${esc(next.type)} has the same dates and details as one already in this trip.`}</p>
-      <div class="dupcols"><div class="dupbox"><h4>Previous</h4>${raw(prev)}</div>
-        <div class="dupbox new"><h4>New</h4>${raw(next)}</div></div>
-      ${same ? `<p class="small"><b>The details are identical.</b></p>` : `<p class="small"><span class="diff">Red</span> = different from the other one.</p>`}
-      <p class="muted small">Replace updates the previous booking with the new details (blank new fields keep the old values; attached files stay).</p>
-      <div class="row end"><button class="btn" data-a="back">Back to Editing</button><span class="grow"></span>
-        <button class="btn" data-a="keep">Keep Previous</button><button class="btn primary" data-a="replace">Replace</button></div></div>`;
+      <p>${sameConf ? "A booking with the <b>same confirmation number</b> is already in this trip." : `This ${esc(next.type)} has the same dates and details as one already in this trip.`}
+      ${diffs ? `<b>${diffs}</b> field${diffs > 1 ? "s differ" : " differs"} - tap the value you want to keep.` : "<b>All details are identical.</b>"}</p>
+      <div class="duptable">
+        <div class="dh"></div><div class="dh"><button type="button" class="linkbtn" data-all="a">Previous</button></div><div class="dh"><button type="button" class="linkbtn" data-all="b">New</button></div>
+        ${vis.map((r, n) => `<div class="dl">${esc(r.l)}</div>${["a", "b"].map((s) => `<button type="button" class="dv ${r.same ? "same" : ""}" data-r="${n}" data-s="${s}">${esc(show(r.k, r[s])) || '<span class="muted">-</span>'}</button>`).join("")}`).join("")}
+      </div>
+      <p class="muted small">Tap "Previous" or "New" at the top to take a whole column. Files already attached stay with the booking.</p>
+      <div class="row end wrap"><button class="btn" data-a="back">Back to Editing</button><span class="grow"></span>
+        <button class="btn" data-a="both" title="Save the new one as a separate booking">Keep Both</button>
+        <button class="btn primary" data-a="merge">Keep Selected</button></div></div>`;
     document.body.appendChild(d);
-    d.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => { d.remove(); done(b.dataset.a); }));
+    const paint = () => d.querySelectorAll(".dv").forEach((el) => el.classList.toggle("on", vis[+el.dataset.r].pick === el.dataset.s));
+    paint();
+    d.querySelectorAll(".dv:not(.same)").forEach((el) => (el.onclick = () => { vis[+el.dataset.r].pick = el.dataset.s; paint(); }));
+    d.querySelectorAll("[data-all]").forEach((el) => (el.onclick = () => { vis.forEach((r) => { if (!r.same) r.pick = el.dataset.all; }); paint(); }));
+    d.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => {
+      d.remove();
+      if (b.dataset.a !== "merge") return done({ a: b.dataset.a });
+      const item = { ...prev }, priv = { ...prevPriv };
+      for (const r of vis) { const v = r[r.pick]; if (r.k.startsWith("priv.")) { if (v) priv[r.k.slice(5)] = v; else delete priv[r.k.slice(5)]; } else item[r.k] = v ?? ""; }
+      done({ a: "merge", item: { ...item, type: next.type }, priv });
+    }));
   });
 }
 function itemForm(item) {
@@ -602,10 +612,9 @@ function itemForm(item) {
         if (dup) {
           const pv = store.priv[dup.id] || {};
           const choice = await askDuplicate(dup, pv, out, priv, !!priv.confirmation && norm(pv.confirmation) === norm(priv.confirmation));
-          if (choice === "back") throw Object.assign(new Error("back"), { back: true });
-          if (choice === "keep") throw Object.assign(new Error("keep"), { keepPrevious: true });
-          for (const [k, v] of Object.entries(dup)) if (k !== "id" && (out[k] === "" || out[k] === undefined)) out[k] = v;
-          out.id = dup.id; priv = { ...pv, ...priv };
+          if (choice.a === "back") throw Object.assign(new Error("back"), { back: true });
+          if (choice.a === "merge") { Object.assign(out, choice.item, { id: dup.id }); priv = choice.priv; }
+          // "both": fall through and save the new one separately
         }
       }
       const id = await data.saveItem(out, priv);

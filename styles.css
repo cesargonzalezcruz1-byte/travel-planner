@@ -194,3 +194,15 @@ section h3{margin:0 0 10px;color:var(--darkred);font-size:16px}
 .cell .swap,.swap.static{display:inline-block;font:700 11px/1 system-ui,sans-serif;padding:3px 6px;box-shadow:0 1px 3px #0004;border:1.5px solid #000;border-radius:999px;background:#fff;color:#000;cursor:pointer;white-space:nowrap}
 .swap.static{cursor:default;box-shadow:none}
 .cell .swap:hover{background:#000;color:#fff}
+
+/* day map */
+.daymap{height:340px;border:2px solid var(--blue);border-radius:12px;overflow:hidden;margin:6px 0;background:#e9eef5}
+.daymap-canvas{width:100%;height:100%}
+.daymap-msg:empty{display:none}
+.maplegend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;margin:4px 0 8px}
+.maplegend i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.pdot{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;color:#fff;font-style:normal;font-size:12px;vertical-align:middle}
+.mpin{--pin:#C62828;width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--pin);border:2px solid #fff;box-shadow:0 2px 5px #0006;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.mpin span{transform:rotate(45deg);color:#fff;font-size:14px;line-height:1}
+.mpop{font:13px/1.4 system-ui,sans-serif;max-width:220px}.mpop .k{font-weight:700;font-size:12px}.mpop a{display:inline-block;margin-top:4px}
+@media (max-width:600px){.daymap{height:260px}}

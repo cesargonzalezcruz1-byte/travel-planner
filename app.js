@@ -1,4 +1,5 @@
 import * as data from "./data.js";
+import { drawDayMap, mapsReady } from "./map.js";
 const { store } = data;
 
 // ================================================================= helpers
@@ -412,9 +413,28 @@ function renderDay() {
   const acts = ents.filter((e) => e.kind === "activity" && e.status !== "recommended");
   const recs = ents.filter((e) => e.kind === "activity" && e.status === "recommended");
   const coms = ents.filter((e) => e.kind === "comment");
-  const places = [];
-  its.forEach((i) => { if (i.type === "stay" && i.status !== "tbc" && i.address) places.push([i.short || i.name, i.address]); });
-  acts.forEach((e) => e.place && places.push([e.place, e.place]));
+  // map pins: bookings + confirmed activities in one colour, recommended / not-yet-confirmed activities in another
+  const BOOKED = "#C62828", IDEA = "#7B3FC4";
+  const pins = [];
+  const apt = (c) => (/^[A-Z]{3}$/.test(c.trim()) ? c.trim() + " airport" : c.trim());
+  its.forEach((i) => {
+    if (i.type === "flight") {
+      const codes = String(i.route || "").split(/[-–>]+/).map((c) => c.trim()).filter(Boolean);
+      const todays = i.start === i.end ? codes : date === i.start ? codes.slice(0, -1) : date === i.end ? codes.slice(-1) : [];
+      todays.forEach((c) => pins.push({ q: apt(c), name: c, kind: "Airport" + (i.number ? " · " + i.number : ""), glyph: "✈", color: BOOKED }));
+    } else if (i.type === "stay") {
+      if (i.address || i.name) pins.push({ q: i.address || i.name, name: i.short || i.name, kind: i.status === "tbc" ? "Hotel (TBC)" : "Hotel", glyph: "🛏", color: i.status === "tbc" ? IDEA : BOOKED });
+    } else if (i.type === "car") {
+      const at = (loc, what) => loc && pins.push({ q: [i.company, apt(loc)].filter(Boolean).join(" "), name: `${i.company || "Car"} ${loc}`, kind: what, glyph: "🚗", color: BOOKED });
+      if (date === i.start) at(i.pickup, "Car Pick-Up" + (i.pickupTime ? " " + i.pickupTime : ""));
+      if (date === i.end) at(i.dropoff, "Car Drop-Off" + (i.dropoffTime ? " " + i.dropoffTime : ""));
+    }
+  });
+  ents.filter((e) => e.kind === "activity" && e.place).forEach((e) => {
+    const ok = e.confirmed && e.status !== "recommended";
+    pins.push({ q: e.place, name: e.place, kind: ok ? "Confirmed Activity" : e.status === "recommended" ? "Recommended" : "Planned - Not Confirmed", glyph: ok ? "★" : "☆", color: ok ? BOOKED : IDEA });
+  });
+  const places = pins.filter((x) => x.color === BOOKED).map((x) => [x.name, x.q]);
   const dayFiles = isEditor() ? store.files.filter((f) => f.date === date || (f.itemId && its.some((i) => i.id === f.itemId)) || (f.entryId && ents.some((e) => e.id === f.entryId))) : [];
   const route = places.length >= 2 ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(places[0][1])}&destination=${encodeURIComponent(places.at(-1)[1])}${places.length > 2 ? "&waypoints=" + encodeURIComponent(places.slice(1, -1).map((x) => x[1]).join("|")) : ""}` : "";
   const entryLi = (e) => {
@@ -454,8 +474,10 @@ function renderDay() {
     <section><h3>Comments</h3><ul class="entries">${coms.map(entryLi).join("") || `<li class="muted">No comments.</li>`}</ul>
       ${isEditor() ? `<button class="btn small" data-new-entry="comment">+ Add Comment</button>` : ""}</section>
 
-    <section><h3>Places</h3>
-      ${places.length ? `<ul class="places">${places.map(([n, q]) => `<li><a class="maplink" target="_blank" rel="noopener" href="${maps(q)}">📍 ${fmt(n)}</a></li>`).join("")}</ul>` : `<p class="muted">No places for this day.</p>`}
+    <section><h3>Map</h3>
+      ${pins.length ? `${mapsReady() ? `<div class="daymap" id="daymap"></div><p class="daymap-msg muted small"></p>` : isEditor() ? `<p class="muted small">The embedded map isn't set up yet (needs a Google Maps key).</p>` : ""}
+      <div class="maplegend"><span><i style="background:${BOOKED}"></i>Bookings &amp; Confirmed Activities</span><span><i style="background:${IDEA}"></i>Recommended / Not Confirmed</span></div>
+      <ul class="places">${pins.map((x) => `<li><a class="maplink" target="_blank" rel="noopener" href="${maps(x.q)}"><i class="pdot" style="background:${x.color}">${x.glyph}</i> ${esc(x.name)} <span class="muted small">${esc(x.kind)}</span></a></li>`).join("")}</ul>` : `<p class="muted">No places for this day.</p>`}
       ${route ? `<a class="btn small" target="_blank" rel="noopener" href="${route}">🗺 Day Route in Google Maps</a>` : ""}</section>
 
     ${isEditor() ? `<section><h3>Documents</h3>
@@ -464,6 +486,8 @@ function renderDay() {
   </div>`;
   wireHeader();
   root.querySelector("[data-back]").onclick = () => routeTo(ui.tripId, null);
+  const mapBox = root.querySelector("#daymap");
+  if (mapBox) drawDayMap(mapBox, pins, root.querySelector(".daymap-msg")).catch((x) => { mapBox.hidden = true; const m = root.querySelector(".daymap-msg"); if (m) m.textContent = "Map unavailable: " + x.message; });
   root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => routeTo(ui.tripId, ds[idx + +b.dataset.go], true)));
   root.querySelectorAll("[data-edit-item]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.editItem))));
   root.querySelectorAll("[data-edit-entry]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.editEntry))));
@@ -474,7 +498,7 @@ function renderDay() {
     if (confirm(`Delete "${e.text}"${e.endDate && e.endDate !== e.date ? " (all its days)" : ""} for everyone?`)) data.deleteEntry(e.id); }));
   root.querySelectorAll("[data-del-item]").forEach((b) => (b.onclick = () => { const i = store.items.find((x) => x.id === b.dataset.delItem);
     const nm = i.type === "flight" ? `${i.route} ${i.number}` : i.type === "stay" ? i.name : `${i.company} car`;
-    if (confirm(`Delete ${nm} (${fmtDate(i.start)} – ${fmtDate(i.end)}) for everyone? Its attached documents stay in Documents.`)) data.deleteItem(i.id); }));
+    if (confirm(`Delete ${nm} (${fmtDate(i.start)} – ${fmtDate(i.end)}) and its attached documents for everyone?`)) data.deleteItem(i.id); }));
   root.querySelectorAll("[data-attach-entry]").forEach((inp) => (inp.onchange = async () => {
     const e = store.entries.find((x) => x.id === inp.dataset.attachEntry);
     await upload(inp.files, { entryId: e.id, date: e.date }); await data.saveEntry({ ...e, confirmed: true }); }));

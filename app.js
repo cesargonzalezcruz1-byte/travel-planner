@@ -109,7 +109,7 @@ function render() {
   if (!ui.person) return renderEmpty();
   applyTheme();
   if (ui.day) renderDay(); else if (ui.view === "journey") renderJourney(); else if (ui.view === "timeline") renderTimeline(); else renderOverview();
-  if (ui.slide) { root.querySelector(".ov,.tl,.journey")?.classList.add(ui.slide); ui.slide = null; }
+  if (ui.slide) { root.querySelector(".ov,.tl,.journey,.dayview")?.classList.add(ui.slide); ui.slide = null; }
 }
 
 function renderLogin(err = "") {
@@ -422,12 +422,17 @@ window.addEventListener("resize", () => { if (ui.view === "overview" && !ui.day)
   let x0 = 0, y0 = 0, t0 = 0, ok = false;
   document.addEventListener("touchstart", (e) => {
     const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now();
-    ok = e.touches.length === 1 && !!ui.tripId && !ui.day && !document.querySelector(".modal") && !e.target.closest(".seg,.vseg,.daymap,.pop,input,textarea,select");
+    ok = e.touches.length === 1 && !!ui.tripId && !document.querySelector(".modal") && !e.target.closest(".seg,.vseg,.daymap,.pop,input,textarea,select");
   }, { passive: true });
   document.addEventListener("touchend", (e) => {
     if (!ok) return; ok = false;
     const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
     if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6 || Date.now() - t0 > 700) return;
+    if (ui.day) {   // day screen: swipe left = next day, right = previous day
+      const ds = days(), j = ds.indexOf(ui.day) + (dx < 0 ? 1 : -1);
+      if (j < 0 || j >= ds.length) return;
+      ui.slide = dx < 0 ? "from-right" : "from-left"; window.scrollTo(0, 0); routeTo(ui.tripId, ds[j], true); return;
+    }
     const k = VIEWS.findIndex((v) => v[0] === ui.view), n = k + (dx < 0 ? 1 : -1);
     if (n < 0 || n >= VIEWS.length) return;
     ui.view = VIEWS[n][0]; ui.slide = dx < 0 ? "from-right" : "from-left";
@@ -670,7 +675,7 @@ function renderDay() {
   root.querySelector("[data-back]").onclick = () => routeTo(ui.tripId, null);
   const mapBox = root.querySelector("#daymap");
   if (mapBox) drawDayMap(mapBox, pins, root.querySelector(".daymap-msg")).catch((x) => { mapBox.hidden = true; const m = root.querySelector(".daymap-msg"); if (m) m.textContent = "Map unavailable: " + x.message; });
-  root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => routeTo(ui.tripId, ds[idx + +b.dataset.go], true)));
+  root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => { ui.slide = +b.dataset.go > 0 ? "from-right" : "from-left"; routeTo(ui.tripId, ds[idx + +b.dataset.go], true); }));
   root.querySelectorAll("[data-edit-item]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.editItem))));
   root.querySelectorAll("[data-edit-entry]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.editEntry))));
   root.querySelectorAll("[data-new-entry]").forEach((b) => (b.onclick = () => entryForm({ kind: b.dataset.newEntry, date, endDate: date, who: [p, ...others.filter((o) => together(p, o, date))], status: "planned", confirmed: false, text: "", place: "" })));

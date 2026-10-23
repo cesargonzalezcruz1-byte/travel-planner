@@ -113,7 +113,11 @@ function renderLogin(err = "") {
     try { await data.signInFamily($("#famPw").value); }
     catch (x) { renderLogin(x.code === "auth/invalid-credential" || x.code === "auth/wrong-password" ? "That password isn't right." : x.code === "auth/network-request-failed" ? "No connection - try again when you're online." : "Couldn't sign in (" + (x.code || x.message) + ")."); }
   };
-  $("#gBtn").onclick = async () => { try { await data.signInEditor(); } catch (x) { renderLogin("Google sign-in failed (" + (x.code || x.message) + ")."); } };
+  $("#gBtn").onclick = async () => { try { await data.signInEditor(); } catch (x) {
+    renderLogin(x.code === "auth/admin-restricted-operation"
+      ? "First-time Google sign-in is blocked because sign-ups are switched off in Firebase (Authentication > Settings > User actions). Switch it on, sign in once, then switch it off again."
+      : x.code === "auth/unauthorized-domain" ? "This web address isn't allowed yet - add it under Firebase Authentication > Settings > Authorized domains."
+      : x.code === "auth/popup-closed-by-user" ? "" : "Google sign-in failed (" + (x.code || x.message) + ")."); } };
 }
 function renderNoAccess() {
   root.innerHTML = `<div class="login"><h1 class="title-red">Travel Planner</h1>

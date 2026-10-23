@@ -175,7 +175,7 @@ function renderHome() {
     return `<article class="tripcard" data-open="${esc(t.id)}" role="button" tabindex="0">
       <div class="tc-top"><h3>${esc(t.title || "Untitled Trip")}</h3>${status}</div>
       <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
-      <div class="tc-people">${(t.travellers || []).map((p, k) => `<span class="pchip tp" style="--pc:${upc(p.color) || TCOLORS[k % TCOLORS.length][1]}"><b>${esc(p.code)}</b> ${esc(p.name || "")}</span>`).join("")}</div>
+      <div class="tc-people">${(t.travellers || []).map((p, k) => `<span class="pchip tp" style="--pc:${upc(p.color) || TCOLORS[k % TCOLORS.length][1]}" title="${esc(p.name || p.code)}"><b>${esc(p.code)}</b></span>`).join("")}</div>
       ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
     </article>`;
   };

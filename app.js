@@ -466,15 +466,15 @@ function expenseForm(x) {
 }
 function budgetForm() {
   const S = budgetSettings();
-  const rateRows = CURRENCIES.filter((c) => c !== S.home).map((c) => `<label>1 ${c} =<input name="rate.${c}" type="number" step="0.0001" min="0" value="${S.rates[c] ?? ""}" placeholder="rate"></label>`).join("");
+  const rateRows = CURRENCIES.filter((c) => c !== S.home).map((c) => `<label>1 ${c} =<input name="rate.${c}" type="number" step="any" min="0" value="${S.rates[c] ?? ""}" placeholder="rate"></label>`).join("");
   modal(`<h3>Budget Settings</h3>
     <label>Home Currency<select name="home">${CURRENCIES.map((c) => `<option ${c === S.home ? "selected" : ""}>${c}</option>`).join("")}</select></label>
     <fieldset class="pbox"><legend>Exchange Rates (in home currency)</legend><div class="rates">${rateRows}</div>
       <div class="row wrap"><button type="button" class="btn small" data-fetch-rates>↻ Get Latest Rates</button><span class="muted small" data-rates-note>${store.priv._budget?.ratesDate ? `Last updated: ${longDate(store.priv._budget.ratesDate)}` : "Daily European Central Bank rates"}</span></div>
       <p class="muted small">Costs in other currencies are converted with these. Banks and cards add their own fees.</p></fieldset>
-    <label>Total Budget<input name="total" type="number" step="1" min="0" value="${S.total || ""}" placeholder="optional"></label>
+    <label>Total Budget<input name="total" type="number" step="any" min="0" value="${S.total || ""}" placeholder="optional"></label>
     <fieldset class="pbox"><legend>Budget per Category (Optional)</legend><div class="rates">
-      ${BCATS.map(([k, l]) => `<label>${l}<input name="cat.${k}" type="number" step="1" min="0" value="${S.cats[k] || ""}"></label>`).join("")}</div></fieldset>`,
+      ${BCATS.map(([k, l]) => `<label>${l}<input name="cat.${k}" type="number" step="any" min="0" value="${S.cats[k] || ""}"></label>`).join("")}</div></fieldset>`,
     async (fd) => {
       const rates = {}, cats = {};
       for (const [k, v] of fd.entries()) { if (k.startsWith("rate.") && v) rates[k.slice(5)] = +v; if (k.startsWith("cat.") && v) cats[k.slice(4)] = +v; }

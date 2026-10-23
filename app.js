@@ -15,10 +15,21 @@ const longDate = (s) => { const d = D(s); return `${d.getDate()} ${MON[d.getMont
 const WEEKDAY_CLASS = (s) => "wd-" + WD[D(s).getDay()].toLowerCase();
 const maps = (q) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 const isEditor = () => store.role === "editor";
-const PEOPLE = () => (store.trip?.travellers || [{ code: "CGC" }, { code: "CGM" }, { code: "DBMV" }]).map((t) => t.code);
+const PEOPLE = () => (store.trip?.travellers || []).map((t) => t.code);
+const ALL_CODES = () => (store.trip?.travellers || []).concat(store.trip?.extended || []).map((t) => t.code).filter(Boolean);
 const NAME = (code) => (store.trip?.travellers || []).concat(store.trip?.extended || []).find((t) => t.code === code)?.name || code;
 
-let ui = { person: localStorage.getItem("tp.person") || "CGC", day: null };
+let ui = { person: localStorage.getItem("tp.person") || "", day: null, tripId: null };
+// routes:  #/  (trips)   #/t/<tripId>   #/t/<tripId>/<YYYY-MM-DD>
+function parseRoute() {
+  const m = location.hash.match(/^#\/t\/([^/]+)(?:\/(\d{4}-\d{2}-\d{2}))?/);
+  ui.tripId = m ? decodeURIComponent(m[1]) : null; ui.day = m && m[2] ? m[2] : null;
+}
+const routeTo = (tripId, day, replace = false) => {
+  const h = tripId ? `#/t/${encodeURIComponent(tripId)}${day ? "/" + day : ""}` : "#/";
+  if (replace) history.replaceState(null, "", h); else history.pushState(null, "", h);
+  parseRoute(); render();
+};
 const days = () => {
   if (!store.trip) return [];
   const n = dayDiff(store.trip.start, store.trip.end);
@@ -36,12 +47,12 @@ function mainNames() {
 }
 let tokenRe = null, tokenKey = "";
 function fmt(text) {
-  const names = mainNames(); const key = names.join("|");
+  const names = mainNames(); const codes = ALL_CODES(); const key = names.join("|") + "#" + codes.join("|");
   if (!tokenRe || key !== tokenKey) {
     tokenKey = key;
     const nameAlt = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
     tokenRe = new RegExp(
-      `(?<init>\\b(?:CGC|CGM|DBMV|RGA|MCN)\\b|^All(?=:))|(?<tbc>\\bTBC\\b)|(?<main>\\b[A-Z]{3}(?:-[A-Z]{3})+\\b${nameAlt ? "|" + nameAlt : ""})` +
+      `(?<init>${codes.length ? `\\b(?:${codes.map((c) => c.replace(/[^A-Za-z0-9]/g, "")).join("|")})\\b|` : ""}^All(?=:))|(?<tbc>\\bTBC\\b)|(?<main>\\b[A-Z]{3}(?:-[A-Z]{3})+\\b${nameAlt ? "|" + nameAlt : ""})` +
       `|(?<label>\\b(?:Check-In|Check-Out|Pick-Up|Drop-Off)\\b|\\b(?:Vehicle|Location|Flight|Driver):|(?<![A-Za-z])[DA]:)`, "gm");
   }
   let out = "", pos = 0;
@@ -89,8 +100,11 @@ function render() {
   if (!store.ready) { root.innerHTML = `<div class="loading">Loading…</div>`; return; }
   if (!store.role) return renderLogin();
   if (store.role === "none") return renderNoAccess();
+  if (!ui.tripId) { data.openTrip(null); return renderHome(); }
+  data.openTrip(ui.tripId);
   if (!store.trip && !store.items.length) return renderEmpty();
   if (!PEOPLE().includes(ui.person)) ui.person = PEOPLE()[0];
+  if (!ui.person) return renderEmpty();
   if (ui.day) renderDay(); else renderGrid();
 }
 
@@ -125,21 +139,105 @@ function renderNoAccess() {
   $("#out").onclick = data.signOut;
 }
 function renderEmpty() {
-  root.innerHTML = `${header()}<div class="empty card"><h2>No trip data yet</h2>
-    ${isEditor() ? `<p>Import the trip data file Claude sent you to load the whole trip.</p><button class="btn primary" data-act="import">Import trip data</button>` : `<p>The itinerary hasn't been loaded yet - check back soon.</p>`}</div>`;
+  const known = store.trips.find((t) => t.id === ui.tripId);
+  root.innerHTML = `${header()}<div class="empty card">
+    ${!store.tripsLoaded || known ? `<h2>Loading trip…</h2>` : store.trip && !PEOPLE().length ? `<h2>No travellers yet</h2>
+      ${isEditor() ? `<p>Add the travellers in the trip setup.</p><button class="btn primary" data-act="settings">Trip setup</button>` : ""}`
+      : `<h2>Trip not found</h2><p>It may have been deleted.</p>`}
+    <p><button class="btn" data-home>← All trips</button></p></div>`;
   wireHeader();
+}
+
+// ---------------------------------------------------------------- home (trip list)
+function renderHome() {
+  const today = iso(new Date());
+  const trips = [...store.trips].sort((a, b) => (a.start || "").localeCompare(b.start || ""));
+  const upcoming = trips.filter((t) => (t.end || "") >= today), past = trips.filter((t) => (t.end || "") < today);
+  const card = (t) => {
+    const days = t.start && t.end ? dayDiff(t.start, t.end) + 1 : 0;
+    const status = t.start <= today && today <= t.end ? `<span class="tstat now">On now</span>` : t.start > today ? `<span class="tstat">in ${dayDiff(today, t.start)} days</span>` : `<span class="tstat past">Past</span>`;
+    return `<article class="tripcard" data-open="${esc(t.id)}" role="button" tabindex="0">
+      <div class="tc-top"><h3>${esc(t.title || "Untitled trip")}</h3>${status}</div>
+      <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
+      <div class="tc-people">${(t.travellers || []).map((p) => `<span class="pchip"><b>${esc(p.code)}</b> ${esc(p.name || "")}</span>`).join("")}</div>
+      ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
+    </article>`;
+  };
+  root.innerHTML = `<header class="top"><div class="brand"><span class="title-red">Travel Planner</span>
+      <span class="role ${store.role}">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span></div>
+    <div class="menu">${isEditor() ? `<button class="btn small primary" data-act="newtrip">+ New trip</button>` : ""}
+      <details class="more"><summary class="btn small">⋯</summary><div class="pop">
+        ${isEditor() ? `<button data-act="import">Import a trip file</button>` : ""}<button data-act="signout">Sign out</button></div></details></div></header>
+  <div class="home">
+    ${!store.tripsLoaded ? `<p class="muted">Loading trips…</p>` : !trips.length ? `<div class="empty card"><h2>No trips yet</h2>
+       ${isEditor() ? `<p>Create your first trip: name, dates and who's travelling.</p><button class="btn primary" data-act="newtrip">+ New trip</button>` : `<p>Nothing has been planned yet.</p>`}</div>` : ""}
+    ${upcoming.length ? `<h2 class="hsec">Upcoming</h2><div class="trips">${upcoming.map(card).join("")}</div>` : ""}
+    ${past.length ? `<h2 class="hsec">Past trips</h2><div class="trips">${past.map(card).join("")}</div>` : ""}
+  </div>`;
+  wireHeader();
+  root.querySelectorAll("[data-open]").forEach((el) => {
+    el.onclick = (e) => { if (e.target.closest("[data-settings]")) return; localStorage.setItem("tp.trip", el.dataset.open); routeTo(el.dataset.open); };
+    el.onkeydown = (e) => { if (e.key === "Enter") el.click(); };
+  });
+  root.querySelectorAll("[data-settings]").forEach((b) => (b.onclick = () => tripForm(store.trips.find((t) => t.id === b.dataset.settings))));
+}
+
+// ---------------------------------------------------------------- trip setup window
+function tripForm(t) {
+  const isNew = !t; t = t || { title: "", start: "", end: "", travellers: [{ code: "", name: "" }], extended: [] };
+  const row = (p, kind) => `<div class="prow" data-kind="${kind}">
+      <input class="pcode" placeholder="Initials" maxlength="6" value="${esc(p.code || "")}" required>
+      <input class="pname" placeholder="Name" value="${esc(p.name || "")}" ${kind === "t" ? "required" : ""}>
+      <input class="pfull" placeholder="Full name (as on bookings)" value="${esc(p.fullName || "")}">
+      <button type="button" class="btn tiny danger" data-rm title="Remove">✕</button></div>`;
+  modal(`<h3>${isNew ? "New trip" : "Trip setup"}</h3>
+    <label>Trip name<input name="title" value="${esc(t.title)}" placeholder="e.g. Japan 2027" required></label>
+    <div class="row"><label>Start<input type="date" name="start" value="${t.start || ""}" required></label><label>End<input type="date" name="end" value="${t.end || ""}" required></label></div>
+    <fieldset class="pbox"><legend>Travellers (each gets their own itinerary)</legend>
+      <div id="trav">${(t.travellers || []).map((p) => row(p, "t")).join("")}</div>
+      <button type="button" class="btn tiny" data-addp="t">+ Add traveller</button></fieldset>
+    <fieldset class="pbox"><legend>Others joining sometimes (optional)</legend>
+      <div id="ext">${(t.extended || []).map((p) => row(p, "e")).join("")}</div>
+      <button type="button" class="btn tiny" data-addp="e">+ Add person</button></fieldset>
+    <p class="muted small">Initials are how people appear in the itinerary (e.g. CGC). Full names help the AI match names on bookings.</p>`,
+    async (fd, form) => {
+      const read = (kind) => [...form.querySelectorAll(`.prow[data-kind="${kind}"]`)].map((r) => ({
+        code: r.querySelector(".pcode").value.trim().toUpperCase(), name: r.querySelector(".pname").value.trim(), fullName: r.querySelector(".pfull").value.trim() }))
+        .filter((p) => p.code).map((p) => (p.fullName ? p : { code: p.code, name: p.name }));
+      const travellers = read("t"), extended = read("e");
+      if (!travellers.length) throw new Error("Add at least one traveller");
+      const codes = travellers.concat(extended).map((p) => p.code);
+      if (new Set(codes).size !== codes.length) throw new Error("Each person needs different initials");
+      if (codes.some((c) => !/^[A-Z0-9]{2,6}$/.test(c))) throw new Error("Initials: 2-6 letters, no spaces");
+      if (fd.get("end") < fd.get("start")) throw new Error("End is before start");
+      if (!isNew) {
+        const removed = (t.travellers || []).map((p) => p.code).filter((c) => !travellers.some((p) => p.code === c));
+        if (removed.length && !confirm(`Remove ${removed.join(", ")} from the travellers? Their bookings stay but won't show in an itinerary.`)) throw new Error("Cancelled");
+      }
+      const id = await data.saveTrip({ title: fd.get("title").trim(), start: fd.get("start"), end: fd.get("end"), travellers, extended }, isNew ? null : t.id);
+      if (isNew) { ui.person = travellers[0].code; localStorage.setItem("tp.person", ui.person); routeTo(id); }
+    }, isNew ? null : async () => {
+      const typed = prompt(`This deletes "${t.title}" with all its bookings, activities and documents for everyone. Type DELETE to confirm.`);
+      if (typed !== "DELETE") throw new Error("Not deleted");
+      await data.deleteTrip(t.id); routeTo(null);
+    });
+  const form = document.querySelector(".sheet");
+  form.addEventListener("click", (e) => {
+    const rm = e.target.closest("[data-rm]"); if (rm) rm.closest(".prow").remove();
+    const add = e.target.closest("[data-addp]"); if (add) form.querySelector(add.dataset.addp === "t" ? "#trav" : "#ext").insertAdjacentHTML("beforeend", row({}, add.dataset.addp));
+  });
 }
 
 function header() {
   const ppl = PEOPLE().map((p) => `<button class="chip ${p === ui.person ? "on" : ""}" data-person="${p}"><b>${p}</b><span>${esc(NAME(p))}</span></button>`).join("");
   return `<header class="top">
-    <div class="brand"><span class="title-red">${esc(store.trip?.title || "Travel Planner")}</span>
+    <div class="brand"><button class="btn small" data-home title="All trips">☰ Trips</button><span class="title-red">${esc(store.trip?.title || "Travel Planner")}</span>
       <span class="role ${store.role}">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span></div>
     <nav class="people">${ppl}</nav>
     <div class="menu">
       ${isEditor() ? `<button class="btn small" data-act="add">+ Booking</button>` : ""}
       <details class="more"><summary class="btn small">⋯</summary><div class="pop">
-        ${isEditor() ? `<button data-act="import">Import trip data</button><button data-act="export">Download backup</button>` : ""}
+        ${isEditor() ? `<button data-act="settings">Trip setup</button><button data-act="import">Import trip data</button><button data-act="export">Download backup</button>` : ""}
         <button data-act="signout">Sign out</button></div></details>
     </div></header>
     ${store.error ? `<div class="banner err">${esc(store.error)}</div>` : ""}`;
@@ -147,18 +245,21 @@ function header() {
 function wireHeader() {
   root.querySelectorAll("[data-person]").forEach((b) => (b.onclick = () => { ui.person = b.dataset.person; localStorage.setItem("tp.person", ui.person); render(); }));
   root.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.(b)));
+  root.querySelectorAll("[data-home]").forEach((b) => (b.onclick = () => routeTo(null)));
 }
 
 // ---------------------------------------------------------------- grid
-const COL = { day: 1, o1: 2, o2: 3, flight: 4, hout: 5, hin: 6, cdrop: 7, cpick: 8, act: 9, com: 10 };
+let COL = {};
+const makeCols = (n) => { const b = 1 + n; COL = { day: 1, flight: b + 1, hout: b + 2, hin: b + 3, cdrop: b + 4, cpick: b + 5, act: b + 6, com: b + 7 }; };
 function renderGrid() {
-  const p = ui.person; const others = PEOPLE().filter((x) => x !== p); const ds = days();
+  const p = ui.person; const others = PEOPLE().filter((x) => x !== p); const ds = days(); makeCols(others.length);
   const R = (date) => dayDiff(store.trip.start, date) + 2; // grid row (row 1 = header)
   const cells = [];
   const cell = (r1, r2, c1, c2, cls, html, attrs = "") =>
     cells.push(`<div class="cell ${cls}" style="grid-row:${r1}/${r2 + 1};grid-column:${c1}/${c2 + 1}" ${attrs}><div class="txt">${html}</div></div>`);
   // header
-  const heads = [["Day", 1, 1], [others[0], 2, 2, "rot"], [others[1], 3, 3, "rot"], ["Flight", 4, 4], ["Hotel", 5, 6], ["Car", 7, 8], ["Activity", 9, 9], ["Comments", 10, 10]];
+  const heads = [["Day", 1, 1], ...others.map((o, k) => [o, 2 + k, 2 + k, "rot"]), ["Flight", COL.flight, COL.flight], ["Hotel", COL.hout, COL.hin],
+                 ["Car", COL.cdrop, COL.cpick], ["Activity", COL.act, COL.act], ["Comments", COL.com, COL.com, "c-com"]];
   heads.forEach(([t, a, b, c]) => cell(1, 1, a, b, "head " + (c || ""), `<span>${esc(t)}</span>`));
   // days + ticks
   ds.forEach((date) => {
@@ -217,10 +318,10 @@ function renderGrid() {
     }
   };
   runs("activity", COL.act, "act");
-  runs("comment", COL.com, "com");
+  runs("comment", COL.com, "com c-com");
 
   root.innerHTML = `${header()}
-    <div class="gridwrap"><div class="grid" style="grid-template-rows:var(--head-h) repeat(${ds.length}, var(--row-h))">${cells.join("")}</div></div>
+    <div class="gridwrap"><div class="grid" style="--ticks:${others.length};grid-template-columns:var(--c-day) repeat(${others.length}, var(--c-tick)) var(--c-flight) repeat(4, var(--c-half)) var(--c-act) var(--c-com);grid-template-rows:var(--head-h) repeat(${ds.length}, var(--row-h))">${cells.join("")}</div></div>
     <p class="hint">Tap a day to see its activities, places and documents.</p>`;
   wireHeader();
   root.querySelectorAll(".grid [data-slot]").forEach((el) => {
@@ -240,9 +341,9 @@ function renderGrid() {
 }
 function openDay(date) {
   sessionStorage.setItem("tp.wscroll", window.scrollY);
-  ui.day = date; history.pushState({ day: date }, "", "#" + date); render(); window.scrollTo(0, 0);
+  routeTo(ui.tripId, date); window.scrollTo(0, 0);
 }
-window.onpopstate = () => { ui.day = location.hash.slice(1) || null; render(); };
+window.onpopstate = () => { parseRoute(); render(); };
 
 // ---------------------------------------------------------------- day view
 function roleOn(i, date) {
@@ -340,8 +441,8 @@ function renderDay() {
       <label class="btn small">Upload for this day<input type="file" hidden data-attach-day="${date}" multiple></label></section>` : ""}
   </div>`;
   wireHeader();
-  root.querySelector("[data-back]").onclick = () => history.back();
-  root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => { ui.day = ds[idx + +b.dataset.go]; history.replaceState({ day: ui.day }, "", "#" + ui.day); render(); }));
+  root.querySelector("[data-back]").onclick = () => routeTo(ui.tripId, null);
+  root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => routeTo(ui.tripId, ds[idx + +b.dataset.go], true)));
   root.querySelectorAll("[data-edit-item]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.editItem))));
   root.querySelectorAll("[data-edit-entry]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.editEntry))));
   root.querySelectorAll("[data-new-entry]").forEach((b) => (b.onclick = () => entryForm({ kind: b.dataset.newEntry, date, endDate: date, who: [p, ...others.filter((o) => together(p, o, date))], status: "planned", confirmed: false, text: "", place: "" })));
@@ -382,7 +483,7 @@ function modal(html, onSubmit, onDelete) {
   const close = () => { m.remove(); render(); };
   m.querySelector("[data-cancel]").onclick = close;
   m.onclick = (e) => { if (e.target === m) close(); };
-  if (onDelete) m.querySelector("[data-del]").onclick = async () => { if (confirm("Delete this for everyone?")) { await onDelete(); close(); } };
+  if (onDelete) m.querySelector("[data-del]").onclick = async () => { if (confirm("Delete this for everyone?")) { try { await onDelete(); close(); } catch (x) { toast(x.message); } } };
   m.querySelector("form").onsubmit = async (e) => { e.preventDefault(); const btn = e.target.querySelector("button.primary"); btn.disabled = true; try { await onSubmit(new FormData(e.target), e.target); close(); } catch (x) { btn.disabled = false; toast("Save failed: " + (x.code || x.message)); } };
   m.querySelector("input,select,textarea")?.focus();
 }
@@ -481,6 +582,8 @@ function entryForm(e) {
 // ---------------------------------------------------------------- menu actions
 const actions = {
   signout: () => data.signOut(),
+  newtrip: () => tripForm(null),
+  settings: () => tripForm(store.trips.find((t) => t.id === ui.tripId) || { id: ui.tripId, ...store.trip }),
   add: () => itemForm({ type: "stay", who: [ui.person], start: ui.day || store.trip?.start, end: ui.day || store.trip?.start, status: "booked" }),
   export: () => {
     const blob = new Blob([JSON.stringify(data.exportAll(), null, 1)], { type: "application/json" });
@@ -491,7 +594,7 @@ const actions = {
     inp.onchange = async () => {
       try { const seed = JSON.parse(await inp.files[0].text());
         if (store.items.length && !confirm("Import will add/overwrite bookings and activities with the file's contents. Continue?")) return;
-        toast("Importing…"); await data.importSeed(seed); toast("Trip data imported"); }
+        toast("Importing…"); const id = await data.importSeed(seed); toast("Trip data imported"); if (!ui.tripId) routeTo(id); }
       catch (e) { toast("Import failed: " + (e.code || e.message)); }
     };
     inp.click();
@@ -503,11 +606,12 @@ function toast(msg) {
 }
 
 // ================================================================= start
-ui.day = location.hash.slice(1) || null;
+parseRoute();
+if (!ui.tripId && /^#\d{4}-\d{2}-\d{2}$/.test(location.hash)) routeTo("usmx-2026", location.hash.slice(1), true); // old links
 const PLANNED_IDS = ["e007","e008","e009","e010","e011","e012","e013","e014","e015","e016","e017","e020"]; // Tulum day plans + Ruta del Vino: not booked yet
 let migrating = false;
 data.onChange(() => {
-  if (isEditor() && store.trip && (store.trip.schema || 1) < 2 && store.entries.length && !migrating) {
+  if (isEditor() && store.tripId === "usmx-2026" && store.trip && (store.trip.schema || 1) < 2 && store.entries.length && !migrating) {
     migrating = true;
     data.migrateConfirmed((e) => e.kind === "comment" || (e.status !== "recommended" && !PLANNED_IDS.includes(e.id)))
       .then(() => toast("Updated: activities now have a Confirmed tick")).catch((x) => { console.error(x); migrating = false; });

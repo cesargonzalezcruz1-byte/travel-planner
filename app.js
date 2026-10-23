@@ -1097,7 +1097,7 @@ function journalHtml(date) {
     <div class="jnew">
       <div class="jas"><span class="muted small">Posting as</span>
         <select data-jauthor aria-label="Posting as">${me ? "" : `<option value="">Choose…</option>`}${authors().map((a) => `<option value="${esc(a.code)}" ${me && me.code === a.code ? "selected" : ""}>${esc(a.name)}</option>`).join("")}
-          ${me && !me.code ? `<option value="name:${esc(me.name)}" selected>${esc(me.name)}</option>` : ""}<option value="other">Someone else…</option></select></div>
+          ${me && !me.code ? `<option value="name:${esc(me.name)}" selected>${esc(me.name)}</option>` : ""}<option value="other">Other…</option></select></div>
       ${composer("new", { placeholder: "How was the day? Share a story, a tip or what you'd do again…", withRating: true, acts })}
     </div></section>`;
 }
@@ -1106,7 +1106,7 @@ function wireJournal(date) {
   const rerender = () => { const y = window.scrollY; render(); window.scrollTo(0, y); };
   sec.querySelector("[data-jauthor]").onchange = (ev) => {
     let v = ev.target.value;
-    if (v === "other") { const n = (prompt("Your name, as it should show in the journal:") || "").trim().slice(0, 60); if (!n) return rerender(); v = n; }
+    if (v === "other") { const n = (prompt("Name (not in Trip Setup):") || "").trim().slice(0, 60); if (!n) return rerender(); v = n; }
     else if (v.startsWith("name:")) v = v.slice(5);
     jStore("tp.author", v); rerender();
   };

@@ -160,3 +160,10 @@ section h3{margin:0 0 10px;color:var(--darkred);font-size:16px}
 .prow input{min-width:0;width:100%}
 .sheet{overflow-x:hidden}
 .pbox legend{font-size:13px;font-weight:700}
+
+/* fields to double-check after AI fill */
+.sheet label.verify,.whobox.verify legend{color:#C62828;font-weight:700}
+.sheet label.verify>.vtxt::before,.whobox.verify legend::before{content:"* ";color:#C62828}
+.sheet label.verify input,.sheet label.verify textarea,.sheet label.verify select{border-color:#C62828;box-shadow:0 0 0 1px #C62828}
+.whobox.verify{border-color:#C62828}
+.verify-key{color:#C62828}

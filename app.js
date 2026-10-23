@@ -491,6 +491,29 @@ const whoBoxes = (who) => `<fieldset class="whobox"><legend>Who</legend>${PEOPLE
 const PDF_BTN = `<div class="extract"><label class="btn small pdfbtn">📄 Fill from PDF or photo<input type="file" hidden accept="application/pdf,image/*" data-extract></label>
   <span class="extract-status muted small">The file is read by AI, then attached. Check the details before saving.</span></div>`;
 function setVal(form, name, v) { const el = form.querySelector(`[name="${name}"]`); if (el && v !== undefined && v !== null && v !== "") el.value = v; }
+// After AI fill: red label + * on the fields that matter most (and any the AI was unsure of); cleared once the field is touched.
+const CRITICAL = {
+  flight: ["who", "start", "end", "route", "number", "dep", "arr", "priv.confirmation"],
+  stay: ["who", "start", "end", "name", "checkin", "checkout", "priv.confirmation", "priv.cost", "priv.cancel"],
+  car: ["who", "start", "end", "pickup", "dropoff", "pickupTime", "dropoffTime", "priv.confirmation"],
+  activity: ["who", "date", "endDate", "text", "place"],
+};
+function markCheck(form, type, unsure = []) {
+  form.querySelectorAll(".verify").forEach((el) => el.classList.remove("verify"));
+  const PRIV = new Set(["confirmation", "tickets", "seats", "cost", "paidWith", "dueAtHotel", "cancel", "phone", "notes"]);
+  const names = new Set([...(CRITICAL[type] || []), ...unsure.map((n) => (PRIV.has(n) ? "priv." + n : n === "date" && type !== "activity" ? "start" : n))]);
+  let n = 0;
+  for (const name of names) {
+    const box = name === "who" ? form.querySelector(".whobox") : form.querySelector(`[name="${name}"]`)?.closest("label");
+    if (!box || box.classList.contains("verify")) continue;
+    box.classList.add("verify"); n++;
+    const tn = [...box.childNodes].find((c) => c.nodeType === 3 && c.textContent.trim());   // put the * inline with the label text
+    if (tn) { const sp = document.createElement("span"); sp.className = "vtxt"; tn.replaceWith(sp); sp.appendChild(tn); }
+    const clear = () => box.classList.remove("verify");
+    box.addEventListener("input", clear, { once: true }); box.addEventListener("change", clear, { once: true });
+  }
+  return n;
+}
 function wireExtract(form, hint, onResult) {
   const inp = form.querySelector("[data-extract]"); const st = form.querySelector(".extract-status");
   if (!inp) return;
@@ -501,8 +524,9 @@ function wireExtract(form, hint, onResult) {
     st.textContent = `Reading ${f.name}…`; st.classList.add("busy");
     try {
       const r = await data.extractFromFile(f, hint(), { travellers: store.trip?.travellers || [], extended: store.trip?.extended || [], start: store.trip?.start, end: store.trip?.end });
-      onResult(r || {});
-      st.textContent = `✓ Filled from ${f.name} - please check, then Save (the file will be attached).`;
+      const type = onResult(r || {}) || hint();
+      const n = markCheck(form, type, Array.isArray(r?.unsure) ? r.unsure : []);
+      st.innerHTML = `✓ Filled from ${esc(f.name)}. <b class="verify-key">Check the ${n} fields marked * in red</b> - the mark goes when you edit one. Then Save (the file will be attached).`;
     } catch (x) {
       console.error(x); const why = String(x.message || x.code || x).replace(/^.*?googleapis\.com\S*:\s*/, "").slice(0, 400);
       st.textContent = `Couldn't read it automatically: ${why} - fill in by hand; ${f.name} will still be attached.`;
@@ -553,6 +577,7 @@ function itemForm(item) {
       setVal(form, "priv." + k, v);
     }
     form.querySelector(".privbox").open = true;
+    return t;
   });
 }
 function entryForm(e) {
@@ -576,6 +601,7 @@ function entryForm(e) {
     const txt = [r.text || r.name, r.time ? "at " + r.time : ""].filter(Boolean).join(" ");
     setVal(form, "text", txt); setVal(form, "place", r.place || r.address); setVal(form, "date", r.start || r.date); setVal(form, "endDate", r.end || r.start || r.date);
     if (Array.isArray(r.who) && r.who.length) form.querySelectorAll("input[name=who]").forEach((cb) => (cb.checked = r.who.includes(cb.value)));
+    return "activity";
   });
 }
 

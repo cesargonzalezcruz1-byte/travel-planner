@@ -1,5 +1,5 @@
 // Offline support: cache the app shell + Firebase SDK. Trip data is cached by Firestore itself.
-const CACHE = "travel-planner-v5";
+const CACHE = "travel-planner-v6";
 const SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./data.js", "./firebase-config.js", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL))); self.skipWaiting(); });

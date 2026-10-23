@@ -227,9 +227,10 @@ const EXTRACT_SCHEMA = req({
     confirmation: S("Booking / confirmation / reservation / itinerary number(s)"), tickets: S("Ticket numbers"), seats: S("Seat numbers"),
     cost: S("Total price with currency, e.g. USD 245.10"), paidWith: S("Payment card or method, e.g. Visa ending 1234, or 'Pay at hotel'"),
     dueAtHotel: S("Amount still to pay at the property, with currency"),
-    cancel: S("Cancellation rule in one line, with the deadline date"), phone: S("Phone number of the hotel / company"),
+    cancel: S("Cancellation rule in one line, with the deadline date"), phone: S("Phone number of the hotel / airline / rental company itself (not the booking website's customer service line, unless no other number is given)"),
     notes: S("Other useful private details: room type, guests, booking site, taxes, deposit"),
   }),
+  unsure: { type: "array", items: { type: "string" }, description: "Names of fields you guessed or could not read clearly, e.g. ['checkin','phone','who']; empty if all are clearly in the document" },
 });
 let aiModel = null;
 async function getModel(tryIndex = 0) {

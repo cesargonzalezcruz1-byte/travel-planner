@@ -190,7 +190,7 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .entries{list-style:none;margin:0;padding:0}
 .entry{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
 .entry:last-child{border-bottom:0}
-.entry.recommended .etext{color:var(--ink2)}
+.entry.st-recommended .etext{color:var(--ink2)}
 .etext{font-size:14px;line-height:1.45} .whos{margin-left:6px;font-size:12px}
 .eacts{display:flex;gap:6px;align-items:center;flex-shrink:0}
 #app section .entries .muted{padding:4px 0}

@@ -19,8 +19,8 @@ const PEOPLE = () => (store.trip?.travellers || []).map((t) => t.code);
 const ALL_CODES = () => (store.trip?.travellers || []).concat(store.trip?.extended || []).map((t) => t.code).filter(Boolean);
 const NAME = (code) => (store.trip?.travellers || []).concat(store.trip?.extended || []).find((t) => t.code === code)?.name || code;
 
-let ui = { person: localStorage.getItem("tp.person") || "", day: null, tripId: null, swap: {}, view: "timeline" };
-try { if (localStorage.getItem("tp.view") === "journey") ui.view = "journey"; } catch (e) { /* ignore */ }
+let ui = { person: localStorage.getItem("tp.person") || "", day: null, tripId: null, swap: {}, view: "overview" };
+try { const v = localStorage.getItem("tp.view"); ui.view = ["overview", "timeline", "journey"].includes(v) ? v : "overview"; } catch (e) { ui.view = "overview"; }
 try { ui.swap = JSON.parse(localStorage.getItem("tp.swap") || "{}"); } catch (e) { /* private mode */ }
 // routes:  #/  (trips)   #/t/<tripId>   #/t/<tripId>/<YYYY-MM-DD>
 function parseRoute() {
@@ -102,12 +102,13 @@ function render() {
   if (!store.ready) { root.innerHTML = `<div class="loading">Loading…</div>`; return; }
   if (!store.role) return renderLogin();
   if (store.role === "none") return renderNoAccess();
-  if (!ui.tripId) { data.openTrip(null); return renderHome(); }
+  if (!ui.tripId) { data.openTrip(null); applyTheme(); return renderHome(); }
   data.openTrip(ui.tripId);
   if (!store.trip && !store.items.length) return renderEmpty();
   if (!PEOPLE().includes(ui.person)) ui.person = PEOPLE()[0];
   if (!ui.person) return renderEmpty();
-  if (ui.day) renderDay(); else if (ui.view === "journey") renderJourney(); else renderTimeline();
+  applyTheme();
+  if (ui.day) renderDay(); else if (ui.view === "journey") renderJourney(); else if (ui.view === "timeline") renderTimeline(); else renderOverview();
 }
 
 function renderLogin(err = "") {
@@ -187,25 +188,31 @@ function renderHome() {
 // ---------------------------------------------------------------- trip setup window
 function tripForm(t) {
   const isNew = !t; t = t || { title: "", start: "", end: "", travellers: [{ code: "", name: "" }], extended: [] };
-  const row = (p, kind) => `<div class="prow" data-kind="${kind}">
+  const used = (t.travellers || []).map((x) => x.color).filter(Boolean);
+  const nextColor = () => { const all = [...document.querySelectorAll('.prow[data-kind="t"]')].map((r) => r.dataset.color); return (TCOLORS.find(([, h]) => !all.includes(h) && !used.includes(h)) || TCOLORS[all.length % TCOLORS.length])[1]; };
+  const row = (p, kind, k = 0) => { const c = p.color || (kind === "t" ? TCOLORS[k % TCOLORS.length][1] : "");
+    return `<div class="prow" data-kind="${kind}" ${kind === "t" ? `data-color="${c}" style="--pc:${c}"` : ""}>
       <input class="pcode" placeholder="Initials" maxlength="6" value="${esc(p.code || "")}" required>
       <input class="pname" placeholder="Name" value="${esc(p.name || "")}" ${kind === "t" ? "required" : ""}>
       <input class="pfull" placeholder="Full Name (as on Bookings)" value="${esc(p.fullName || "")}">
-      <button type="button" class="btn tiny danger" data-rm title="Remove">✕</button></div>`;
+      <button type="button" class="btn tiny danger" data-rm title="Remove">✕</button>
+      ${kind === "t" ? `<div class="swrow" role="radiogroup" aria-label="Colour">${TCOLORS.map(([n, h]) => `<button type="button" class="swbtn${h === c ? " on" : ""}" style="--c:${h}" data-sw="${h}" role="radio" aria-checked="${h === c}" aria-label="${n}" title="${n}"></button>`).join("")}</div>` : ""}</div>`; };
   modal(`<h3>${isNew ? "New Trip" : "Trip Setup"}</h3>
     <label>Trip Name<input name="title" value="${esc(t.title)}" placeholder="e.g. Japan 2027" required></label>
     <div class="row"><label>Start<input type="date" name="start" value="${t.start || ""}" required></label><label>End<input type="date" name="end" value="${t.end || ""}" required></label></div>
     <fieldset class="pbox"><legend>Travellers (Each Gets Their Own Itinerary)</legend>
-      <div id="trav">${(t.travellers || []).map((p) => row(p, "t")).join("")}</div>
+      <div id="trav">${(t.travellers || []).map((p, k) => row(p, "t", k)).join("")}</div>
       <button type="button" class="btn tiny" data-addp="t">+ Add Traveller</button></fieldset>
     <fieldset class="pbox"><legend>Others Joining Sometimes (Optional)</legend>
       <div id="ext">${(t.extended || []).map((p) => row(p, "e")).join("")}</div>
       <button type="button" class="btn tiny" data-addp="e">+ Add Person</button></fieldset>
-    <p class="muted small">Initials are how people appear in the itinerary (e.g. CGC). Full names help the AI match names on bookings.</p>`,
+    <p class="muted small">Initials are how people appear in the itinerary (e.g. CGC). Full names help the AI match names on bookings. The colour is each traveller's dot in the Overview.</p>
+    <fieldset class="pbox"><legend>Colour Theme</legend><div class="themes">
+      ${THEMES.map(([k, n, cs]) => `<label class="themecard"><input type="radio" name="theme" value="${k}" ${(t.theme || "ink") === k ? "checked" : ""}><span class="tsw">${cs.map((c) => `<i style="background:${c}"></i>`).join("")}</span><b>${n}</b></label>`).join("")}</div></fieldset>`,
     async (fd, form) => {
       const read = (kind) => [...form.querySelectorAll(`.prow[data-kind="${kind}"]`)].map((r) => ({
-        code: r.querySelector(".pcode").value.trim().toUpperCase(), name: r.querySelector(".pname").value.trim(), fullName: r.querySelector(".pfull").value.trim() }))
-        .filter((p) => p.code).map((p) => (p.fullName ? p : { code: p.code, name: p.name }));
+        code: r.querySelector(".pcode").value.trim().toUpperCase(), name: r.querySelector(".pname").value.trim(), fullName: r.querySelector(".pfull").value.trim(), color: r.dataset.color || "" }))
+        .filter((p) => p.code).map(({ fullName, color, ...p }) => ({ ...p, ...(fullName ? { fullName } : {}), ...(color ? { color } : {}) }));
       const travellers = read("t"), extended = read("e");
       if (!travellers.length) throw new Error("Add at least one traveller");
       const codes = travellers.concat(extended).map((p) => p.code);
@@ -216,7 +223,7 @@ function tripForm(t) {
         const removed = (t.travellers || []).map((p) => p.code).filter((c) => !travellers.some((p) => p.code === c));
         if (removed.length && !confirm(`Remove ${removed.join(", ")} from the travellers? Their bookings stay but won't show in an itinerary.`)) throw new Error("Cancelled");
       }
-      const id = await data.saveTrip({ title: fd.get("title").trim(), start: fd.get("start"), end: fd.get("end"), travellers, extended }, isNew ? null : t.id);
+      const id = await data.saveTrip({ title: fd.get("title").trim(), start: fd.get("start"), end: fd.get("end"), travellers, extended, theme: fd.get("theme") || "ink" }, isNew ? null : t.id);
       if (isNew) { ui.person = travellers[0].code; localStorage.setItem("tp.person", ui.person); routeTo(id); }
     }, isNew ? null : async () => {
       const typed = prompt(`This deletes "${t.title}" with all its bookings, activities and documents for everyone. Type DELETE to confirm.`);
@@ -226,7 +233,10 @@ function tripForm(t) {
   const form = document.querySelector(".sheet");
   form.addEventListener("click", (e) => {
     const rm = e.target.closest("[data-rm]"); if (rm) rm.closest(".prow").remove();
-    const add = e.target.closest("[data-addp]"); if (add) form.querySelector(add.dataset.addp === "t" ? "#trav" : "#ext").insertAdjacentHTML("beforeend", row({}, add.dataset.addp));
+    const add = e.target.closest("[data-addp]"); if (add) form.querySelector(add.dataset.addp === "t" ? "#trav" : "#ext").insertAdjacentHTML("beforeend", row(add.dataset.addp === "t" ? { color: nextColor() } : {}, add.dataset.addp));
+    const sw = e.target.closest("[data-sw]");
+    if (sw) { const r = sw.closest(".prow"); r.dataset.color = sw.dataset.sw; r.style.setProperty("--pc", sw.dataset.sw);
+      r.querySelectorAll("[data-sw]").forEach((b) => { b.classList.toggle("on", b === sw); b.setAttribute("aria-checked", b === sw); }); }
   });
 }
 
@@ -243,6 +253,9 @@ const ICON = {
   dots: SV('<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>'),
   chat: SV('<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>'),
   chev: SV('<path d="M9 6l6 6-6 6"/>'),
+  grid: SV('<path d="M3 4h18v16H3zM3 10h18M3 15h18M9 4v16"/>'),
+  list: SV('<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
+  route: SV('<circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/>'),
 };
 const KIND = { flight: "flight", stay: "stay", car: "car", activity: "act", act: "act" };
 const shortDate = (s) => { const d = D(s); return `${d.getDate()} ${MON[d.getMonth()]}`; };
@@ -252,22 +265,46 @@ const cleanTime = (t) => String(t || "").replace(/\s*\(.*\)\s*$/, "").trim();
 const codesOf = (route) => String(route || "").split(/[-–>]+/).map((c) => c.trim()).filter(Boolean);
 const withText = (p, date) => { const w = PEOPLE().filter((o) => o !== p && together(p, o, date)).map(NAME); return w.length ? "With " + w.join(" & ") : ""; };
 
+// ---------------------------------------------------------------- traveller colours (picked in Trip Setup; none of them is used by a theme)
+const TCOLORS = [["Teal", "#14B8A6"], ["Coral", "#FF7A59"], ["Amber", "#F2A93B"], ["Emerald", "#22A06B"], ["Cyan", "#17B2D9"], ["Lime", "#8BBF2B"], ["Terracotta", "#C8553D"], ["Sand", "#C9A66B"]];
+const THEMES = [["ink", "Ink & Violet", ["#16141F", "#2F6FED", "#7A4BD6", "#5D6573", "#E0457B"]],
+  ["lavender", "Lavender & Pink", ["#4B2A8C", "#3D6BE0", "#C2367A", "#5D6573", "#7C4DDB"]],
+  ["midnight", "Midnight (dark)", ["#000000", "#6E9BFF", "#A47BFF", "#9AA3B2", "#FF5FA2"]]];
+function pcolor(code) {
+  const tr = store.trip?.travellers || []; const k = tr.findIndex((t) => t.code === code);
+  return (k >= 0 && tr[k].color) || TCOLORS[Math.max(0, k) % TCOLORS.length][1];
+}
+const inkOn = (hex) => { const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255; return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#16141F" : "#FFFFFF"; };
+function applyTheme() {
+  const th = (ui.tripId && store.trip?.theme) || "ink";
+  if (th === "ink") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = th;
+  const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = THEMES.find((t) => t[0] === th)?.[2][0] || "#16141F";
+}
+
+// ---------------------------------------------------------------- header: trip title, initials (traveller menu), view icons, + and ⋯
+const VIEWS = [["overview", "Overview", "grid"], ["timeline", "Timeline", "list"], ["journey", "Journey", "route"]];
 function header(opts = {}) {
   const t = store.trip || {}; const today = iso(new Date());
   const when = !t.start ? "" : t.start > today ? `In ${dayDiff(today, t.start)} days` : today <= t.end ? "On now" : "";
-  const sub = [NAME(ui.person), t.start ? `${shortDate(t.start)} – ${shortDate(t.end)}` : "", when].filter(Boolean).join(" · ");
+  const sub = [t.start ? `${shortDate(t.start)} – ${shortDate(t.end)}` : "", when].filter(Boolean).join(" · ");
+  const me = ui.person, mc = pcolor(me);
   return `<header class="hero">
     <div class="hero-top">
       <button class="iconbtn" data-home aria-label="All trips" title="All trips">${ICON.menu}</button>
       <div class="hero-title"><span class="hero-sub">${esc(sub)}</span><span class="hero-name">${esc(t.title || "Travel Planner")}</span></div>
+      <details class="more who"><summary class="pbtn" style="--pc:${mc};--pi:${inkOn(mc)}" aria-label="Traveller: ${esc(NAME(me))} - change" title="Change traveller">${esc(me)}</summary>
+        <div class="pop"><span class="pop-role">Show itinerary for</span>
+        ${PEOPLE().map((p) => `<button data-person="${p}" class="${p === me ? "on" : ""}"><span class="sw" style="background:${pcolor(p)};color:${inkOn(pcolor(p))}">${esc(p)}</span><span class="grow">${esc(NAME(p))}</span>${p === me ? "✓" : ""}</button>`).join("")}</div></details>
+    </div>
+    <div class="hero-bar">
+      ${opts.views ? `<nav class="vseg" aria-label="View">${VIEWS.map(([k, l, ic]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}" aria-label="${l}" title="${l}">${ICON[ic]}${ui.view === k ? `<span>${l}</span>` : ""}</button>`).join("")}</nav>` : `<span class="hero-hint">${esc(NAME(me))}'s day</span>`}
+      <span class="grow"></span>
       ${isEditor() ? `<button class="iconbtn" data-act="add" aria-label="Add booking" title="Add booking">${ICON.plus}</button>` : ""}
       <details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span>
         ${isEditor() ? `<button data-act="settings">Trip Setup</button><button data-act="import">Import Trip Data</button><button data-act="export">Download Backup</button>` : ""}
         <button data-act="signout">Sign Out</button></div></details>
     </div>
-    <nav class="seg people" aria-label="Traveller">${PEOPLE().map((p) => `<button class="${p === ui.person ? "on" : ""}" data-person="${p}">${esc(NAME(p))}</button>`).join("")}</nav>
-    ${opts.views ? `<nav class="seg views" aria-label="View">${[["timeline", "Timeline"], ["journey", "Journey"]].map(([k, l]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}">${l}</button>`).join("")}</nav>` : ""}
   </header>
   ${store.error ? `<div class="banner err">${esc(store.error)}</div>` : ""}`;
 }
@@ -276,7 +313,110 @@ function wireHeader() {
   root.querySelectorAll("[data-view]").forEach((b) => (b.onclick = () => { ui.view = b.dataset.view; try { localStorage.setItem("tp.view", ui.view); } catch (e) { /* ignore */ } sessionStorage.removeItem("tp.wscroll"); render(); }));
   root.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.(b)));
   root.querySelectorAll("[data-home]").forEach((b) => (b.onclick = () => routeTo(null)));
+  // close an open menu when tapping elsewhere
+  document.onclick = (e) => root.querySelectorAll("details.more[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
 }
+
+// ---------------------------------------------------------------- Overview (the spreadsheet, phone-sized)
+// Stays and cars use two half-columns: a booking starts in the right half of its first day, fills both halves in between
+// and ends in the left half of its last day, so hand-overs read like the spreadsheet. Each booking is one SVG shape.
+function areaOf(i) {
+  if (i.area) return i.area;
+  const parts = String(i.address || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const cand = parts.filter((x) => !/\d/.test(x) && !/^[A-Z]{2,3}$/.test(x) && !/^(USA|US|United States( of America)?|Mexico|México|Australia|Canada)$/i.test(x));
+  return parts.length > 1 && cand.length ? cand.at(-1) : "";
+}
+const placeCode = (x) => { const m = String(x || "").trim().match(/^([A-Z]{3})\b/); return m ? m[1] : String(x || "").replace(/\s*airport$/i, "").trim(); };
+const ROW_H = 34;
+function renderOverview() {
+  const p = ui.person, ds = days(), N = ds.length, today = iso(new Date());
+  const ix = (d) => dayDiff(store.trip.start, d);
+  const others = PEOPLE().filter((o) => o !== p);
+  const cells = [];
+  ds.forEach((d, k) => {
+    const wd = D(d).getDay(), wk = wd === 0 || wd === 6, first = k === 0 || D(d).getDate() === 1;
+    const dots = others.filter((o) => together(p, o, d)).map((o) => `<i style="background:${pcolor(o)}" title="With ${esc(NAME(o))}"></i>`).join("");
+    cells.push(`<div class="ov-bg${wk ? " wk" : k % 2 ? "" : " alt"}${d === today ? " today" : ""}" style="grid-row:${k + 1}"></div>
+      <button class="ov-day" data-day="${d}" style="grid-row:${k + 1}" aria-label="${WD[wd]} ${longDate(d)}"><span class="ov-dn"><b>${D(d).getDate()}</b><small class="${first ? "mon" : wk ? "wk" : ""}">${first ? MON[D(d).getMonth()].toUpperCase() : WD3(d)}</small></span><span class="ov-dots">${dots}</span></button>`);
+  });
+  const its = itemsFor(p).filter((i) => i.end >= store.trip.start && i.start <= store.trip.end).sort((a, b) => a.start.localeCompare(b.start));
+  // flights: one rounded block per flight in the Flight column
+  its.filter((i) => i.type === "flight").forEach((i) => {
+    const s = Math.max(0, ix(i.start)), e = Math.min(N - 1, ix(i.end)); const c = codesOf(i.route);
+    const lab = c.length ? `${c[0]}-${c.at(-1)}` : (i.number || "Flight");
+    cells.push(`<button class="ov-fl${i.status === "tbc" ? " tbc" : ""}" data-day="${i.start}" style="grid-row:${s + 1} / ${e + 2}" title="${esc(c.join(" → "))}"><b>${esc(lab)}</b></button>`);
+  });
+  // stays and cars: one shape per booking (overlapping ones: the first is drawn, the label says +n)
+  const shapes = [];
+  const lab = (col, r1, r2, cls, d, title, sub) => cells.push(`<button class="ov-lab ${cls}" data-day="${d}" style="grid-column:${col};grid-row:${r1} / ${r2}">${title ? `<b>${esc(title)}</b>` : ""}${sub ? `<small>${esc(sub)}</small>` : ""}</button>`);
+  [["stay", 3], ["car", 5]].forEach(([type, col]) => {
+    const groups = overlapGroups(its.filter((i) => i.type === type)).sort((a, b) => a[0].start.localeCompare(b[0].start));
+    groups.forEach((g, n) => {
+      const i = g[0], extra = g.length > 1 ? ` +${g.length - 1}` : "";
+      const s0 = ix(i.start), e0 = ix(i.end), cutTop = s0 < 0, cutBot = e0 > N - 1;
+      const s = Math.max(0, s0), e = Math.min(N - 1, e0);
+      shapes.push({ type, half: col === 3 ? 0 : 1, s, e, cutTop, cutBot, shade: n % 2, tbc: i.status === "tbc", day: i.start });
+      const name = (type === "stay" ? (i.short || i.name) : (i.company || "Car")) + extra;
+      const sub = type === "stay" ? areaOf(i) : (i.vehicle || "").replace(/\s*\(.*\)$/, "");
+      const inLab = type === "car" ? placeCode(i.pickup) : "", outLab = type === "car" ? placeCode(i.dropoff) : "";
+      const mid0 = cutTop ? s : s + 1, mid1 = cutBot ? e : e - 1, hasMid = mid1 >= mid0 && e > s;
+      const tbc = i.status === "tbc" ? " (TBC)" : "";
+      if (e === s) { lab(`${col} / span 2`, s + 1, s + 2, "", i.start, name + tbc, ""); return; }
+      if (!cutTop) lab(`${col + 1} / span 1`, s + 1, s + 2, "half", i.start, hasMid ? inLab : name + tbc, "");
+      if (hasMid) lab(`${col} / span 2`, mid0 + 1, mid1 + 2, "", addDays(i.start, cutTop ? 0 : 1), name + tbc, sub);
+      if (!cutBot) lab(`${col} / span 1`, e + 1, e + 2, "half", i.end, hasMid ? outLab : (type === "stay" ? sub : outLab), "");
+    });
+  });
+  const legend = others.length ? `<div class="ov-legend"><span class="muted">Traveling together with:</span>${others.map((o) => `<span><i style="background:${pcolor(o)}"></i>${esc(NAME(o))}</span>`).join("")}</div>` : "";
+  root.innerHTML = `${header({ views: true })}
+    <div class="ov"><div class="ov-card">
+      <div class="ov-head"><span class="l">DAY</span><span class="k-flight">FLIGHT</span><span class="k-stay" style="grid-column:3 / span 2">STAY</span><span class="k-car" style="grid-column:5 / span 2">CAR</span></div>
+      <div class="ov-grid" style="--n:${N}">${cells.join("")}<svg class="ov-svg" aria-hidden="true"></svg></div>
+      ${legend}</div></div>`;
+  ui.ovShapes = shapes; drawOverviewShapes();
+  wireHeader(); wireDays();
+  const back = sessionStorage.getItem("tp.wscroll");
+  if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
+}
+function drawOverviewShapes() {
+  const svg = root.querySelector(".ov-svg"); if (!svg || !ui.ovShapes) return;
+  const W = svg.getBoundingClientRect().width, H = ROW_H, GAP = 3, PAIR = (W - GAP) / 2, INSET = 2, R = 12, NECK = 10;
+  if (!W) return;
+  const rows = days().length; svg.setAttribute("viewBox", `0 0 ${W} ${rows * H}`);
+  const outline = (x0, s, e, cutTop, cutBot) => {
+    const xL = x0, xR = x0 + PAIR, xm = x0 + PAIR / 2, ys = s * H, ye = e * H;
+    if (e === s || (cutTop && cutBot)) return [[xL, ys], [xR, ys], [xR, ye + H], [xL, ye + H]];
+    if (e - s === 1 && !cutTop && !cutBot) { const yb = ys + H, n = NECK;
+      return [[xm, ys], [xR, ys], [xR, yb], [xm + n, yb], [xm, yb + n], [xm, yb + H], [xL, yb + H], [xL, yb], [xm - n, yb], [xm, yb - n]]; }
+    const pts = cutTop ? [[xL, ys], [xR, ys]] : [[xm, ys], [xR, ys]];
+    if (cutBot) pts.push([xR, ye + H], [xL, ye + H]); else pts.push([xR, ye], [xm, ye], [xm, ye + H], [xL, ye + H]);
+    if (!cutTop) pts.push([xL, ys + H], [xm, ys + H]);
+    return pts;
+  };
+  const unit = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; };
+  const pathOf = (pts) => {   // shrink by INSET (even gap between neighbours), then round every corner
+    const M = pts.length;
+    const ins = pts.map((v, i) => {
+      const a = unit(pts[(i - 1 + M) % M], v), b = unit(v, pts[(i + 1) % M]);
+      const na = [-a[1], a[0]], nb = [-b[1], b[0]], k = 1 + na[0] * nb[0] + na[1] * nb[1];
+      return [v[0] + INSET * (na[0] + nb[0]) / k, v[1] + INSET * (na[1] + nb[1]) / k];
+    });
+    return ins.map((v, i) => {
+      const p0 = ins[(i - 1 + M) % M], q = ins[(i + 1) % M];
+      const t = Math.min(R, Math.hypot(v[0] - p0[0], v[1] - p0[1]) / 2, Math.hypot(q[0] - v[0], q[1] - v[1]) / 2);
+      const a = unit(p0, v), b = unit(v, q);
+      return `${i ? "L" : "M"}${(v[0] - a[0] * t).toFixed(1)} ${(v[1] - a[1] * t).toFixed(1)}Q${v[0].toFixed(1)} ${v[1].toFixed(1)} ${(v[0] + b[0] * t).toFixed(1)} ${(v[1] + b[1] * t).toFixed(1)}`;
+    }).join("") + "Z";
+  };
+  svg.innerHTML = ui.ovShapes.map((x) => {
+    const fill = x.tbc ? "var(--card)" : `var(--${x.type}-t${x.shade ? "2" : ""})`;
+    const stroke = x.tbc ? `stroke:var(--${x.type});stroke-width:1.5;stroke-dasharray:4 3;` : "";
+    return `<path data-day="${x.day}" d="${pathOf(outline(x.half * (PAIR + GAP), x.s, x.e, x.cutTop, x.cutBot))}" style="fill:${fill};${stroke}"></path>`;
+  }).join("");
+  svg.querySelectorAll("[data-day]").forEach((el) => (el.onclick = () => openDay(el.dataset.day)));
+}
+window.addEventListener("resize", () => { if (ui.view === "overview" && !ui.day) drawOverviewShapes(); });
+
 const pillHtml = (s) => `<span class="pill k-${s.k}${s.tbc ? " tbc" : ""}"><span class="ic">${ICON[s.k]}</span><span class="pt"><b>${s.rich ? fmt(s.title) : esc(s.title)}</b>${s.sub ? `<small>${esc(s.sub)}</small>` : ""}</span>${s.tbc ? `<span class="tbctag">TBC</span>` : ""}</span>`;
 
 // ---------------------------------------------------------------- what happens on a day (for one traveller)
@@ -436,7 +576,8 @@ function renderDay() {
   const recs = ents.filter((e) => e.kind === "activity" && e.status === "recommended");
   const coms = ents.filter((e) => e.kind === "comment");
   // map pins: one colour per type (as everywhere in the app); recommended / not-yet-confirmed activities are outlined
-  const COLOR = { flight: "#1F5FBF", stay: "#B4530A", car: "#1E7A4E", act: "#6A3FB5" };
+  const cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const COLOR = { flight: cssv("--flight"), stay: cssv("--stay"), car: cssv("--car"), act: cssv("--act") };
   const pins = [];
   const apt = (c) => (/^[A-Z]{3}$/.test(c.trim()) ? c.trim() + " airport" : c.trim());
   its.forEach((i) => {
@@ -482,7 +623,7 @@ function renderDay() {
       <div><div class="wd">${WD[D(date).getDay()]}</div><div class="dt">${longDate(date)}</div></div>
       <button class="nav" data-go="1" ${idx === ds.length - 1 ? "disabled" : ""}>›</button>
     </div>
-    <button class="btn back" data-back>← ${ui.view === "journey" ? "Journey" : "Timeline"}</button>
+    <button class="btn back" data-back>← ${VIEWS.find((v) => v[0] === ui.view)?.[1] || "Overview"}</button>
     <div class="withrow"><span class="muted">With ${esc(NAME(p))} tonight:</span>
       ${others.map((o) => together(p, o, date) ? `<span class="pill yes">☑ <span class="t-init">${o}</span> ${esc(NAME(o))}</span>` : `<span class="pill no">☐ ${o}</span>`).join("")}</div>
 

@@ -549,3 +549,5 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .mpin:not(.hollow) span svg,.pdot:not(.hollow) svg{stroke-width:2.4}
 .idots{display:inline-flex;gap:5px;align-items:center}
 .tdot{width:11px;height:11px;border-radius:50%;background:var(--pc);box-shadow:0 0 0 1.5px var(--card)}
+.pchip.tp{background:var(--pc);color:#fff;border:2px solid var(--pc);border-radius:13px;padding:2px 10px;font-size:12px;font-weight:600;letter-spacing:.02em}
+.pchip.tp b{font-weight:800;color:#fff}

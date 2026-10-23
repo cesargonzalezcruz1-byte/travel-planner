@@ -1070,7 +1070,7 @@ async function fetchRecs(loc) {
     recState.error = "";
   } catch (e) {
     console.warn("recs", e);
-    recState.error = /not (been )?(used|enabled)|PERMISSION|403|ApiNotActivated|REQUEST_DENIED/i.test(String(e.message || e)) ? "Google Places isn't switched on for the Maps key yet." : "Couldn't get recommendations: " + (e.message || e);
+    recState.error = /not (been )?(used|enabled)|PERMISSION|403|ApiNotActivated|REQUEST_DENIED/i.test(String(e.message || e)) ? "Google Places isn't switched on for the Maps key yet. (Google said: " + String(e.message || e).slice(0, 160) + ")" : "Couldn't get recommendations: " + (e.message || e);
   } finally { recState.busy.delete(loc.key); if (ui.day) render(); }
 }
 let recQueue = Promise.resolve();

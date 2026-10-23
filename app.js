@@ -409,7 +409,8 @@ function renderBudget() {
         <div class="bd-acts"><button class="btn primary" data-add-exp>+ Add Expense</button><button class="btn" data-bsettings>Budget Settings</button></div>
       </section>
       <section><h3>By Category</h3><ul class="bc">${catRows || `<li class="muted">No costs yet.</li>`}</ul>
-        <p class="muted small">All amounts in ${cur}${Object.keys(S.rates).length ? ` · ${Object.entries(S.rates).map(([c, r]) => `1 ${c} = ${r} ${cur}`).join(" · ")}` : ""}</p></section>
+        <div class="bd-rates"><p class="muted small">All amounts in ${cur}${Object.keys(S.rates).length ? ` · ${Object.entries(S.rates).map(([c, r]) => `1 ${c} = ${r} ${cur}`).join(" · ")}` : ""}${store.priv._budget?.ratesDate ? ` · rates of ${longDate(store.priv._budget.ratesDate)}` : " · rates entered by hand"}</p>
+          <button class="btn small" data-rates>↻ Latest Rates</button></div></section>
       <section><h3>Spending</h3>${expHtml || `<p class="muted">Nothing logged yet. Use <b>+ Add Expense</b> for meals, tickets, fuel, shopping…</p>`}</section>
       <section><h3>Bookings</h3>${bkHtml || `<p class="muted">No bookings yet.</p>`}</section>
     </div>`;
@@ -421,6 +422,30 @@ function wireBudget() {
   root.querySelectorAll("[data-bk]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.bk))));
   root.querySelectorAll("[data-bact]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.bact))));
   root.querySelectorAll("[data-bsettings]").forEach((b) => (b.onclick = budgetForm));
+  root.querySelectorAll("[data-rates]").forEach((b) => (b.onclick = refreshRates));
+}
+// latest rates (European Central Bank daily reference rates via Frankfurter - free, no key); returns { USD: 1.52, ... } in home currency
+async function fetchRates(home, curs) {
+  const want = curs.filter((c) => c !== home); if (!want.length) return { rates: {}, date: "" };
+  const urls = [`https://api.frankfurter.dev/v1/latest?base=${home}&symbols=${want.join(",")}`, `https://api.frankfurter.app/latest?from=${home}&to=${want.join(",")}`];
+  let lastErr;
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, { cache: "no-store" }); if (!r.ok) throw new Error("HTTP " + r.status);
+      const j = await r.json(), rates = {};
+      for (const c of want) if (j.rates?.[c]) rates[c] = +(1 / j.rates[c]).toFixed(c === "MXN" ? 5 : 4);
+      return { rates, date: j.date || "" };
+    } catch (e) { lastErr = e; }
+  }
+  throw new Error("Couldn't get rates (" + (lastErr?.message || "offline?") + ")");
+}
+async function refreshRates() {
+  const S = budgetSettings(); toast("Getting latest rates…");
+  try {
+    const { rates, date } = await fetchRates(S.home, CURRENCIES);
+    await data.savePrivate("_budget", { ...(store.priv._budget || {}), home: S.home, rates: { ...S.rates, ...rates }, ratesDate: date });
+    toast(`Rates updated (${date || "today"})`);
+  } catch (e) { toast(e.message); }
 }
 const defaultExpenseDate = () => { const t = iso(new Date()), tr = store.trip; return tr && t >= tr.start && t <= tr.end ? t : tr?.start || t; };
 function expenseForm(x) {
@@ -445,15 +470,27 @@ function budgetForm() {
   modal(`<h3>Budget Settings</h3>
     <label>Home Currency<select name="home">${CURRENCIES.map((c) => `<option ${c === S.home ? "selected" : ""}>${c}</option>`).join("")}</select></label>
     <fieldset class="pbox"><legend>Exchange Rates (in home currency)</legend><div class="rates">${rateRows}</div>
-      <p class="muted small">Update these before relying on totals. Costs in other currencies are converted with them.</p></fieldset>
+      <div class="row wrap"><button type="button" class="btn small" data-fetch-rates>↻ Get Latest Rates</button><span class="muted small" data-rates-note>${store.priv._budget?.ratesDate ? `Last updated: ${longDate(store.priv._budget.ratesDate)}` : "Daily European Central Bank rates"}</span></div>
+      <p class="muted small">Costs in other currencies are converted with these. Banks and cards add their own fees.</p></fieldset>
     <label>Total Budget<input name="total" type="number" step="1" min="0" value="${S.total || ""}" placeholder="optional"></label>
     <fieldset class="pbox"><legend>Budget per Category (Optional)</legend><div class="rates">
       ${BCATS.map(([k, l]) => `<label>${l}<input name="cat.${k}" type="number" step="1" min="0" value="${S.cats[k] || ""}"></label>`).join("")}</div></fieldset>`,
     async (fd) => {
       const rates = {}, cats = {};
       for (const [k, v] of fd.entries()) { if (k.startsWith("rate.") && v) rates[k.slice(5)] = +v; if (k.startsWith("cat.") && v) cats[k.slice(4)] = +v; }
-      await data.savePrivate("_budget", { home: fd.get("home"), rates, total: +fd.get("total") || 0, cats });
+      const form = document.querySelector(".sheet");
+      await data.savePrivate("_budget", { home: fd.get("home"), rates, total: +fd.get("total") || 0, cats, ratesDate: form?.dataset.ratesDate || store.priv._budget?.ratesDate || "" });
     });
+  const form = document.querySelector(".sheet");
+  form.querySelector("[data-fetch-rates]").onclick = async (ev) => {
+    const btn = ev.currentTarget, note = form.querySelector("[data-rates-note]"), home = form.querySelector("[name=home]").value;
+    btn.disabled = true; note.textContent = "Getting rates…";
+    try {
+      const { rates, date } = await fetchRates(home, CURRENCIES);
+      CURRENCIES.forEach((c) => { const inp = form.querySelector(`[name="rate.${c}"]`); if (inp) inp.value = c === home ? "" : (rates[c] ?? inp.value); });
+      form.dataset.ratesDate = date; note.textContent = `Rates of ${date ? longDate(date) : "today"} - press Save to keep them`;
+    } catch (e) { note.textContent = e.message; } finally { btn.disabled = false; }
+  };
 }
 
 // ---------------------------------------------------------------- Overview (the spreadsheet, phone-sized)

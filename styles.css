@@ -471,3 +471,41 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .dd:not(:disabled):hover{background:var(--soft)}
 .dd i{width:14px;height:14px;border-radius:7px;border:2.5px solid var(--pc);box-sizing:border-box;background:transparent;transition:background .15s}
 .dd.on i{background:var(--pc)}
+
+/* ---------- journal (day view, editable by the family too) ---------- */
+.journal{--star:#F5A524}
+.jthread{padding:12px 0;border-bottom:1px solid var(--line)}
+.jthread:first-of-type{padding-top:4px}
+.jpost{display:flex;gap:10px;align-items:flex-start}
+.jpost.reply{margin:10px 0 0 22px;padding-left:12px;border-left:2px solid var(--line2)}
+.jpost.reply .javatar{width:26px;height:26px;font-size:10px}
+.javatar{flex:none;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;letter-spacing:.02em;background:var(--pc,var(--soft));color:var(--ink2)}
+.jn-body{flex:1;min-width:0}
+.jmeta{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}
+.jtext{margin:4px 0 0;line-height:1.45;overflow-wrap:anywhere}
+.jrated{margin-top:3px;display:flex;gap:6px;align-items:center;color:var(--ink2)}
+.stars{display:inline-flex;gap:1px;color:var(--line2);font-style:normal;letter-spacing:0}
+.stars i{font-style:normal}
+.stars i.on{color:var(--star)}
+.stars.sm{font-size:12px}
+.jn-acts{display:flex;gap:14px;margin-top:4px}
+.lnk{background:none;border:0;padding:4px 0;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
+.lnk:hover{color:var(--accent)} .lnk.danger:hover{color:#C62828}
+.jsummary{display:grid;gap:4px;margin:0 0 8px;padding:8px 12px;border-radius:14px;background:var(--soft);font-size:13px;color:var(--ink2)}
+.jsummary>div{display:flex;gap:8px;align-items:center;min-width:0}
+.jsn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jnew{margin-top:12px;padding:12px;border-radius:16px;background:var(--soft)}
+.jas{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.jas select{border:1px solid var(--line2);border-radius:10px;padding:5px 8px;background:var(--card);font-weight:600;font-size:13px}
+.jcomposer{flex:1;display:grid;gap:8px;min-width:0}
+.jcomposer textarea{width:100%;box-sizing:border-box;resize:vertical;padding:10px 12px;border:1.5px solid var(--line2);border-radius:14px;background:var(--card);line-height:1.4}
+.jcomposer textarea:focus,.jrate select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--soft)}
+.jrate{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.jrate select{flex:1 1 180px;min-width:0;border:1px solid var(--line2);border-radius:10px;padding:7px 8px;background:var(--card);font-size:13px}
+.starpick{display:inline-flex}
+.starpick button{background:none;border:0;padding:2px 3px;font-size:24px;line-height:1;color:var(--line2);cursor:pointer;min-width:32px;min-height:36px}
+.starpick button.on{color:var(--star)}
+.jfoot{display:flex;justify-content:flex-end;gap:8px}
+.jwarn{background:#FFF4E5;color:#7A4B00;border-radius:10px;padding:8px 10px}
+.rbadge{display:inline-flex;align-items:baseline;gap:2px;margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--soft);color:var(--ink2);font-size:12px;font-weight:700;white-space:nowrap}
+.rbadge small{font-weight:500;color:var(--muted)}

@@ -15,13 +15,13 @@ export const onChange = (fn) => { listeners.add(fn); return () => listeners.dele
 const uid = (p) => p + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const clean = (o) => JSON.parse(JSON.stringify(o));
 const now = () => new Date().toISOString();
-const clearTrip = () => Object.assign(store, { trip: null, items: [], entries: [], priv: {}, files: [] });
+const clearTrip = () => Object.assign(store, { trip: null, items: [], entries: [], priv: {}, files: [], journal: [], journalError: "" });
 
 // ---------------- demo store (local testing only)
 const demo = { trips: {} };   // id -> {trip, items, entries, priv, files}
 function demoLoad(id) {
   const t = demo.trips[id]; if (!t) { clearTrip(); return; }
-  Object.assign(store, { trip: t.trip, items: t.items, entries: t.entries, priv: store.role === "editor" ? t.priv : {}, files: store.role === "editor" ? t.files : [] });
+  Object.assign(store, { trip: t.trip, items: t.items, entries: t.entries, priv: store.role === "editor" ? t.priv : {}, files: store.role === "editor" ? t.files : [], journal: (t.journal = t.journal || []) });
 }
 const demoList = () => { store.trips = Object.entries(demo.trips).map(([id, t]) => ({ id, ...t.trip })); store.tripsLoaded = true; };
 
@@ -88,6 +88,9 @@ function subscribeTrip(id) {
   tripUnsubs.push(fsM.onSnapshot(fsM.doc(fb.db, "trips", id), (s) => { store.trip = s.exists() ? s.data() : null; emit(); }, onErr));
   tripUnsubs.push(fsM.onSnapshot(col("items"), (s) => { store.items = s.docs.map((d) => ({ id: d.id, ...d.data() })); emit(); }, onErr));
   tripUnsubs.push(fsM.onSnapshot(col("entries"), (s) => { store.entries = s.docs.map((d) => ({ id: d.id, ...d.data() })); emit(); }, onErr));
+  // journal: the one place the family can write too (needs the journal rule in firestore.rules)
+  tripUnsubs.push(fsM.onSnapshot(col("journal"), (s) => { store.journal = s.docs.map((d) => ({ id: d.id, ...d.data() })); store.journalError = ""; emit(); },
+    (e) => { console.warn("journal", e); store.journalError = e.code === "permission-denied" ? "The journal isn't switched on yet (Firestore rules need the journal section)." : e.message; emit(); }));
   if (store.role === "editor") {
     tripUnsubs.push(fsM.onSnapshot(col("private"), (s) => { store.priv = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); emit(); }, onErr));
     tripUnsubs.push(fsM.onSnapshot(col("files"), (s) => { store.files = s.docs.map((d) => ({ id: d.id, ...d.data() })); emit(); }, onErr));
@@ -116,7 +119,7 @@ export async function saveTrip(meta, id = null) {
 export async function deleteTrip(id) {
   if (DEMO) { delete demo.trips[id]; demoList(); if (store.tripId === id) openTrip(null); emit(); return; }
   const { fsM } = fb;
-  for (const name of ["items", "entries", "private", "files"]) {
+  for (const name of ["items", "entries", "private", "files", "journal"]) {
     const snap = await fsM.getDocs(fsM.collection(fb.db, "trips", id, name));
     for (const d of snap.docs) {
       if (name === "files" && d.data().path) { try { await fb.stM.deleteObject(fb.stM.ref(fb.storage, d.data().path)); } catch (e) { /* gone */ } }
@@ -136,6 +139,19 @@ export async function saveItem(item, priv) {
   await fb.fsM.setDoc(fb.fsM.doc(col("items"), id), data);
   if (priv) await fb.fsM.setDoc(fb.fsM.doc(col("private"), id), clean(priv));
   return id;
+}
+// ------------------------------------------------------------------ journal (editors and family)
+export async function saveJournal(post) {
+  const id = post.id || uid("j");
+  const data = clean({ ...post, id: undefined, by: post.by || (store.role === "editor" ? "editor" : "family"), updatedAt: now(), createdAt: post.createdAt || now() });
+  if (DEMO) { const j = mem().journal = mem().journal || []; const i = j.findIndex((x) => x.id === id); if (i >= 0) j[i] = { id, ...data }; else j.push({ id, ...data }); demoLoad(store.tripId); emit(); return id; }
+  await fb.fsM.setDoc(fb.fsM.doc(col("journal"), id), data);
+  return id;
+}
+export async function deleteJournal(id) {
+  if (DEMO) { const t = mem(); t.journal = (t.journal || []).filter((x) => x.id !== id && x.replyTo !== id); demoLoad(store.tripId); emit(); return; }
+  for (const r of store.journal.filter((x) => x.replyTo === id)) await fb.fsM.deleteDoc(fb.fsM.doc(col("journal"), r.id)).catch(() => {});
+  await fb.fsM.deleteDoc(fb.fsM.doc(col("journal"), id));
 }
 // Who travels together on a day: manual overrides on the trip (pair key "A|B", sorted, so it is the same for both people).
 // value true/false = override; null = back to automatic (worked out from shared bookings)
@@ -201,7 +217,7 @@ export async function deleteFile(f) {
 // ------------------------------------------------------------------ import / export
 function seedToMem(seed) {
   return { trip: { ...seed.trip }, items: seed.items.map((x) => ({ ...x })), entries: seed.entries.map((x) => ({ ...x })),
-           priv: Object.fromEntries((seed.privateItems || []).map(({ id, ...rest }) => [id, rest])), files: [] };
+           priv: Object.fromEntries((seed.privateItems || []).map(({ id, ...rest }) => [id, rest])), files: [], journal: (seed.journal || []).map((x) => ({ ...x })) };
 }
 // Imports a trip file. Into the open trip, or (no trip open) as the trip id in the file.
 export async function importSeed(seed) {
@@ -219,7 +235,7 @@ export async function importSeed(seed) {
   return id;
 }
 export function exportAll() {
-  return { version: 1, exportedAt: now(), trip: { id: store.tripId, ...store.trip }, items: store.items, entries: store.entries,
+  return { version: 1, exportedAt: now(), trip: { id: store.tripId, ...store.trip }, items: store.items, entries: store.entries, journal: store.journal,
            privateItems: Object.entries(store.priv).map(([id, v]) => ({ id, ...v })), files: store.files.map(({ demoUrl, ...f }) => f) };
 }
 // One-time update: give every activity a "confirmed" flag (only confirmed ones show in the grid)

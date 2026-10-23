@@ -12,6 +12,13 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email == 'family@travelplanner.app';
     }
 
+    function validPost() {
+      let d = request.resource.data;
+      return ((isEditor() && d.by == 'editor') || (isFamily() && d.by == 'family'))
+        && d.text is string && d.text.size() <= 4000 && d.date is string && d.author is string && d.author.size() <= 60
+        && (!('rating' in d) || (d.rating is int && d.rating >= 0 && d.rating <= 5));
+    }
+
     match /trips/{tripId} {
       allow read: if isEditor() || isFamily();
       allow write: if isEditor();
@@ -19,6 +26,14 @@ service cloud.firestore {
       // Itinerary the family can see: bookings (no confirmation numbers) and day activities/comments
       match /items/{id}   { allow read: if isEditor() || isFamily(); allow write: if isEditor(); }
       match /entries/{id} { allow read: if isEditor() || isFamily(); allow write: if isEditor(); }
+
+      // Journal: everyone can read and post; the family can only change or delete family posts
+      match /journal/{id} {
+        allow read: if isEditor() || isFamily();
+        allow create: if validPost();
+        allow update: if isEditor() || (isFamily() && resource.data.by == 'family' && validPost());
+        allow delete: if isEditor() || (isFamily() && resource.data.by == 'family');
+      }
 
       // Editors only: confirmation numbers, costs, tickets, and the list of uploaded documents
       match /private/{id} { allow read, write: if isEditor(); }

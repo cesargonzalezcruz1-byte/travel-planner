@@ -822,7 +822,7 @@ function renderJourney() {
   // every confirmed activity of a day (multi-day ones included)
   const actsOn = (date) => entriesFor(p, date).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed).map((e) => e.text);
   const dayChip = (d) => { const a = actsOn(d);
-    return `<button class="jday${d === today ? " today" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jacts">${a.map((t) => `<span class="ja"><span class="jdot"></span>${fmt(t)}</span>`).join("")}</span>` : ""}</button>`; };
+    return `<button class="jday${d === today ? " today" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jn-acts">${a.map((t) => `<span class="ja"><span class="jdot"></span>${fmt(t)}</span>`).join("")}</span>` : ""}</button>`; };
   const chips = (ds) => { let out = "", run = [];
     const flush = () => { if (run.length) out += `<div class="jempties">${run.map(dayChip).join("")}</div>`; run = []; };
     ds.forEach((d) => { if (actsOn(d).length) { flush(); out += dayChip(d); } else run.push(d); }); flush(); return out; };
@@ -837,7 +837,7 @@ function renderJourney() {
       for (let d = i.start; d < i.end; d = addDays(d, 1)) if (d >= store.trip.start && d <= store.trip.end) inner.push(d);
       return `<li class="jrow station${i.status === "tbc" ? " tbc" : ""}">
         <span class="jnode k-stay">${ICON.stay}</span>
-        <div class="jbody">
+        <div class="jn-body">
           <button class="jcard${i.start <= today && today < i.end ? " today" : ""}" data-day="${i.start}"><b>${esc(i.name)}${i.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>
             <small>${shortDate(i.start)} – ${shortDate(i.end)} · ${N} night${N === 1 ? "" : "s"}${i.address ? " · " + esc(i.address) : ""}</small></button>
           ${inner.length ? `<div class="jdays">${chips(inner)}</div>` : ""}
@@ -849,14 +849,14 @@ function renderJourney() {
       : [i.vehicle && i.vehicle.replace(/\s*\(.*\)$/, ""), `until ${shortDate(i.end)}`, i.dropoff && i.dropoff !== i.pickup ? "return " + i.dropoff : ""].filter(Boolean).join(" · ");
     return `<li class="jrow leg">
       <span class="jnode k-${k}">${ICON[k]}</span>
-      <div class="jbody"><button class="jleg k-${k}${i.status === "tbc" ? " tbc" : ""}${i.start === today ? " today" : ""}" data-day="${i.start}">
+      <div class="jn-body"><button class="jleg k-${k}${i.status === "tbc" ? " tbc" : ""}${i.start === today ? " today" : ""}" data-day="${i.start}">
         <span class="jl-top"><b>${esc(title)}</b><span class="jl-date">${WD3(i.start)} ${D(i.start).getDate()}</span></span>
         <small>${esc(sub)}</small></button>${extra[i.id] ? `<div class="jdays">${chips(extra[i.id])}</div>` : ""}</div></li>`;
   }).join("");
   const t = store.trip;
   root.innerHTML = `${header({ views: true })}
     <ol class="journey">${stops || `<li class="jempty">No bookings yet${isEditor() ? " - add one with +" : ""}.</li>`}
-      ${t ? `<li class="jrow station end"><span class="jnode k-home">${ICON.home}</span><div class="jbody"><div class="jcard plain"><b>End of Trip</b><small>${WD[D(t.end).getDay()]} ${longDate(t.end)}</small></div></div></li>` : ""}</ol>`;
+      ${t ? `<li class="jrow station end"><span class="jnode k-home">${ICON.home}</span><div class="jn-body"><div class="jcard plain"><b>End of Trip</b><small>${WD[D(t.end).getDay()]} ${longDate(t.end)}</small></div></div></li>` : ""}</ol>`;
   wireHeader(); wireDays();
   const back = sessionStorage.getItem("tp.wscroll"); if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
   else if (!ui.jScrolled) { const el = root.querySelector(".jday.today, .jleg.today, .jcard.today"); if (el) { ui.jScrolled = true; window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + scrollY - 200)); } }
@@ -956,7 +956,7 @@ function renderDay() {
       : (e.confirmed ? "✓ " : "○ ");
     const efiles = isEditor() ? store.files.filter((f) => f.entryId === e.id) : [];
     return `<li class="entry ${e.status} ${isAct ? (e.confirmed ? "is-conf" : "is-plan") : ""}">
-      <div class="etext">${mark}${fmt(e.text)}${isAct && !e.confirmed ? ` <span class="planned">planned</span>` : ""}
+      <div class="etext">${mark}${fmt(e.text)}${isAct && !e.confirmed ? ` <span class="planned">planned</span>` : ""}${ratingBadge(e.id)}
         ${(e.endDate && e.endDate !== e.date) ? `<span class="muted small"> (${fmtDate(e.date)} – ${fmtDate(e.endDate)})</span>` : ""}
         ${e.who.length < PEOPLE().length ? `<span class="whos">${e.who.map((w) => `<span class="t-init">${w}</span>`).join(" ")}</span>` : ""}</div>
       <div class="eacts">${e.place ? `<a class="maplink" target="_blank" rel="noopener" href="${maps(e.place)}">📍</a>` : ""}
@@ -999,10 +999,12 @@ function renderDay() {
     ${isEditor() ? `<section><h3>Documents</h3>
       ${dayFiles.length ? `<div class="files">${dayFiles.map((f) => `<div class="frow">${fileLink(f)}<button class="btn tiny" data-del-file="${f.id}">Remove</button></div>`).join("")}</div>` : `<p class="muted">No documents for this day.</p>`}
       <label class="btn small">Upload for This Day<input type="file" hidden data-attach-day="${date}" multiple></label></section>` : ""}
+    ${journalHtml(date)}
   </div>`;
   wireHeader();
   root.querySelector("[data-back]").onclick = () => routeTo(ui.tripId, null);
   if (isEditor()) wireBudget();
+  wireJournal(date);
   root.querySelectorAll("[data-with]").forEach((b) => (b.onclick = async () => {
     const o = b.dataset.with, next = !together(p, o, date), auto = autoTogether(p, o, date);
     try { await data.setTogether(date, p, o, next === auto ? null : next); toast(`${NAME(o)} ${next ? "with" : "not with"} ${NAME(p)} on ${shortDate(date)}`); }
@@ -1028,6 +1030,127 @@ function renderDay() {
   root.querySelectorAll("[data-del-file]").forEach((b) => (b.onclick = () => { const f = store.files.find((x) => x.id === b.dataset.delFile); if (confirm(`Remove ${f.name}?`)) data.deleteFile(f); }));
   root.querySelectorAll("[data-attach-item]").forEach((inp) => (inp.onchange = () => upload(inp.files, { itemId: inp.dataset.attachItem })));
   root.querySelectorAll("[data-attach-day]").forEach((inp) => (inp.onchange = () => upload(inp.files, { date: inp.dataset.attachDay })));
+}
+// ------------------------------------------------------------------ journal
+// The family can read and write here (and only here): comments, a discussion thread and activity ratings, per day.
+const DEVICE = (() => { try { let d = localStorage.getItem("tp.device"); if (!d) { d = Math.random().toString(36).slice(2, 10); localStorage.setItem("tp.device", d); } return d; } catch { return "nodevice"; } })();
+const jStore = (k, v) => { try { if (v === undefined) return localStorage.getItem(k) || ""; localStorage.setItem(k, v); } catch {} return ""; };
+const jui = { draft: {}, reply: null, edit: null, rate: {}, focus: null };
+const STARS = (n, cls = "") => `<span class="stars ${cls}" aria-label="${n} out of 5">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= n ? "on" : ""}">★</i>`).join("")}</span>`;
+function authors() {
+  const t = store.trip || {};
+  return (t.travellers || []).concat(t.extended || []).filter((x) => x.name || x.code).map((x) => ({ code: x.code, name: x.name || x.code }));
+}
+function myAuthor() {
+  const saved = jStore("tp.author");
+  if (saved) { const a = authors().find((x) => x.code === saved); return a || { code: "", name: saved }; }
+  if (isEditor() && store.email) { const local = store.email.split("@")[0].toLowerCase();
+    const a = authors().find((x) => x.name && local.includes(x.name.toLowerCase().slice(0, 3))); if (a) return a; }
+  return null;
+}
+const dayActivities = (date) => store.entries.filter((e) => e.kind === "activity" && e.status !== "recommended" && e.date <= date && date <= (e.endDate || e.date))
+  .filter((e, i, a) => a.findIndex((x) => x.text === e.text) === i);
+function ratingsFor(id) { return (store.journal || []).filter((j) => j.activityId === id && j.rating > 0 && !j.replyTo).map((j) => j.rating); }
+function ratingBadge(id) {
+  const r = ratingsFor(id); if (!r.length) return "";
+  const avg = r.reduce((a, b) => a + b, 0) / r.length;
+  return ` <span class="rbadge" title="${r.length} rating${r.length > 1 ? "s" : ""} in the journal">★ ${avg.toFixed(1).replace(/\.0$/, "")}<small>(${r.length})</small></span>`;
+}
+const canChange = (j) => isEditor() || (j.by === "family" && j.device === DEVICE);
+const when = (s) => { if (!s) return ""; const d = new Date(s); return d.toLocaleString("en-AU", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }); };
+function avatar(j) {
+  const c = j.authorCode && pcolor(j.authorCode);
+  const ini = (j.authorCode || (j.author || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 3)).toUpperCase();
+  return `<span class="javatar" style="${c ? `--pc:${c};color:${inkOn(c)}` : ""}">${esc(ini)}</span>`;
+}
+function composer(key, { placeholder, withRating, acts, value = "", rating = 0, actId = "", button = "Post" }) {
+  const draft = jui.draft[key] ?? value;
+  const r = jui.rate[key] ?? { rating, actId };
+  return `<form class="jcomposer" data-jform="${key}">
+    <textarea name="text" rows="${key === "new" ? 3 : 2}" maxlength="4000" placeholder="${placeholder}" data-jkey="${key}">${esc(draft)}</textarea>
+    ${withRating && acts.length ? `<div class="jrate"><select name="act" aria-label="Activity to rate"><option value="">Rate an activity (optional)…</option>${acts.map((a) => `<option value="${a.id}" ${a.id === r.actId ? "selected" : ""}>${esc(a.text.replace(/\s*\n[\s\S]*/, "").slice(0, 60))}</option>`).join("")}</select>
+      <span class="starpick" role="radiogroup" aria-label="Rating">${[1, 2, 3, 4, 5].map((i) => `<button type="button" class="${i <= r.rating ? "on" : ""}" data-star="${i}" aria-label="${i} star${i > 1 ? "s" : ""}">★</button>`).join("")}</span><input type="hidden" name="rating" value="${r.rating}"></div>` : ""}
+    <div class="jfoot">${key !== "new" ? `<button type="button" class="btn tiny" data-jcancel>Cancel</button>` : ""}<button class="btn small primary">${button}</button></div></form>`;
+}
+function journalHtml(date) {
+  const acts = dayActivities(date);
+  const posts = (store.journal || []).filter((j) => j.date === date);
+  const top = posts.filter((j) => !j.replyTo).sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+  const replies = (id) => posts.filter((j) => j.replyTo === id).sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+  const me = myAuthor();
+  const actName = (id) => { const a = store.entries.find((e) => e.id === id); return a ? a.text.replace(/\s*\n[\s\S]*/, "").slice(0, 60) : "an activity"; };
+  const post = (j, isReply) => jui.edit === j.id
+    ? `<div class="jpost${isReply ? " reply" : ""}">${composer("edit:" + j.id, { placeholder: "", withRating: !isReply, acts, value: j.text, rating: j.rating || 0, actId: j.activityId || "", button: "Save" })}</div>`
+    : `<div class="jpost${isReply ? " reply" : ""}">${avatar(j)}<div class="jn-body">
+      <div class="jmeta"><b>${esc(j.author || "Someone")}</b><span class="muted small">${when(j.createdAt)}${j.updatedAt && j.createdAt && j.updatedAt.slice(0, 16) !== j.createdAt.slice(0, 16) ? " · edited" : ""}</span></div>
+      ${j.activityId && j.rating ? `<div class="jrated">${STARS(j.rating)} <span class="small">${esc(actName(j.activityId))}</span></div>` : ""}
+      ${j.text ? `<p class="jtext">${esc(j.text).replace(/\n/g, "<br>")}</p>` : ""}
+      <div class="jn-acts">${!isReply ? `<button class="lnk" data-jreply="${j.id}">Reply</button>` : ""}${canChange(j) ? `<button class="lnk" data-jedit="${j.id}">Edit</button><button class="lnk danger" data-jdel="${j.id}">Delete</button>` : ""}</div></div></div>`;
+  const thread = (j) => `<div class="jthread">${post(j, false)}${replies(j.id).map((r) => post(r, true)).join("")}
+      ${jui.reply === j.id ? `<div class="jpost reply">${composer("reply:" + j.id, { placeholder: "Write a reply…", button: "Reply" })}</div>` : ""}</div>`;
+  const rated = acts.map((a) => ({ a, r: ratingsFor(a.id) })).filter((x) => x.r.length);
+  return `<section class="journal" id="journal"><h3>Journal</h3>
+    ${store.journalError ? `<p class="jwarn small">${esc(store.journalError)}</p>` : ""}
+    ${rated.length ? `<div class="jsummary">${rated.map(({ a, r }) => { const avg = r.reduce((x, y) => x + y, 0) / r.length;
+      return `<div>${STARS(Math.round(avg), "sm")}<b>${avg.toFixed(1).replace(/\.0$/, "")}</b><span class="jsn">${esc(a.text.replace(/\s*\n[\s\S]*/, ""))}</span><span class="muted">${r.length} rating${r.length > 1 ? "s" : ""}</span></div>`; }).join("")}</div>` : ""}
+    ${top.length ? top.map(thread).join("") : `<p class="muted">Nothing here yet. Share how the day went, a tip for the others, or rate what you did.</p>`}
+    <div class="jnew">
+      <div class="jas"><span class="muted small">Posting as</span>
+        <select data-jauthor aria-label="Posting as">${me ? "" : `<option value="">Choose…</option>`}${authors().map((a) => `<option value="${esc(a.code)}" ${me && me.code === a.code ? "selected" : ""}>${esc(a.name)}</option>`).join("")}
+          ${me && !me.code ? `<option value="name:${esc(me.name)}" selected>${esc(me.name)}</option>` : ""}<option value="other">Someone else…</option></select></div>
+      ${composer("new", { placeholder: "How was the day? Share a story, a tip or what you'd do again…", withRating: true, acts })}
+    </div></section>`;
+}
+function wireJournal(date) {
+  const sec = root.querySelector("#journal"); if (!sec) return;
+  const rerender = () => { const y = window.scrollY; render(); window.scrollTo(0, y); };
+  sec.querySelector("[data-jauthor]").onchange = (ev) => {
+    let v = ev.target.value;
+    if (v === "other") { const n = (prompt("Your name, as it should show in the journal:") || "").trim().slice(0, 60); if (!n) return rerender(); v = n; }
+    else if (v.startsWith("name:")) v = v.slice(5);
+    jStore("tp.author", v); rerender();
+  };
+  sec.querySelectorAll("textarea[data-jkey]").forEach((ta) => {
+    ta.oninput = () => (jui.draft[ta.dataset.jkey] = ta.value);
+    ta.onfocus = () => (jui.focus = ta.dataset.jkey);
+    ta.onblur = () => setTimeout(() => { if (jui.focus === ta.dataset.jkey && document.activeElement !== ta) jui.focus = null; }, 0);
+  });
+  // keep typing intact when someone else's post arrives and the screen redraws
+  if (jui.focus) { const ta = sec.querySelector(`textarea[data-jkey="${CSS.escape(jui.focus)}"]`); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } }
+  sec.querySelectorAll("form[data-jform]").forEach((f) => {
+    const key = f.dataset.jform, sel = f.querySelector("select[name=act]"), hid = f.querySelector("input[name=rating]");
+    const setR = () => (jui.rate[key] = { rating: +(hid?.value || 0), actId: sel?.value || "" });
+    if (sel) sel.onchange = () => { setR(); if (sel.value && !+hid.value) f.querySelector(".starpick button")?.focus(); };
+    f.querySelectorAll("[data-star]").forEach((b) => (b.onclick = () => {
+      const n = +b.dataset.star; hid.value = +hid.value === n ? 0 : n;
+      f.querySelectorAll("[data-star]").forEach((x) => x.classList.toggle("on", +x.dataset.star <= +hid.value)); setR();
+    }));
+    f.querySelector("[data-jcancel]")?.addEventListener("click", () => { delete jui.draft[key]; delete jui.rate[key]; jui.reply = jui.edit = null; jui.focus = null; rerender(); });
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const text = f.text.value.trim(), rating = +(hid?.value || 0), actId = sel?.value || "";
+      if (rating && !actId) return toast("Pick which activity you're rating");
+      if (actId && !rating) return toast("Tap the stars to rate it");
+      if (!text && !rating) return toast("Write something first");
+      const me = myAuthor();
+      if (!me) { toast("Choose who's posting first"); sec.querySelector("[data-jauthor]").focus(); return; }
+      const [mode, id] = key.split(":");
+      const old = mode === "edit" ? store.journal.find((j) => j.id === id) : null;
+      const post = old ? { ...old, text, ...(old.replyTo ? {} : { rating, activityId: actId }) }
+        : { date, text, author: me.name, authorCode: me.code || "", device: DEVICE, ...(mode === "reply" ? { replyTo: id } : { rating, activityId: actId }) };
+      if (!post.activityId) { delete post.activityId; delete post.rating; }
+      f.querySelector("button.primary").disabled = true;
+      try { await data.saveJournal(post); delete jui.draft[key]; delete jui.rate[key]; jui.reply = jui.edit = null; jui.focus = null; rerender(); toast(old ? "Saved" : "Posted"); }
+      catch (x) { f.querySelector("button.primary").disabled = false; toast(x.code === "permission-denied" ? "The journal needs the new Firestore rules published" : "Couldn't post: " + (x.code || x.message)); }
+    };
+  });
+  sec.querySelectorAll("[data-jreply]").forEach((b) => (b.onclick = () => { jui.reply = b.dataset.jreply; jui.edit = null; jui.focus = "reply:" + jui.reply; rerender(); }));
+  sec.querySelectorAll("[data-jedit]").forEach((b) => (b.onclick = () => { jui.edit = b.dataset.jedit; jui.reply = null; jui.focus = "edit:" + jui.edit; rerender(); }));
+  sec.querySelectorAll("[data-jdel]").forEach((b) => (b.onclick = async () => {
+    const j = store.journal.find((x) => x.id === b.dataset.jdel); const n = store.journal.filter((x) => x.replyTo === j.id).length;
+    if (!confirm(`Delete this journal entry${n ? ` and its ${n} repl${n > 1 ? "ies" : "y"}` : ""}?`)) return;
+    try { await data.deleteJournal(j.id); toast("Deleted"); } catch (x) { toast("Couldn't delete: " + (x.code || x.message)); }
+  }));
 }
 async function upload(files, where) {
   toast(`Uploading ${files.length} file(s)…`);

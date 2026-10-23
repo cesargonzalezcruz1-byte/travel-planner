@@ -967,12 +967,11 @@ function renderDay() {
   <div class="dayview">
     <div class="dayhead${date === iso(new Date()) ? " today" : ""}">
       <button class="nav" data-go="-1" ${idx === 0 ? "disabled" : ""}>‹</button>
-      <div><div class="wd">${date === iso(new Date()) ? "Today · " : ""}${WD[D(date).getDay()]}</div><div class="dt">${longDate(date)}</div></div>
+      <div><div class="wd">${date === iso(new Date()) ? "Today · " : ""}${WD[D(date).getDay()]}</div><div class="dt">${longDate(date)}</div>${(() => { const w = others.filter((o) => together(p, o, date));
+        return w.length ? `<div class="ddots" role="img" aria-label="With ${esc(w.map(NAME).join(" and "))} tonight">${w.map((o) => `<i style="background:${pcolor(o)}" title="${esc(NAME(o))}"></i>`).join("")}</div>` : ""; })()}</div>
       <button class="nav" data-go="1" ${idx === ds.length - 1 ? "disabled" : ""}>›</button>
     </div>
     
-    <div class="withrow"><span class="muted">With ${esc(NAME(p))} tonight:</span>
-      ${others.map((o) => together(p, o, date) ? `<span class="pill yes">☑ <span class="t-init">${o}</span> ${esc(NAME(o))}</span>` : `<span class="pill no">☐ ${o}</span>`).join("")}</div>
 
     <section><h3>Travel & Stays</h3>${its.length ? its.map((i) => itemCard(i, date)).join("") : `<p class="muted">No flights, hotels or cars today.</p>`}</section>
 

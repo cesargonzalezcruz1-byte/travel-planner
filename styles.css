@@ -465,3 +465,5 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .ja{display:flex;align-items:baseline;gap:6px;font-size:12.5px;font-weight:700;line-height:1.3}
 .ja .jdot{transform:translateY(-1px)}
 .jempties{display:flex;flex-wrap:wrap;gap:6px}
+.ddots{display:flex;justify-content:center;gap:4px;margin-top:4px}
+.ddots i{width:10px;height:10px;border-radius:5px}

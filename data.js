@@ -238,7 +238,8 @@ Dates as YYYY-MM-DD, times as 24h HH:MM. Fill only fields you can read in the do
       const res = await aiModel.generateContent(parts);
       return JSON.parse(res.response.text());
     } catch (e) {
-      lastErr = e; aiModel = null;
+      lastErr = e; aiModel = null; console.warn("AI model", AI_MODELS[i], "failed:", e.message);
+      if (i > 0) e.message = `[tried ${AI_MODELS.slice(0, i + 1).join(", ")}] ` + e.message;
       if (!/not.?found|404|unsupported|model/i.test(String(e.message || e))) break;   // only fall back on a model problem
     }
   }

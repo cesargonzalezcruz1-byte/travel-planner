@@ -384,7 +384,8 @@ function wireExtract(form, hint, onResult) {
       onResult(r || {});
       st.textContent = `✓ Filled from ${f.name} - please check, then Save (the file will be attached).`;
     } catch (x) {
-      st.textContent = `Couldn't read it automatically (${x.code || x.message}). Fill in by hand - ${f.name} will still be attached.`;
+      console.error(x); const why = String(x.message || x.code || x).replace(/^.*?googleapis\.com\S*:\s*/, "").slice(0, 400);
+      st.textContent = `Couldn't read it automatically: ${why} - fill in by hand; ${f.name} will still be attached.`;
     } finally { st.classList.remove("busy"); }
   };
 }

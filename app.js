@@ -1049,6 +1049,12 @@ function dayLocations(p, date) {
   const st = itemsFor(p).filter((i) => i.type === "stay" && i.start <= date && date <= i.end && stayArea(i));
   const night = st.find((i) => i.start <= date && date < i.end), left = st.find((i) => i.end === date && i !== night);
   const out = []; [night, left].filter(Boolean).forEach((s) => { const k = recKey(stayArea(s)); if (!out.some((o) => o.key === k)) out.push({ key: k, area: stayArea(s) }); });
+  if (!out.length) {   // travel day or no hotel booked yet: use the closest stay (this traveller's first, then anyone's)
+    const near = (list) => list.filter((i) => i.type === "stay" && stayArea(i)).sort((a, b) => dist(a) - dist(b))[0];
+    const dist = (i) => (date < i.start ? dayDiff(date, i.start) : date > i.end ? dayDiff(i.end, date) : 0);
+    const s = near(itemsFor(p)) || near(store.items);
+    if (s) out.push({ key: recKey(stayArea(s)), area: stayArea(s) });
+  }
   return out;
 }
 const recState = { busy: new Set(), tried: new Set(), error: "" };
@@ -1058,7 +1064,8 @@ const tidy = (list) => list.filter((x) => x.rating && x.count >= 15).sort((a, b)
 async function fetchRecs(loc) {
   recState.busy.add(loc.key); recState.tried.add(loc.key); if (ui.day) render();
   try {
-    const [todo, eat] = await Promise.all([searchPlaces(`top things to do in ${loc.area}`, loc.near), searchPlaces(`best restaurants in ${loc.area}`, loc.near)]);
+    const timeout = new Promise((_, bad) => setTimeout(() => bad(new Error("Google took too long to answer - try ↻ again")), 25000));
+    const [todo, eat] = await Promise.race([Promise.all([searchPlaces(`top things to do in ${loc.area}`, loc.near), searchPlaces(`best restaurants in ${loc.area}`, loc.near)]), timeout]);
     await data.saveRecs(loc.key, { v: REC_V, area: loc.area, fetchedAt: new Date().toISOString(), do: tidy(todo), eat: tidy(eat) });
     recState.error = "";
   } catch (e) {
@@ -1087,14 +1094,16 @@ function recsHtml(p, date, notesHtml) {
         <div class="rsub"><span class="rstar">★ ${x.rating.toFixed(1)}</span><span class="muted">(${x.count.toLocaleString("en-AU")})</span>${x.type ? `<span class="muted">· ${esc(x.type)}</span>` : ""}</div></div>
       ${isEditor() ? (added(x) ? `<span class="radded">✓ In plan</span>` : `<button class="btn tiny" data-rec-add="${esc(x.id)}">+ Plan</button>`) : ""}</li>`;
   const busy = loc && recState.busy.has(loc.key);
-  return `<section class="recs"><h3>Recommended${loc ? ` <span class="muted small">near ${esc(loc.area)}</span>` : ""}</h3>
+  const anyBusy = locs.some((l) => recState.busy.has(l.key));
+  return `<section class="recs"><h3 class="rhead"><span>Recommended${loc ? ` <span class="muted small">near ${esc(loc.area)}</span>` : ""}</span>
+      ${isEditor() && locs.length ? `<button class="iconbtn rrefresh${anyBusy ? " spin" : ""}" data-rec-refresh ${anyBusy ? "disabled" : ""} aria-label="Search Google again for things to do and places to eat" title="Search again for things to do and places to eat">↻</button>` : ""}</h3>
     ${locs.length > 1 ? `<div class="seg-mini rlocs">${locs.map((l) => `<button class="${l.key === ui.recLoc ? "on" : ""}" data-rec-loc="${l.key}">${esc(l.area)}</button>`).join("")}</div>` : ""}
     ${notesHtml ? `<p class="rlabel">From Our Notes</p><ul class="entries">${notesHtml}</ul>` : ""}
     ${loc ? `<div class="seg-mini rtabs"><button class="${tab === "do" ? "on" : ""}" data-rec-tab="do">Things to Do</button><button class="${tab === "eat" ? "on" : ""}" data-rec-tab="eat">Places to Eat</button></div>
       ${list.length ? `<ol class="reclist">${shown.map(row).join("")}</ol>
         ${list.length > 5 ? `<button class="lnk" data-rec-more>${ui.recMore ? "Show top 5" : `Show all ${list.length}`}</button>` : ""}`
       : `<p class="muted small">${busy ? "Finding the best-rated places…" : rec ? "Nothing found for this location." : isEditor() ? (recState.error || (mapsReady() ? "Looking these up…" : "Needs the Google Maps key.")) : "Recommendations will appear once Cesar or Debora opens the app."}</p>`}
-      <p class="rfoot muted small">${rec ? `Google ratings · updated ${shortDate(iso(new Date(rec.fetchedAt)))}` : ""}${isEditor() && rec ? ` · <button class="lnk" data-rec-refresh ${busy ? "disabled" : ""}>${busy ? "Updating…" : "Refresh"}</button>` : ""}</p>
+      <p class="rfoot muted small">${busy && rec ? "Updating… · " : ""}${rec ? `Google ratings · updated ${shortDate(iso(new Date(rec.fetchedAt)))}` : ""}</p>
       ${isEditor() && recState.error && rec ? `<p class="jwarn small">${esc(recState.error)}</p>` : ""}` : ""}
   </section>`;
 }
@@ -1104,7 +1113,13 @@ function wireRecs(p, date, others) {
   sec.querySelectorAll("[data-rec-loc]").forEach((b) => (b.onclick = () => { ui.recLoc = b.dataset.recLoc; ui.recMore = false; keep(); }));
   sec.querySelectorAll("[data-rec-tab]").forEach((b) => (b.onclick = () => { ui.recTab = b.dataset.recTab; ui.recMore = false; keep(); }));
   sec.querySelector("[data-rec-more]")?.addEventListener("click", () => { ui.recMore = !ui.recMore; keep(); });
-  sec.querySelector("[data-rec-refresh]")?.addEventListener("click", () => { const l = recLocations().find((x) => x.key === ui.recLoc); if (l) { recState.error = ""; recQueue = recQueue.then(() => fetchRecs(l)); } });
+  sec.querySelector("[data-rec-refresh]")?.addEventListener("click", () => {
+    if (!mapsReady()) return toast("Needs the Google Maps key");
+    recState.error = ""; recState.tried.clear();
+    const keys = dayLocations(p, date).map((l) => l.key), all = recLocations();
+    all.filter((l) => keys.includes(l.key) && !recState.busy.has(l.key)).forEach((l) => { recState.busy.add(l.key); recQueue = recQueue.then(() => fetchRecs(l)); });
+    toast("Searching Google…"); keep(); setTimeout(ensureRecs, 0);   // also picks up any other new locations
+  });
   sec.querySelectorAll("[data-rec-add]").forEach((b) => (b.onclick = async () => {
     const rec = store.trip.recs?.[ui.recLoc], x = rec && (rec[ui.recTab || "do"] || []).find((r) => r.id === b.dataset.recAdd); if (!x) return;
     b.disabled = true;

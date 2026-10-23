@@ -528,3 +528,8 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .rfoot{margin:8px 0 0}
 .rfoot .lnk{font-size:inherit;padding:0}
 .modal .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.rrefresh{width:34px;height:34px;font-size:18px;line-height:1;border:1px solid var(--line2);background:var(--card);color:var(--ink2);border-radius:50%;display:grid;place-items:center;cursor:pointer}
+.rrefresh:disabled{opacity:.6}
+.rrefresh.spin{animation:rspin 1s linear infinite}
+@keyframes rspin{to{transform:rotate(360deg)}}

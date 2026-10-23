@@ -137,6 +137,15 @@ export async function saveItem(item, priv) {
   if (priv) await fb.fsM.setDoc(fb.fsM.doc(col("private"), id), clean(priv));
   return id;
 }
+// Who travels together on a day: manual overrides on the trip (pair key "A|B", sorted, so it is the same for both people).
+// value true/false = override; null = back to automatic (worked out from shared bookings)
+export async function setTogether(date, a, b, value) {
+  const key = [a, b].sort().join("|");
+  if (DEMO) { const t = mem().trip; t.together = t.together || {}; t.together[date] = { ...(t.together[date] || {}) };
+    if (value === null) delete t.together[date][key]; else t.together[date][key] = value; demoList(); demoLoad(store.tripId); emit(); return; }
+  const { fsM } = fb;
+  await fsM.setDoc(fsM.doc(fb.db, "trips", store.tripId), { together: { [date]: { [key]: value === null ? fsM.deleteField() : value } } }, { merge: true });
+}
 // Editors-only records kept in the "private" collection: activity costs, expenses (id x-...), budget settings (id _budget)
 export async function savePrivate(id, obj) {
   id = id || uid("x");

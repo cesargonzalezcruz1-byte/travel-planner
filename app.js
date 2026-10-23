@@ -86,7 +86,9 @@ function nightKey(p, date) {
   if (store.trip && date === store.trip.end) return "home";
   return null;
 }
-const together = (a, b, date) => { const ka = nightKey(a, date); return ka !== null && ka === nightKey(b, date); };
+const autoTogether = (a, b, date) => { const ka = nightKey(a, date); return ka !== null && ka === nightKey(b, date); };
+// a manual choice on the day screen (stored on the trip, shared by both people) wins over the automatic answer
+const together = (a, b, date) => { const o = store.trip?.together?.[date]?.[[a, b].sort().join("|")]; return typeof o === "boolean" ? o : autoTogether(a, b, date); };
 
 // ---- item texts (as in the spreadsheet)
 function texts(i) {
@@ -967,8 +969,8 @@ function renderDay() {
   <div class="dayview">
     <div class="dayhead${date === iso(new Date()) ? " today" : ""}">
       <button class="nav" data-go="-1" ${idx === 0 ? "disabled" : ""}>‹</button>
-      <div><div class="wd">${date === iso(new Date()) ? "Today · " : ""}${WD[D(date).getDay()]}</div><div class="dt">${longDate(date)}</div>${(() => { const w = others.filter((o) => together(p, o, date));
-        return w.length ? `<div class="ddots" role="img" aria-label="With ${esc(w.map(NAME).join(" and "))} tonight">${w.map((o) => `<i style="background:${pcolor(o)}" title="${esc(NAME(o))}"></i>`).join("")}</div>` : ""; })()}</div>
+      <div><div class="wd">${date === iso(new Date()) ? "Today · " : ""}${WD[D(date).getDay()]}</div><div class="dt">${longDate(date)}</div>${others.length ? `<div class="ddots" role="group" aria-label="Travelling with">${others.map((o) => { const on = together(p, o, date);
+        return `<button class="dd${on ? " on" : ""}" style="--pc:${pcolor(o)}" ${isEditor() ? `data-with="${o}"` : "disabled"} aria-pressed="${on}" aria-label="${esc(NAME(o))}: ${on ? "travelling with " + esc(NAME(p)) : "not with " + esc(NAME(p))}" title="${esc(NAME(o))}${on ? " - together" : " - apart"}${isEditor() ? " (tap to change)" : ""}"><i></i></button>`; }).join("")}</div>` : ""}</div>
       <button class="nav" data-go="1" ${idx === ds.length - 1 ? "disabled" : ""}>›</button>
     </div>
     
@@ -1001,6 +1003,11 @@ function renderDay() {
   wireHeader();
   root.querySelector("[data-back]").onclick = () => routeTo(ui.tripId, null);
   if (isEditor()) wireBudget();
+  root.querySelectorAll("[data-with]").forEach((b) => (b.onclick = async () => {
+    const o = b.dataset.with, next = !together(p, o, date), auto = autoTogether(p, o, date);
+    try { await data.setTogether(date, p, o, next === auto ? null : next); toast(`${NAME(o)} ${next ? "with" : "not with"} ${NAME(p)} on ${shortDate(date)}`); }
+    catch (x) { toast("Couldn't save: " + (x.code || x.message)); }
+  }));
   const mapBox = root.querySelector("#daymap");
   if (mapBox) drawDayMap(mapBox, pins, root.querySelector(".daymap-msg")).catch((x) => { mapBox.hidden = true; const m = root.querySelector(".daymap-msg"); if (m) m.textContent = "Map unavailable: " + x.message; });
   root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => { ui.slide = +b.dataset.go > 0 ? "from-right" : "from-left"; routeTo(ui.tripId, ds[idx + +b.dataset.go], true); }));

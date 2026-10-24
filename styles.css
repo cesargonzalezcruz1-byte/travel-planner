@@ -551,3 +551,13 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .tdot{width:11px;height:11px;border-radius:50%;background:var(--pc);box-shadow:0 0 0 1.5px var(--card)}
 .pchip.tp{background:var(--pc);color:#fff;border:2px solid var(--pc);border-radius:13px;padding:2px 10px;font-size:12px;font-weight:600;letter-spacing:.02em}
 .pchip.tp b{font-weight:800;color:#fff}
+
+/* ---------- bulk attach ---------- */
+.blist{display:grid;gap:8px}
+.brow{display:grid;gap:6px;padding:10px 12px;border-radius:14px;border:1.5px solid var(--line2);border-left-width:5px}
+.brow.ok{border-left-color:var(--ok)} .brow.none{border-left-color:#D9A13B} .brow.dup{opacity:.6;border-left-color:var(--line2)}
+.bname{display:flex;gap:6px;align-items:center;font-weight:700;font-size:13.5px;min-width:0}
+.bname span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brow select{width:100%;min-width:0;padding:8px 10px;border:1px solid var(--line2);border-radius:10px;background:var(--card);font-size:13px}
+.bwhy{color:var(--muted)} .brow.none .bwhy{color:#9A6510}
+.sheet .bpick label.btn{display:inline-flex;flex-direction:row;align-items:center;gap:6px}

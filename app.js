@@ -335,7 +335,7 @@ function header(opts = {}) {
       ${isEditor() ? `<button class="iconbtn" data-act="add" aria-label="Add booking" title="Add booking">${ICON.plus}</button>` : ""}
       <details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span>
-        ${isEditor() ? `<button data-act="settings">Trip Setup</button><button data-act="import">Import Trip Data</button><button data-act="export">Download Backup</button>` : ""}
+        ${isEditor() ? `<button data-act="settings">Trip Setup</button><button data-act="import">Import Trip Data</button><button data-act="export">Download Backup</button><button data-act="bulk">Attach Documents…</button>` : ""}
         <button data-act="album">Export Album (Word)</button>
         <button data-act="signout">Sign Out</button></div></details>
     </div>
@@ -1057,6 +1057,135 @@ function renderDay() {
   root.querySelectorAll("[data-attach-item]").forEach((inp) => (inp.onchange = () => upload(inp.files, { itemId: inp.dataset.attachItem })));
   root.querySelectorAll("[data-attach-day]").forEach((inp) => (inp.onchange = () => upload(inp.files, { date: inp.dataset.attachDay })));
 }
+// ------------------------------------------------------------------ bulk attach (editors)
+// Pick many files (or a whole folder); each is matched to a booking by its confirmation number, flight number, names and dates -
+// first from the file name, then (PDFs and photos) by reading it with AI. Everything can be checked and changed before uploading.
+const bnorm = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
+const bwords = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !/^(hotel|resort|airport|terminal|booking|confirmation|reservation|rental|flight|international|the|and|with|from|nights?)$/.test(w));
+function bulkTargets() {
+  const its = store.items.map((i) => ({ kind: "item", id: i.id, type: i.type, start: i.start, end: i.end, rec: i, conf: bnorm(store.priv[i.id]?.confirmation),
+    label: i.type === "flight" ? `Flight · ${shortDate(i.start)} · ${i.route || ""} ${i.number || ""}` : i.type === "stay" ? `Stay · ${shortDate(i.start)}–${shortDate(i.end)} · ${i.short || i.name || ""}` : `Car · ${shortDate(i.start)}–${shortDate(i.end)} · ${i.company || ""}`,
+    names: i.type === "flight" ? [i.number, i.airline] : i.type === "stay" ? [i.name, i.short, areaOf(i)] : [i.company, i.vehicle] }));
+  const acts = store.entries.filter((e) => e.kind === "activity" && e.status !== "recommended").map((e) => ({ kind: "entry", id: e.id, type: "activity", start: e.date, end: e.endDate || e.date, rec: e,
+    conf: bnorm(store.priv[e.id]?.confirmation), label: `Activity · ${shortDate(e.date)} · ${firstText(e.text)}`, names: [e.text, e.place] }));
+  return its.concat(acts).sort((a, b) => a.start.localeCompare(b.start) || a.label.localeCompare(b.label));
+}
+const firstText = (t) => String(t || "").split("\n")[0].slice(0, 48);
+// day + month in a file name ("25-Dec", "Dic28", "8-Jan-27", "Enero1", "08JAN"), English or Spanish, mapped onto the trip's years
+const BMON = { jan: 0, ene: 0, enero: 0, feb: 1, mar: 2, apr: 3, abr: 3, may: 4, jun: 5, jul: 6, aug: 7, ago: 7, sep: 8, oct: 9, nov: 10, dec: 11, dic: 11 };
+function fileDates(name) {
+  const out = [], t = store.trip || {}, y0 = +(t.start || "2000").slice(0, 4), re = /(\d{1,2})\s*[-_ ]?\s*(enero|jan|ene|feb|mar|apr|abr|may|jun|jul|aug|ago|sep|oct|nov|dec|dic)[a-z]*|(enero|jan|ene|feb|mar|apr|abr|may|jun|jul|aug|ago|sep|oct|nov|dec|dic)[a-z]*\s*[-_ ]?\s*(\d{1,2})(?!\d)/gi;
+  const nm = String(name).replace(/(\d{1,2})\s*-\s*(\d{1,2})\s*([a-z]{3,5})/gi, "$1$3 $2$3").replace(/([a-z]{3,5})\s*(\d{1,2})\s*-\s*(\d{1,2})(?!\d)/gi, "$1$2 $1$3");
+  for (const m of nm.matchAll(re)) {
+    const d = +(m[1] || m[4]), mo = BMON[(m[2] || m[3]).toLowerCase()]; if (!(d >= 1 && d <= 31)) continue;
+    for (const y of [y0, y0 + 1]) { const iso2 = `${y}-${String(mo + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`; if (iso2 >= t.start && iso2 <= t.end) { out.push(iso2); break; } }
+  }
+  return out;
+}
+// what kind of document the name suggests (English and Spanish)
+function typeHint(name) {
+  const n = String(name).toLowerCase();
+  if (/hotel|airbnb|\bstay|hospedaje|hostal|\binn\b|resort/.test(n)) return "stay";
+  if (/car ?rental|carrental|rent ?a ?car|alamo|hertz|avis|budget|enterprise|sixt|\bsuv\b|coche|auto/.test(n)) return "car";
+  if (/vuelo|flight|e-?ticket|airlines?|avion|boarding|itinerary receipt/.test(n)) return "flight";
+  if (/comida|cena|desayuno|dinner|lunch|breakfast|ticket|tour|entrada|park/.test(n)) return "activity";
+  return "";
+}
+function scoreName(t, fileName, folder = "") {
+  const f = bnorm(fileName); let sc = 0; const why = [];
+  const hint = typeHint(fileName) || typeHint(folder); if (hint) sc += hint === t.type ? 15 : -40;
+  if (t.type === "car") { const toks = new Set(String(fileName).toUpperCase().split(/[^A-Z]+/)); const codes = [t.rec.pickup, t.rec.dropoff].map((x) => String(x || "").trim().toUpperCase()).filter((x) => /^[A-Z]{3}$/.test(x));
+    if (codes.some((c) => toks.has(c))) { sc += 20; why.push(codes.find((c) => toks.has(c))); } }
+  if (t.conf && t.conf.length >= 4 && f.includes(t.conf)) return [100, "confirmation number in the file name"];
+  if (t.type === "flight" && t.rec.number && f.includes(bnorm(t.rec.number))) { sc += 60; why.push("flight " + t.rec.number); }
+  if (t.type === "flight" && t.rec.route) { const legs = String(t.rec.route).split("-"); if (legs.length > 1 && (f.includes(bnorm(legs[0] + legs[1])) || f.includes(bnorm(legs[0] + legs.at(-1))))) { sc += 30; why.push(legs.slice(0, 2).join("-")); } else if (f.includes(bnorm(legs.at(-2) + legs.at(-1)))) { sc += 30; why.push(legs.slice(-2).join("-")); } }
+  const hits = [...new Set(t.names.flatMap(bwords))].filter((w) => f.includes(w));
+  if (hits.length) { sc += Math.min(60, hits.length * 30); why.push(`"${hits[0]}"`); }
+  const ds = fileDates(fileName);
+  if (ds.length) {
+    if (ds[0] === t.start) { sc += 30; why.push("date"); } else if (t.start <= ds[0] && ds[0] <= t.end && t.type !== "flight") sc += 10;
+    else sc -= 20;
+    if (ds[1] && ds[1] === t.end) sc += 15;
+  }
+  return [sc, why.length ? why.join(", ") + " in the file name" : ""];
+}
+function scoreAI(t, x) {
+  if (!x) return [0, ""];
+  const conf = bnorm(x.private?.confirmation);
+  if (conf && t.conf && (conf === t.conf || (conf.length >= 5 && (t.conf.includes(conf) || conf.includes(t.conf))))) return [100, "same confirmation number"];
+  let sc = 0; const why = [];
+  const xt = x.type === "activity" ? "activity" : x.type;
+  if (xt && xt !== t.type) sc -= 40;
+  if (x.start && x.start === t.start) { sc += 30; why.push("same dates"); } else if (x.start && t.start <= x.start && x.start <= t.end) sc += 15;
+  if (x.end && x.end === t.end && t.type !== "activity") sc += 15;
+  if (t.type === "flight" && x.number && bnorm(x.number) === bnorm(t.rec.number)) { sc += 50; why.push("flight " + t.rec.number); }
+  if (t.type === "flight" && x.route && bnorm(x.route) === bnorm(t.rec.route)) sc += 20;
+  const xw = new Set(bwords([x.name, x.short, x.company, x.text, x.place, x.airline].join(" "))), hits = t.names.flatMap(bwords).filter((w) => xw.has(w));
+  if (hits.length) { sc += Math.min(40, hits.length * 20); why.push("name matches"); }
+  return [sc, why.join(", ")];
+}
+function bulkAttach() {
+  const targets = bulkTargets();
+  const opts = (sel) => `<option value="">Don't attach</option>` + targets.map((t) => `<option value="${t.kind}:${t.id}" ${sel === t.kind + ":" + t.id ? "selected" : ""}>${esc(t.label)}</option>`).join("");
+  let rows = [];   // { file, target, why, state }
+  modal(`<h2>Attach Documents</h2>
+    <p class="muted small">Choose the confirmations, tickets and vouchers (or a whole folder). Each is matched to its booking - check the matches, change any that are wrong, then upload.</p>
+    <div class="row bpick"><label class="btn small"><i class="ic16">${I.file}</i>Choose Files<input type="file" hidden multiple data-bfiles></label>
+      <label class="btn small"><i class="ic16">${I.clip}</i>Choose Folder<input type="file" hidden webkitdirectory multiple data-bfolder></label></div>
+    <p class="bstatus muted small"></p><div class="blist"></div>`, async () => {
+    const go = rows.filter((r) => r.target && r.state !== "dup");
+    if (!go.length) { toast("Nothing to attach"); throw Object.assign(new Error(""), { back: true }); }
+    let n = 0;
+    for (const r of go) {
+      const [kind, id] = r.target.split(":");
+      setStatus(`Uploading ${++n} of ${go.length}: ${r.file.name}`);
+      if (kind === "item") await data.uploadFile(r.file, { itemId: id });
+      else { const e = store.entries.find((x) => x.id === id); await data.uploadFile(r.file, { entryId: id, date: e?.date || "" }); if (e && !e.confirmed) await data.saveEntry({ ...e, confirmed: true }); }
+    }
+    toast(`${go.length} document${go.length > 1 ? "s" : ""} attached`);
+  });
+  const m = [...document.querySelectorAll(".modal")].pop(), list = m.querySelector(".blist"), btn = m.querySelector("button.primary");
+  const setStatus = (t) => (m.querySelector(".bstatus").textContent = t);
+  btn.textContent = "Upload"; btn.disabled = true;
+  const draw = () => {
+    list.innerHTML = rows.map((r, i) => `<div class="brow ${r.target ? "ok" : "none"}${r.state === "dup" ? " dup" : ""}">
+      <div class="bname"><i class="ic16">${I.file}</i><span>${esc(r.file.name)}</span></div>
+      <select data-bi="${i}" aria-label="Booking for ${esc(r.file.name)}" ${r.state === "reading" ? "disabled" : ""}>${opts(r.target)}</select>
+      <div class="bwhy small">${r.state === "reading" ? "Reading the document…" : r.state === "dup" ? "Already attached to this booking - will be skipped" : r.target ? "Matched: " + esc(r.why) : esc(r.why || "No match found - choose the booking, or leave it out")}</div></div>`).join("");
+    list.querySelectorAll("[data-bi]").forEach((s) => (s.onchange = () => { const r = rows[+s.dataset.bi]; r.target = s.value; r.why = "chosen by you"; r.state = isDup(r) ? "dup" : "done"; draw(); }));
+    const ready = rows.filter((r) => r.target && r.state !== "dup").length;
+    btn.disabled = !ready || rows.some((r) => r.state === "reading"); btn.textContent = ready ? `Upload ${ready}` : "Upload";
+  };
+  const isDup = (r) => { if (!r.target) return false; const [kind, id] = r.target.split(":"); return store.files.some((f) => f.name === r.file.name && (kind === "item" ? f.itemId === id : f.entryId === id)); };
+  const pick = async (files) => {
+    files = [...files].filter((f) => !/^\./.test(f.name) && !/\.(ds_store|ini|tmp)$/i.test(f.name));
+    const big = files.filter((f) => f.size > 25 * 1024 * 1024); if (big.length) toast(`Skipped ${big.length} file(s) over 25 MB`);
+    files = files.filter((f) => f.size <= 25 * 1024 * 1024 && !rows.some((r) => r.file.name === f.name && r.file.size === f.size));
+    const fresh = files.map((file) => {
+      const folder = String(file.webkitRelativePath || "").split("/").slice(1, -1).join(" ");
+      const best = targets.map((t) => [t, ...scoreName(t, file.name, folder)]).sort((a, b) => b[1] - a[1])[0];
+      return { file, folder, target: best && best[1] >= 50 ? best[0].kind + ":" + best[0].id : "", why: best && best[1] >= 50 ? best[2] : "", sure: best && best[1] >= 70, state: "done" };
+    });
+    rows = rows.concat(fresh); fresh.forEach((r) => (r.state = isDup(r) ? "dup" : r.state)); draw();
+    const toRead = fresh.filter((r) => !r.sure && r.state !== "dup" && /pdf|image/.test(r.file.type || (/\.pdf$/i.test(r.file.name) ? "pdf" : "")));
+    let k = 0;
+    for (const r of toRead) {
+      r.state = "reading"; draw(); setStatus(`Reading ${++k} of ${toRead.length} with AI…`);
+      try {
+        const x = await data.extractFromFile(r.file, "stay", { travellers: store.trip?.travellers || [], extended: store.trip?.extended || [], start: store.trip?.start, end: store.trip?.end });
+        const best = targets.map((t) => { const a = scoreAI(t, x), n = scoreName(t, r.file.name, r.folder); return [t, a[0] + n[0] / 2, a[1] || n[1]]; }).sort((a, b) => b[1] - a[1])[0];
+        if (best && best[1] >= 50) { r.target = best[0].kind + ":" + best[0].id; r.why = best[2]; }
+        else if (!r.target) r.why = "Couldn't tell which booking - choose it, or leave it out";
+      } catch (e) { r.why = r.target ? r.why : "Couldn't read it (" + (e.code || e.message || "error").toString().slice(0, 60) + ") - choose the booking"; }
+      r.state = isDup(r) ? "dup" : "done"; draw();
+    }
+    const matched = rows.filter((r) => r.target).length;
+    setStatus(`${rows.length} file${rows.length > 1 ? "s" : ""} · ${matched} matched${rows.length - matched ? ` · ${rows.length - matched} to choose` : ""}`);
+  };
+  m.querySelector("[data-bfiles]").onchange = (ev) => pick(ev.target.files);
+  m.querySelector("[data-bfolder]").onchange = (ev) => pick(ev.target.files);
+}
+
 // ------------------------------------------------------------------ recommendations
 // Every stay location gets the best-rated things to do and places to eat from Google (Places API).
 // Results are cached on the trip (so the family sees them too); a new or changed location is looked up automatically.
@@ -1566,6 +1695,7 @@ const actions = {
     });
     const b = document.querySelector(".modal button.primary"); if (b) b.textContent = "Download";
   },
+  bulk: () => bulkAttach(),
   import: () => {
     const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
     inp.onchange = async () => {

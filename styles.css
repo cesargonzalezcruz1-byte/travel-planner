@@ -571,3 +571,4 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .ov-swap{z-index:4;justify-self:end;align-self:start;width:20px;height:20px;margin:-3px -3px 0 0;padding:0;border-radius:50%;border:2px solid var(--card);color:#fff;line-height:0;display:grid;place-items:center;cursor:pointer;box-shadow:0 1px 3px #0003}
 .ov-swap svg{width:12px;height:12px;display:block;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .ov-swap.c1{background:var(--clash1)} .ov-swap.c2{background:var(--clash2)}
+.ov-lab.loc b{font-weight:500}

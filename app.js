@@ -712,9 +712,9 @@ function renderOverview() {
       const mid0 = cutTop ? s : s + 1, mid1 = cutBot ? e : e - 1, hasMid = mid1 >= mid0 && e > s;
       const tbc = i.status === "tbc" ? " (TBC)" : "";
       if (e === s) { lab(`${col} / span 2`, s + 1, s + 2, "", i.start, name + tbc, ""); return; }
-      if (!cutTop) lab(`${col + 1} / span 1`, s + 1, s + 2, "half", i.start, hasMid ? inLab : name + tbc, "");
+      if (!cutTop) lab(`${col + 1} / span 1`, s + 1, s + 2, hasMid ? "half loc" : "half", i.start, hasMid ? inLab : name + tbc, "");
       if (hasMid) lab(`${col} / span 2`, mid0 + 1, mid1 + 2, "", addDays(i.start, cutTop ? 0 : 1), name + tbc, sub);
-      if (!cutBot) lab(`${col} / span 1`, e + 1, e + 2, "half", i.end, hasMid ? outLab : (type === "stay" ? sub : outLab), "");
+      if (!cutBot) lab(`${col} / span 1`, e + 1, e + 2, "half loc", i.end, hasMid ? outLab : (type === "stay" ? sub : outLab), "");
     });
   });
   clashNow = 0;

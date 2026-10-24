@@ -1,6 +1,7 @@
 /* ================================================================ theme
    One colour per booking type, used everywhere (itinerary, day screen, forms, map pins). */
 :root{
+  --clash1:#D97706; --clash1-t:#FDE7C4; --clash1-x:#7A4300; --clash2:#DC2626; --clash2-t:#FCDADA; --clash2-x:#8A1C1C;
   /* ---- theme 1: Ink & Violet (default) ---- */
   --accent:#16141F; --dark:#16141F; --ink:#16141F; --ink2:#3A3747; --muted:#5E5A6E; --bg:#F4F3F8; --card:#FFFFFF; --soft:#F3F2F7;
   --line:#ECEAF2; --line2:#D9D6E3; --row-alt:#FAF9FC; --row-wk:#F1EDF9; --wk-ink:#6D3FD1;
@@ -25,6 +26,7 @@
 }
 /* ---- theme 3: Midnight (dark) ---- */
 :root[data-theme="midnight"]{
+  --clash1:#F5A524; --clash1-t:#3E2C0C; --clash1-x:#FFD58F; --clash2:#FF6B6B; --clash2-t:#421A1A; --clash2-x:#FFB8B8;
   --accent:#000000; --dark:#2E2C3A; --ink:#F2F1F7; --ink2:#D6D4E0; --muted:#A09DB0; --bg:#0F0F14; --card:#1A1A22; --soft:#23222C;
   --line:#2A2933; --line2:#3A3846; --row-alt:#1E1E27; --row-wk:#24212F; --wk-ink:#FF6FAE;
   --flight:#6E9BFF; --flight-t:#1F3159; --flight-x:#C9DAFF;
@@ -561,3 +563,10 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .brow select{width:100%;min-width:0;padding:8px 10px;border:1px solid var(--line2);border-radius:10px;background:var(--card);font-size:13px}
 .bwhy{color:var(--muted)} .brow.none .bwhy{color:#9A6510}
 .sheet .bpick label.btn{display:inline-flex;flex-direction:row;align-items:center;gap:6px}
+
+/* ---------- overview: overlapping bookings (one shown at a time, swap to switch) ---------- */
+.ov-lab.clash.c1,.ov-lab.clash.c1[style]{color:var(--clash1-x)} .ov-lab.clash.c2,.ov-lab.clash.c2[style]{color:var(--clash2-x)}
+.ov-fl.clash.c1{background:var(--clash1-t);color:var(--clash1-x);box-shadow:inset 0 0 0 1.5px var(--clash1)}
+.ov-fl.clash.c2{background:var(--clash2-t);color:var(--clash2-x);box-shadow:inset 0 0 0 1.5px var(--clash2)}
+.ov-swap{z-index:4;justify-self:end;align-self:start;width:20px;height:20px;margin:-3px -3px 0 0;padding:0;border-radius:50%;border:2px solid var(--card);color:#fff;font-size:11px;font-weight:800;line-height:1;display:grid;place-items:center;cursor:pointer;box-shadow:0 1px 3px #0003}
+.ov-swap.c1{background:var(--clash1)} .ov-swap.c2{background:var(--clash2)}

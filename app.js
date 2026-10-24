@@ -669,23 +669,44 @@ function renderOverview() {
       <button class="ov-day${d === today ? " today" : ""}" data-day="${d}" style="grid-row:${k + 1}" aria-label="${WD[wd]} ${longDate(d)}${d === today ? " (today)" : ""}"><span class="ov-dn"><b>${D(d).getDate()}</b><small class="${first ? "mon" : wk ? "wk" : ""}">${first ? MON[D(d).getMonth()].toUpperCase() : WD3(d)}</small></span><span class="ov-dots">${dots}</span></button>`);
   });
   const its = itemsFor(p).filter((i) => i.end >= store.trip.start && i.start <= store.trip.end).sort((a, b) => a.start.localeCompare(b.start));
+  // Bookings of the same type that would cover the same space are a "clash": only one is drawn at a time, in a clash colour,
+  // with a swap button to switch which one fills the space. Occupancy is counted in half-days (stays/cars hand over mid-row).
+  const occ = (i) => { const a = ix(i.start), b = ix(i.end); return i.type === "flight" || a === b ? [2 * a, 2 * b + 1] : [2 * a + 1, 2 * b]; };
+  const collide = (a, b) => { const x = occ(a), y = occ(b); return x[0] <= y[1] && y[0] <= x[1]; };
+  const clusters = (list) => { const gs = []; for (const i of list) { const hit = gs.filter((g) => g.some((j) => collide(i, j))); const m = [i, ...hit.flat()]; hit.forEach((g) => gs.splice(gs.indexOf(g), 1)); gs.push(m); }
+    return gs.map((g) => g.sort((a, b) => a.start.localeCompare(b.start) || (a.updatedAt || "").localeCompare(b.updatedAt || ""))).sort((a, b) => a[0].start.localeCompare(b[0].start)); };
+  // For each clash group, the selected booking is drawn and every other one that doesn't clash with what's drawn is drawn too;
+  // the swap button steps through the distinct arrangements.
+  const layout = (list) => clusters(list).flatMap((g) => {
+    if (g.length < 2) return [{ i: g[0], clash: 0 }];
+    const sets = [];
+    g.forEach((first) => { const drawn = [first]; g.forEach((x) => { if (!drawn.includes(x) && !drawn.some((d) => collide(d, x))) drawn.push(x); });
+      const sig = drawn.map((x) => x.id).sort().join("|"); if (!sets.some((t) => t.sig === sig)) sets.push({ sig, first, drawn }); });
+    if (sets.length < 2 && sets[0].drawn.length === g.length) return g.map((i) => ({ i, clash: 0 }));
+    const key = g.map((x) => x.id).sort().join("|"), k = (ui.swap[key] || 0) % sets.length, set = sets[k], clash = (k % 2) + 1;
+    return set.drawn.sort((a, b) => a.start.localeCompare(b.start)).map((i) => ({ i, clash, key, k, n: sets.length, btn: i === set.first, hidden: g.length - set.drawn.length }));
+  });
+  const swapBtn = (pk, col, row) => pk.btn ? cells.push(`<button class="ov-swap c${pk.clash}" data-swap="${esc(pk.key)}" style="grid-column:${col};grid-row:${row}" title="Overlapping bookings - ${pk.hidden} hidden here (view ${pk.k + 1} of ${pk.n}). Tap to switch." aria-label="Switch overlapping bookings (view ${pk.k + 1} of ${pk.n})">⇄</button>`) : 0;
   // flights: one rounded block per flight in the Flight column
-  its.filter((i) => i.type === "flight").forEach((i) => {
+  layout(its.filter((i) => i.type === "flight")).forEach((pk) => {
+    const i = pk.i;
     const s = Math.max(0, ix(i.start)), e = Math.min(N - 1, ix(i.end)); const c = codesOf(i.route);
     const lab = c.length ? `${c[0]}-${c.at(-1)}` : (i.number || "Flight");
-    cells.push(`<button class="ov-fl${i.status === "tbc" ? " tbc" : ""}" data-day="${i.start}" style="grid-row:${s + 1} / ${e + 2}" title="${esc(c.join(" → "))}"><b>${esc(lab)}</b></button>`);
+    cells.push(`<button class="ov-fl${i.status === "tbc" ? " tbc" : ""}${pk.clash ? " clash c" + pk.clash : ""}" data-day="${i.start}" style="grid-row:${s + 1} / ${e + 2}" title="${esc(c.join(" → "))}"><b>${esc(lab)}</b></button>`);
+    swapBtn(pk, 2, s + 1);
   });
-  // stays and cars: one shape per booking (overlapping ones: the first is drawn, the label says +n)
+  // stays and cars: one shape per booking (clashing ones: one at a time, see above)
   const shapes = [];
-  const lab = (col, r1, r2, cls, d, title, sub) => cells.push(`<button class="ov-lab ${cls}" data-day="${d}" style="grid-column:${col};grid-row:${r1} / ${r2}">${title ? `<b>${esc(title)}</b>` : ""}${sub ? `<small>${esc(sub)}</small>` : ""}</button>`);
+  let clashNow = 0;
+  const lab = (col, r1, r2, cls, d, title, sub) => cells.push(`<button class="ov-lab ${cls}${clashNow ? " clash c" + clashNow : ""}" data-day="${d}" style="grid-column:${col};grid-row:${r1} / ${r2}">${title ? `<b>${esc(title)}</b>` : ""}${sub ? `<small>${esc(sub)}</small>` : ""}</button>`);
   [["stay", 3], ["car", 5]].forEach(([type, col]) => {
-    const groups = overlapGroups(its.filter((i) => i.type === type)).sort((a, b) => a[0].start.localeCompare(b[0].start));
-    groups.forEach((g, n) => {
-      const i = g[0], extra = g.length > 1 ? ` +${g.length - 1}` : "";
+    layout(its.filter((i) => i.type === type)).forEach((pk, n) => {
+      const i = pk.i; clashNow = pk.clash;
       const s0 = ix(i.start), e0 = ix(i.end), cutTop = s0 < 0, cutBot = e0 > N - 1;
       const s = Math.max(0, s0), e = Math.min(N - 1, e0);
-      shapes.push({ type, half: col === 3 ? 0 : 1, s, e, cutTop, cutBot, shade: n % 2, tbc: i.status === "tbc", day: i.start });
-      const name = (type === "stay" ? (i.short || i.name) : (i.company || "Car")) + extra;
+      shapes.push({ type, half: col === 3 ? 0 : 1, s, e, cutTop, cutBot, shade: n % 2, tbc: i.status === "tbc", day: i.start, clash: pk.clash });
+      swapBtn(pk, col + 1, s + 1);
+      const name = type === "stay" ? (i.short || i.name) : (i.company || "Car");
       const sub = type === "stay" ? areaOf(i) : (i.vehicle || "").replace(/\s*\(.*\)$/, "");
       const inLab = type === "car" ? placeCode(i.pickup) : "", outLab = type === "car" ? placeCode(i.dropoff) : "";
       const mid0 = cutTop ? s : s + 1, mid1 = cutBot ? e : e - 1, hasMid = mid1 >= mid0 && e > s;
@@ -696,6 +717,7 @@ function renderOverview() {
       if (!cutBot) lab(`${col} / span 1`, e + 1, e + 2, "half", i.end, hasMid ? outLab : (type === "stay" ? sub : outLab), "");
     });
   });
+  clashNow = 0;
   const legend = others.length ? `<div class="ov-legend"><span class="muted">Traveling together with:</span>${others.map((o) => `<span><i style="background:${pcolor(o)}"></i>${esc(NAME(o))}</span>`).join("")}</div>` : "";
   root.innerHTML = `${header({ views: true })}
     <div class="ov"><div class="ov-card">
@@ -704,6 +726,8 @@ function renderOverview() {
       ${legend}</div></div>`;
   ui.ovShapes = shapes; drawOverviewShapes();
   wireHeader(); wireDays();
+  root.querySelectorAll("[data-swap]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); const k = b.dataset.swap; ui.swap[k] = (ui.swap[k] || 0) + 1;
+    try { localStorage.setItem("tp.swap", JSON.stringify(ui.swap)); } catch (e) { /* ignore */ } const y = scrollY; render(); scrollTo(0, y); }));
   const back = sessionStorage.getItem("tp.wscroll");
   if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
   else if (ds.includes(today) && !ui.ovScrolled) { ui.ovScrolled = true; const el = root.querySelector(".ov-day.today"); if (el) window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + scrollY - 200)); }
@@ -739,8 +763,8 @@ function drawOverviewShapes() {
     }).join("") + "Z";
   };
   svg.innerHTML = ui.ovShapes.map((x) => {
-    const fill = x.tbc ? "var(--card)" : `var(--${x.type}-t${x.shade ? "2" : ""})`;
-    const stroke = x.tbc ? `stroke:var(--${x.type});stroke-width:1.5;stroke-dasharray:4 3;` : "";
+    const fill = x.tbc ? "var(--card)" : x.clash ? `var(--clash${x.clash}-t)` : `var(--${x.type}-t${x.shade ? "2" : ""})`;
+    const stroke = x.tbc ? `stroke:var(--${x.clash ? "clash" + x.clash : x.type});stroke-width:1.5;stroke-dasharray:4 3;` : x.clash ? `stroke:var(--clash${x.clash});stroke-width:1.5;` : "";
     return `<path data-day="${x.day}" d="${pathOf(outline(x.half * (PAIR + GAP), x.s, x.e, x.cutTop, x.cutBot))}" style="fill:${fill};${stroke}"></path>`;
   }).join("");
   svg.querySelectorAll("[data-day]").forEach((el) => (el.onclick = () => openDay(el.dataset.day)));

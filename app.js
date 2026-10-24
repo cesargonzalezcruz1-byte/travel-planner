@@ -686,7 +686,7 @@ function renderOverview() {
     const key = g.map((x) => x.id).sort().join("|"), k = (ui.swap[key] || 0) % sets.length, set = sets[k], clash = (k % 2) + 1;
     return set.drawn.sort((a, b) => a.start.localeCompare(b.start)).map((i) => ({ i, clash, key, k, n: sets.length, btn: i === set.first, hidden: g.length - set.drawn.length }));
   });
-  const swapBtn = (pk, col, row) => pk.btn ? cells.push(`<button class="ov-swap c${pk.clash}" data-swap="${esc(pk.key)}" style="grid-column:${col};grid-row:${row}" title="Overlapping bookings - ${pk.hidden} hidden here (view ${pk.k + 1} of ${pk.n}). Tap to switch." aria-label="Switch overlapping bookings (view ${pk.k + 1} of ${pk.n})">⇄</button>`) : 0;
+  const swapBtn = (pk, col, row) => pk.btn ? cells.push(`<button class="ov-swap c${pk.clash}" data-swap="${esc(pk.key)}" style="grid-column:${col};grid-row:${row}" title="Overlapping bookings - ${pk.hidden} hidden here (view ${pk.k + 1} of ${pk.n}). Tap to switch." aria-label="Switch overlapping bookings (view ${pk.k + 1} of ${pk.n})"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5h9M9.5 3 12 5.5 9.5 8M13 10.5H4M6.5 8 4 10.5 6.5 13"/></svg></button>`) : 0;
   // flights: one rounded block per flight in the Flight column
   layout(its.filter((i) => i.type === "flight")).forEach((pk) => {
     const i = pk.i;
@@ -748,24 +748,24 @@ function drawOverviewShapes() {
     return pts;
   };
   const unit = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; };
-  const pathOf = (pts) => {   // shrink by INSET (even gap between neighbours), then round every corner
-    const M = pts.length;
+  const pathOf = (pts, inset = INSET) => {   // shrink by INSET (even gap between neighbours), then round every corner
+    const M = pts.length, INS = inset, RR = Math.max(4, R - (inset - INSET));
     const ins = pts.map((v, i) => {
       const a = unit(pts[(i - 1 + M) % M], v), b = unit(v, pts[(i + 1) % M]);
       const na = [-a[1], a[0]], nb = [-b[1], b[0]], k = 1 + na[0] * nb[0] + na[1] * nb[1];
-      return [v[0] + INSET * (na[0] + nb[0]) / k, v[1] + INSET * (na[1] + nb[1]) / k];
+      return [v[0] + INS * (na[0] + nb[0]) / k, v[1] + INS * (na[1] + nb[1]) / k];
     });
     return ins.map((v, i) => {
       const p0 = ins[(i - 1 + M) % M], q = ins[(i + 1) % M];
-      const t = Math.min(R, Math.hypot(v[0] - p0[0], v[1] - p0[1]) / 2, Math.hypot(q[0] - v[0], q[1] - v[1]) / 2);
+      const t = Math.min(RR, Math.hypot(v[0] - p0[0], v[1] - p0[1]) / 2, Math.hypot(q[0] - v[0], q[1] - v[1]) / 2);
       const a = unit(p0, v), b = unit(v, q);
       return `${i ? "L" : "M"}${(v[0] - a[0] * t).toFixed(1)} ${(v[1] - a[1] * t).toFixed(1)}Q${v[0].toFixed(1)} ${v[1].toFixed(1)} ${(v[0] + b[0] * t).toFixed(1)} ${(v[1] + b[1] * t).toFixed(1)}`;
     }).join("") + "Z";
   };
   svg.innerHTML = ui.ovShapes.map((x) => {
     const fill = x.tbc ? "var(--card)" : x.clash ? `var(--clash${x.clash}-t)` : `var(--${x.type}-t${x.shade ? "2" : ""})`;
-    const stroke = x.tbc ? `stroke:var(--${x.clash ? "clash" + x.clash : x.type});stroke-width:1.5;stroke-dasharray:4 3;` : x.clash ? `stroke:var(--clash${x.clash});stroke-width:1.5;` : "";
-    return `<path data-day="${x.day}" d="${pathOf(outline(x.half * (PAIR + GAP), x.s, x.e, x.cutTop, x.cutBot))}" style="fill:${fill};${stroke}"></path>`;
+    const stroke = x.tbc ? `stroke:var(--${x.clash ? "clash" + x.clash : x.type});stroke-width:1.5;stroke-dasharray:4 3;` : "";
+    return `<path data-day="${x.day}" d="${pathOf(outline(x.half * (PAIR + GAP), x.s, x.e, x.cutTop, x.cutBot), x.tbc ? INSET + 0.75 : INSET)}" style="fill:${fill};${stroke}"></path>`;
   }).join("");
   svg.querySelectorAll("[data-day]").forEach((el) => (el.onclick = () => openDay(el.dataset.day)));
 }

@@ -201,34 +201,32 @@ function renderHome() {
 
 // ---------------------------------------------------------------- trip setup window
 function tripForm(t) {
-  const isNew = !t; t = t || { title: "", start: "", end: "", travellers: [{ code: "", name: "" }], extended: [] };
+  const isNew = !t; t = t || { title: "", start: "", end: "", travellers: [], extended: [] };
   const used = (t.travellers || []).map((x) => upc(x.color)).filter(Boolean);
   const nextColor = () => { const all = [...document.querySelectorAll('.prow[data-kind="t"]')].map((r) => r.dataset.color); return TDEFAULT.find((h) => !all.includes(h) && !used.includes(h)) || TDEFAULT[all.length % TDEFAULT.length]; };
-  const row = (p, kind, k = 0) => { const per = personFor(p), st = per ? personStatus(per) : null;
-    const c = (per && upc(per.color)) || upc(p.color) || (kind === "t" ? TDEFAULT[k % TDEFAULT.length] : "");
-    return `<div class="prow" data-kind="${kind}" data-pid="${esc(per?.id || "")}" ${kind === "t" ? `data-color="${c}" style="--pc:${c}"` : ""}>
-      <input class="pcode" placeholder="Initials" maxlength="6" value="${esc(p.code || "")}" required>
-      <input class="pname" placeholder="Name" value="${esc(p.name || "")}" ${kind === "t" ? "required" : ""}>
-      <input class="pfull" placeholder="Full Name (as on Bookings)" value="${esc(p.fullName || "")}">
-      <button type="button" class="btn tiny danger" data-rm title="Remove">✕</button>
-      <button type="button" class="btn tiny pdocs${st ? " " + st.level : ""}" data-docs title="${esc(st?.text || "Passport, visas and other documents")}"><i class="ic16">${I.file}</i>Profile${per?.docs?.length ? ` · ${per.docs.length} doc${per.docs.length > 1 ? "s" : ""}` : ""}${st && st.level !== "ok" ? ` <span class="dwarn">!</span>` : ""}</button>
-      ${kind === "t" ? `<div class="swrow" role="radiogroup" aria-label="Colour">${TCOLORS.map(([n, h]) => `<button type="button" class="swbtn${h === c ? " on" : ""}" style="--c:${h}" data-sw="${h}" role="radio" aria-checked="${h === c}" aria-label="${n}" title="${n}"></button>`).join("")}</div>` : ""}</div>`; };
-  const savedPick = (kind) => store.people.length ? `<select class="savedpick" data-pick="${kind}" aria-label="Add a saved person"><option value="">Add a saved person…</option>${[...store.people].sort((a, b) => (a.name || "").localeCompare(b.name || "")).map((x) => `<option value="${esc(x.id)}">${esc(x.name || x.code)} (${esc(x.code)})</option>`).join("")}</select>` : "";
+  // every person on a trip has a profile; the row shows it (details and colour are changed in the profile)
+  const row = (p, kind) => { const per = personFor(p), st = per ? personStatus(per) : null;
+    const v = { code: per?.code || p.code || "", name: per?.name || p.name || "", full: per?.fullName || p.fullName || "", color: (per && upc(per.color)) || upc(p.color) || "" };
+    return `<div class="prow pcard" data-kind="${kind}" data-pid="${esc(per?.id || p.pid || "")}" data-code="${esc(v.code)}" data-name="${esc(v.name)}" data-full="${esc(v.full)}" data-color="${kind === "t" ? v.color : ""}" style="--pc:${kind === "t" && v.color ? v.color : "var(--muted)"}">
+      <span class="pchip tp"><b>${esc(v.code)}</b></span><span class="pn2"><b>${esc(v.name)}</b>${v.full ? `<small>${esc(v.full)}</small>` : ""}</span>
+      <button type="button" class="btn tiny pdocs${st ? " " + st.level : ""}" data-docs title="${esc(st?.text || "Profile, passport, visas and other documents")}"><i class="ic16">${I.file}</i>Profile${per?.docs?.length ? ` · ${per.docs.length} doc${per.docs.length > 1 ? "s" : ""}` : ""}${st && st.level !== "ok" ? ` <span class="dwarn">!</span>` : ""}</button>
+      <button type="button" class="btn tiny danger" data-rm title="Remove from this trip" aria-label="Remove ${esc(v.name)} from this trip">✕</button></div>`; };
+  const savedPick = (kind) => `<select class="savedpick" data-pick="${kind}" aria-label="Add someone who has a profile"><option value="">${kind === "t" ? "+ Add Traveller" : "+ Add Person"}</option>${[...store.people].sort((a, b) => (a.name || "").localeCompare(b.name || "")).map((x) => `<option value="${esc(x.id)}">${esc(x.name || x.code)} (${esc(x.code)})</option>`).join("")}</select>`;
   modal(`<h3>${isNew ? "New Trip" : "Trip Setup"}</h3>
     <label>Trip Name<input name="title" value="${esc(t.title)}" placeholder="e.g. Japan 2027" required></label>
     <div class="row"><label>Start<input type="date" name="start" value="${t.start || ""}" required></label><label>End<input type="date" name="end" value="${t.end || ""}" required></label></div>
     <fieldset class="pbox"><legend>Travellers (Each Gets Their Own Itinerary)</legend>
       <div id="trav">${(t.travellers || []).map((p, k) => row(p, "t", k)).join("")}</div>
-      <div class="addrow"><button type="button" class="btn tiny" data-addp="t">+ Add Traveller</button>${savedPick("t")}</div></fieldset>
+      <div class="addrow">${savedPick("t")}<button type="button" class="btn tiny" data-addp="t">New Traveller (Create Profile)</button></div></fieldset>
     <fieldset class="pbox"><legend>Others Joining Sometimes (Optional)</legend>
       <div id="ext">${(t.extended || []).map((p) => row(p, "e")).join("")}</div>
-      <div class="addrow"><button type="button" class="btn tiny" data-addp="e">+ Add Person</button>${savedPick("e")}</div></fieldset>
-    <p class="muted small">Initials are how people appear in the itinerary (e.g. CGC). Full names help the AI match names on bookings. The colour is each traveller's dot in the Overview.</p>
+      <div class="addrow">${savedPick("e")}<button type="button" class="btn tiny" data-addp="e">New Person (Create Profile)</button></div></fieldset>
+    <p class="muted small">Everyone on a trip has a profile: initials (how they appear in the itinerary), full name (helps the AI match names on bookings), their colour and documents. Tap Profile to change them.</p>
     <fieldset class="pbox"><legend>Colour Theme</legend><div class="themes">
       ${THEMES.map(([k, n, cs]) => `<label class="themecard"><input type="radio" name="theme" value="${k}" ${(t.theme || "ink") === k ? "checked" : ""}><span class="tsw">${cs.map((c) => `<i style="background:${c}"></i>`).join("")}</span><b>${n}</b></label>`).join("")}</div></fieldset>`,
     async (fd, form) => {
       const read = (kind) => [...form.querySelectorAll(`.prow[data-kind="${kind}"]`)].map((r) => ({
-        code: r.querySelector(".pcode").value.trim().toUpperCase(), name: r.querySelector(".pname").value.trim(), fullName: r.querySelector(".pfull").value.trim(), color: r.dataset.color || "", pid: r.dataset.pid || "" }))
+        code: r.dataset.code, name: r.dataset.name, fullName: r.dataset.full, color: r.dataset.color || "", pid: r.dataset.pid || "" }))
         .filter((p) => p.code).map(({ fullName, color, pid, ...p }) => ({ ...p, ...(fullName ? { fullName } : {}), ...(color ? { color } : {}), ...(pid ? { pid } : {}) }));
       const travellers = read("t"), extended = read("e");
       if (!travellers.length) throw new Error("Add at least one traveller");
@@ -253,27 +251,29 @@ function tripForm(t) {
       await data.deleteTrip(t.id); routeTo(null);
     });
   const form = [...document.querySelectorAll(".sheet")].pop();
+  const addRow = (per, kind) => {
+    if ([...form.querySelectorAll(".prow")].some((r) => r.dataset.pid === per.id || r.dataset.code === per.code)) return toast(`${per.name} is already on this trip`);
+    const color = kind === "t" ? upc(per.color) || nextColor() : "";
+    if (kind === "t" && [...form.querySelectorAll('.prow[data-kind="t"]')].some((r) => r.dataset.color === color)) toast(`${per.name}'s colour is already used on this trip - change it in their profile`);
+    form.querySelector(kind === "t" ? "#trav" : "#ext").insertAdjacentHTML("beforeend", row({ code: per.code, name: per.name, fullName: per.fullName, color, pid: per.id }, kind));
+  };
   form.addEventListener("change", (e) => {
     const sel = e.target.closest("[data-pick]"); if (!sel || !sel.value) return;
     const per = store.people.find((x) => x.id === sel.value), kind = sel.dataset.pick; sel.value = "";
-    if (!per) return;
-    if ([...form.querySelectorAll(".prow")].some((r) => r.dataset.pid === per.id || r.querySelector(".pcode").value.trim().toUpperCase() === per.code)) return toast(`${per.name} is already on this trip`);
-    const used2 = [...form.querySelectorAll('.prow[data-kind="t"]')].map((r) => r.dataset.color);
-    const color = kind === "t" ? upc(per.color) || nextColor() : "";
-    if (kind === "t" && used2.includes(color)) toast(`${per.name}'s colour is already used on this trip - change one of them`);
-    form.querySelector(kind === "t" ? "#trav" : "#ext").insertAdjacentHTML("beforeend", row({ code: per.code, name: per.name, fullName: per.fullName, color, pid: per.id }, kind));
+    if (per) addRow(per, kind);
   });
+  // after a profile is created or edited, redraw its row with the new name, initials and colour
+  const refreshRow = (pid, rec) => { const r = form.querySelector(`.prow[data-pid="${CSS.escape(pid)}"]`), per = { ...rec, ...store.people.find((x) => x.id === pid) };
+    if (r) r.outerHTML = row({ ...per, pid }, r.dataset.kind); };
   form.addEventListener("click", (e) => {
     const rm = e.target.closest("[data-rm]"); if (rm) rm.closest(".prow").remove();
-    const add = e.target.closest("[data-addp]"); if (add) form.querySelector(add.dataset.addp === "t" ? "#trav" : "#ext").insertAdjacentHTML("beforeend", row(add.dataset.addp === "t" ? { color: nextColor() } : {}, add.dataset.addp));
+    const add = e.target.closest("[data-addp]");
+    if (add) { const kind = add.dataset.addp; personForm(null, { color: kind === "t" ? nextColor() : "", title: kind === "t" ? "New Traveller" : "New Person",
+      onSaved: (pid, rec) => addRow(store.people.find((x) => x.id === pid) || rec, kind) }); }
     const dbtn = e.target.closest("[data-docs]");
     if (dbtn) (async () => { const r = dbtn.closest(".prow");
-      const vals = { code: r.querySelector(".pcode").value.trim().toUpperCase(), name: r.querySelector(".pname").value.trim(), fullName: r.querySelector(".pfull").value.trim(), color: r.dataset.color || "", pid: r.dataset.pid };
-      if (!vals.code || !vals.name) return toast("Enter the initials and name first");
-      try { r.dataset.pid = await rememberPerson(vals); personForm(r.dataset.pid); } catch (x) { toast("Couldn't save the person: " + (x.code || x.message)); } })();
-    const sw = e.target.closest("[data-sw]");
-    if (sw) { const r = sw.closest(".prow"); r.dataset.color = sw.dataset.sw; r.style.setProperty("--pc", sw.dataset.sw);
-      r.querySelectorAll("[data-sw]").forEach((b) => { b.classList.toggle("on", b === sw); b.setAttribute("aria-checked", b === sw); }); }
+      try { if (!r.dataset.pid) r.dataset.pid = await rememberPerson({ code: r.dataset.code, name: r.dataset.name, fullName: r.dataset.full, color: r.dataset.color });
+        const pid = r.dataset.pid; personForm(pid, { onSaved: (id, rec) => refreshRow(pid, rec) }); } catch (x) { toast("Couldn't open the profile: " + (x.code || x.message)); } })();
   });
 }
 
@@ -1225,10 +1225,10 @@ const VAULT_FIELDS = [
   ["Travel Numbers", [["loyalty", "Frequent Flyer & Hotel Programs", "area", "One per line, e.g. Qantas FF 1234567"], ["ktn", "Known Traveller / Global Entry"], ["redress", "Redress Number"]]],
   ["Other", [["vnotes", "Private Notes", "area"]]],
 ];
-function personForm(pid) {
+function personForm(pid, opts = {}) {
   let per = store.people.find((x) => x.id === pid) || { code: "", name: "", fullName: "", docs: [] };
   let vault = per.id && secure.vault[per.id] && unlocked() ? secure.vault[per.id] : null;
-  let color = upc(per.color) || "";
+  let color = upc(per.color) || opts.color || "";
   const docsHtml = () => (per.docs || []).length ? (per.docs || []).slice().sort((a, b) => (a.expiry || "9").localeCompare(b.expiry || "9")).map((d) => { const st = docStatus(d, per);
     const num = vault ? (vault.docNumbers || {})[d.id] || d.number || "" : "";
     const hasFile = d.hasFile || d.file || (vault && (vault.files || {})[d.id]);
@@ -1244,7 +1244,7 @@ function personForm(pid) {
         ? `<label>${l}<textarea name="v_${k}" rows="2" placeholder="${esc(ph || "")}">${esc(vault[k] || "")}</textarea></label>`
         : `<label>${l}<input name="v_${k}" type="${t || "text"}" value="${esc(vault[k] || "")}" autocomplete="off"></label>`).join("")}</div>`).join("")
       + `<p class="muted small vtimer">Unlocked until ${new Date(secure.until).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}.</p>`;
-  modal(`<h3>${per.id ? esc(per.name || per.code) : "New Traveller Profile"}</h3>
+  modal(`<h3>${per.id ? esc(per.name || per.code) : opts.title || "New Traveller Profile"}</h3>
     <div class="row"><label>Initials<input name="code" maxlength="6" value="${esc(per.code)}" required></label><label>Name<input name="name" value="${esc(per.name)}" required></label></div>
     <label>Full Name (as on Passport)<input name="fullName" value="${esc(per.fullName || "")}"></label>
     <div><p class="rlabel">Colour (used on every trip)</p><div class="swrow pfsw" role="radiogroup" aria-label="Colour">${TCOLORS.map(([n, h]) => `<button type="button" class="swbtn${h === color ? " on" : ""}" style="--c:${h}" data-psw="${h}" role="radio" aria-checked="${h === color}" aria-label="${n}" title="${n}"></button>`).join("")}</div></div>
@@ -1258,6 +1258,8 @@ function personForm(pid) {
       if (vault && unlocked()) { VAULT_FIELDS.forEach(([, fs]) => fs.forEach(([k]) => { const v = String(fd.get("v_" + k) ?? "").trim(); if (v) vault[k] = v; else delete vault[k]; }));
         await data.saveVault(id, vault); secure.vault[id] = vault; }
       if (color && color !== upc(per.color)) await syncPersonColor({ ...per, id, code, name, color });
+      if (store.people.some((x) => x.id !== id && x.code === code)) toast(`Another profile also uses ${code} - initials must differ on a trip`);
+      opts.onSaved && setTimeout(() => opts.onSaved(id, { id, code, name, fullName: String(fd.get("fullName")).trim(), color }), 0);
     }, per.id ? async () => { await unlock(); await data.deletePerson(per); } : null);
   const m = [...document.querySelectorAll(".modal")].pop(), form = m.querySelector("form");
   const redraw = () => { per = store.people.find((x) => x.id === per.id) || per; m.querySelector(".dlist").innerHTML = docsHtml(); refreshDocBtns(); };

@@ -643,3 +643,4 @@ fieldset{min-width:0}
 .addrow{margin-top:8px}
 .chk{display:flex;gap:8px;align-items:center;font-weight:600}
 .brow.new{border-left-color:var(--flight)} .brow.new .bwhy{color:var(--flight-x)}
+.bmore{color:var(--flight-x);font-weight:600}

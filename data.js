@@ -382,6 +382,9 @@ const EXTRACT_SCHEMA = req({
     cancel: S("Cancellation rule in one line, with the deadline date"), phone: S("Phone number of the hotel / airline / rental company itself (not the booking website's customer service line, unless no other number is given)"),
     notes: S("Other useful private details: room type, guests, booking site, taxes, deposit"),
   }),
+  journeys: { type: "array", description: "Flights only: ONE entry per separate journey on different days, e.g. the outbound AND the return flight of a return ticket. Connections on the way to one destination (e.g. LAX-IAH-TQO the same day) are ONE journey. Empty for other bookings.",
+    items: req({ route: S("Airport codes joined with '-', e.g. BNE-AKL"), airline: S("Airline name"), number: S("Flight number(s), e.g. NZ148"),
+      start: S("Departure date YYYY-MM-DD"), end: S("Arrival date YYYY-MM-DD"), dep: S("Departure time HH:MM"), arr: S("Arrival time HH:MM; add (dd-Mon) if next day") }) },
   unsure: { type: "array", items: { type: "string" }, description: "Names of fields you guessed or could not read clearly, e.g. ['checkin','phone','who']; empty if all are clearly in the document" },
 });
 let aiModel = null;
@@ -395,9 +398,19 @@ async function getModel(tryIndex = 0, schema = EXTRACT_SCHEMA) {
 const dropEmpty = (o) => { for (const k of Object.keys(o)) { const v = o[k];
   if (v && typeof v === "object" && !Array.isArray(v)) dropEmpty(v); else if (v === "" || v === null) delete o[k]; } return o; };
 const toBase64 = (file) => new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = bad; r.readAsDataURL(file); });
+// A return / multi-city ticket: the booking itself is the first journey; the others are in x.journeys (each becomes its own flight)
+function splitJourneys(x) {
+  const js = (x.journeys || []).filter((j) => j && j.start && j.route);
+  if (x.type !== "flight" || js.length < 2) { delete x.journeys; return x; }
+  js.sort((a, b) => a.start.localeCompare(b.start));
+  Object.assign(x, { route: js[0].route, airline: js[0].airline || x.airline, number: js[0].number, start: js[0].start, end: js[0].end || js[0].start, dep: js[0].dep, arr: js[0].arr });
+  x.journeys = js; return dropEmpty(x);
+}
 export async function extractFromFile(file, hint, ctx) {
   if (DEMO) {
     await new Promise((r) => setTimeout(r, 600));
+    if (/return/i.test(file.name)) return splitJourneys({ type: "flight", who: ctx.travellers.map((t) => t.code), airline: "Air New Zealand", private: { confirmation: "5XFRSH" },
+      journeys: [{ route: "CHC-BNE", number: "NZ205", start: "2027-01-20", end: "2027-01-20", dep: "06:00", arr: "07:05" }, { route: "BNE-AKL", number: "NZ148", start: "2027-01-10", end: "2027-01-11", dep: "19:35", arr: "00:45 (11-Jan)" }] });
     return { type: hint === "activity" ? "activity" : "stay", who: ctx.travellers.map((t) => t.code), start: "2027-01-14", end: "2027-01-15",
              name: "Demo Hotel Orlando", short: "Demo Hotel", address: "1 Demo Way, Orlando, FL", checkin: "15:00", checkout: "11:00",
              text: "Demo activity from " + file.name, place: "Epic Universe", note: "Filled from " + file.name,
@@ -410,6 +423,7 @@ Traveller codes: ${people}. Put in "who" only the codes of these main travellers
 The user expects a "${hint}" booking but set "type" to what the document really is.
 Read the WHOLE document, every page, and fill EVERY field that applies to this type of booking - address, times, confirmation number,
 price, payment, cancellation policy and phone are almost always somewhere in a confirmation, often in small print.
+For a return or multi-city flight booking, list EVERY separate journey in "journeys" (e.g. BNE-AKL on 17 Sep and CHC-BNE on 5 Oct) and fill the top-level flight fields with the FIRST journey only.
 For a hotel, "end" is the check-out date (a 1-night stay from 8 Jan has end 9 Jan). Hotel check-in/check-out times are often in the policies section.
 Dates as YYYY-MM-DD, times as 24h HH:MM. Use "" only for fields that really are not in the document or don't apply to this type. Keep texts short.`;
   const parts = [{ inlineData: { mimeType: file.type || "application/pdf", data: await toBase64(file) } }, { text: prompt }];
@@ -418,7 +432,7 @@ Dates as YYYY-MM-DD, times as 24h HH:MM. Use "" only for fields that really are 
     try {
       if (!aiModel || aiModel._i !== i) { aiModel = await getModel(i); aiModel._i = i; }
       const res = await aiModel.generateContent(parts);
-      return dropEmpty(JSON.parse(res.response.text()));
+      return splitJourneys(dropEmpty(JSON.parse(res.response.text())));
     } catch (e) {
       lastErr = e; aiModel = null; console.warn("AI model", AI_MODELS[i], "failed:", e.message);
       if (i > 0) e.message = `[tried ${AI_MODELS.slice(0, i + 1).join(", ")}] ` + e.message;

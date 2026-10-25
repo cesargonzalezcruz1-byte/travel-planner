@@ -11,10 +11,13 @@ service firebase.storage {
       allow read, delete: if isEditor();
       allow create, update: if isEditor() && request.resource.size < 25 * 1024 * 1024;
     }
-    // Travel documents of saved people (passport, visa scans): editors only, max 25 MB per file
+    function recentAuth() {
+      return request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(15, 'm');
+    }
+    // Passport / visa scans: editors who signed in (or confirmed it's them) in the last 15 minutes, max 25 MB per file
     match /people/{personId}/{fileId}/{fileName} {
-      allow read, delete: if isEditor();
-      allow create, update: if isEditor() && request.resource.size < 25 * 1024 * 1024;
+      allow read, create, update: if isEditor() && recentAuth() && (request.resource == null || request.resource.size < 25 * 1024 * 1024);
+      allow delete: if isEditor();
     }
     match /{allPaths=**} { allow read, write: if false; }
   }

@@ -610,3 +610,10 @@ fieldset{min-width:0}
 .drow{min-width:0}
 .sheet{grid-template-columns:minmax(0,1fr)}
 .row>label{min-width:0} .sheet label input,.sheet label select{min-width:0;width:100%;box-sizing:border-box}
+/* profile: private details */
+.vlocked{display:flex;gap:10px;align-items:center;padding:12px;border-radius:14px;background:var(--soft)}
+.vlocked>div{flex:1;min-width:0;display:grid;gap:2px} .vlocked small{color:var(--muted);font-size:12px;line-height:1.35}
+.vbox{display:grid;gap:10px} .vgroup{display:grid;gap:8px} .vgroup .rlabel{margin:6px 0 0}
+.vbox textarea{padding:9px 10px;border:1.5px solid var(--line2);border-radius:12px;resize:vertical;font:inherit}
+.vtimer{margin:0}
+.pfsw{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 4px}

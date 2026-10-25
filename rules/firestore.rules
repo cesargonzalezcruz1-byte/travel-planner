@@ -41,7 +41,15 @@ service cloud.firestore {
     }
 
     // Saved people and their travel documents (passports, visas...): editors only
-    match /people/{id} { allow read, write: if isEditor(); }
+    // Signed in with Google (or confirmed it's them) within the last 15 minutes
+    function recentAuth() {
+      return request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(15, 'm');
+    }
+    match /people/{id} {
+      allow read, write: if isEditor();
+      // Private part of a profile (birth date, contacts, health, document numbers): editors with a recent sign-in only
+      match /vault/{doc} { allow read, write: if isEditor() && recentAuth(); }
+    }
 
     // Everything else is locked
     match /{document=**} { allow read, write: if false; }

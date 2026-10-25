@@ -184,7 +184,7 @@ function renderHome() {
       <span class="role ${store.role}">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span></div>
     <div class="menu">${isEditor() ? `<button class="btn small primary" data-act="newtrip">+ New Trip</button>` : ""}
       <details class="more"><summary class="btn small">⋯</summary><div class="pop">
-        ${isEditor() ? `<button data-act="people">People & Documents</button><button data-act="import">Import a Trip File</button>` : ""}<button data-act="signout">Sign Out</button></div></details></div></header>
+        ${isEditor() ? `<button data-act="people">Traveller Profiles</button><button data-act="import">Import a Trip File</button>` : ""}<button data-act="signout">Sign Out</button></div></details></div></header>
   <div class="home">
     ${!store.tripsLoaded ? `<p class="muted">Loading trips…</p>` : !trips.length ? `<div class="empty card"><h2>No Trips Yet</h2>
        ${isEditor() ? `<p>Create your first trip: name, dates and who's travelling.</p><button class="btn primary" data-act="newtrip">+ New Trip</button>` : `<p>Nothing has been planned yet.</p>`}</div>` : ""}
@@ -204,14 +204,14 @@ function tripForm(t) {
   const isNew = !t; t = t || { title: "", start: "", end: "", travellers: [{ code: "", name: "" }], extended: [] };
   const used = (t.travellers || []).map((x) => upc(x.color)).filter(Boolean);
   const nextColor = () => { const all = [...document.querySelectorAll('.prow[data-kind="t"]')].map((r) => r.dataset.color); return TDEFAULT.find((h) => !all.includes(h) && !used.includes(h)) || TDEFAULT[all.length % TDEFAULT.length]; };
-  const row = (p, kind, k = 0) => { const c = upc(p.color) || (kind === "t" ? TDEFAULT[k % TDEFAULT.length] : "");
-    const per = personFor(p), st = per ? personStatus(per) : null;
+  const row = (p, kind, k = 0) => { const per = personFor(p), st = per ? personStatus(per) : null;
+    const c = (per && upc(per.color)) || upc(p.color) || (kind === "t" ? TDEFAULT[k % TDEFAULT.length] : "");
     return `<div class="prow" data-kind="${kind}" data-pid="${esc(per?.id || "")}" ${kind === "t" ? `data-color="${c}" style="--pc:${c}"` : ""}>
       <input class="pcode" placeholder="Initials" maxlength="6" value="${esc(p.code || "")}" required>
       <input class="pname" placeholder="Name" value="${esc(p.name || "")}" ${kind === "t" ? "required" : ""}>
       <input class="pfull" placeholder="Full Name (as on Bookings)" value="${esc(p.fullName || "")}">
       <button type="button" class="btn tiny danger" data-rm title="Remove">✕</button>
-      <button type="button" class="btn tiny pdocs${st ? " " + st.level : ""}" data-docs title="${esc(st?.text || "Passport, visas and other documents")}"><i class="ic16">${I.file}</i>Documents${per?.docs?.length ? ` (${per.docs.length})` : ""}${st && st.level !== "ok" ? ` <span class="dwarn">!</span>` : ""}</button>
+      <button type="button" class="btn tiny pdocs${st ? " " + st.level : ""}" data-docs title="${esc(st?.text || "Passport, visas and other documents")}"><i class="ic16">${I.file}</i>Profile${per?.docs?.length ? ` · ${per.docs.length} doc${per.docs.length > 1 ? "s" : ""}` : ""}${st && st.level !== "ok" ? ` <span class="dwarn">!</span>` : ""}</button>
       ${kind === "t" ? `<div class="swrow" role="radiogroup" aria-label="Colour">${TCOLORS.map(([n, h]) => `<button type="button" class="swbtn${h === c ? " on" : ""}" style="--c:${h}" data-sw="${h}" role="radio" aria-checked="${h === c}" aria-label="${n}" title="${n}"></button>`).join("")}</div>` : ""}</div>`; };
   const savedPick = (kind) => store.people.length ? `<select class="savedpick" data-pick="${kind}" aria-label="Add a saved person"><option value="">Add a saved person…</option>${[...store.people].sort((a, b) => (a.name || "").localeCompare(b.name || "")).map((x) => `<option value="${esc(x.id)}">${esc(x.name || x.code)} (${esc(x.code)})</option>`).join("")}</select>` : "";
   modal(`<h3>${isNew ? "New Trip" : "Trip Setup"}</h3>
@@ -241,7 +241,10 @@ function tripForm(t) {
         if (removed.length && !confirm(`Remove ${removed.join(", ")} from the travellers? Their bookings stay but won't show in an itinerary.`)) throw new Error("Cancelled");
       }
       // remember everyone for next time (saved people), and link each row to its saved person
-      for (const p of travellers.concat(extended)) { try { p.pid = await rememberPerson(p); } catch (e) { console.warn("people", e); } }
+      const dup = travellers.find((p, k) => p.color && travellers.findIndex((q) => q.color === p.color) !== k);
+      if (dup && !confirm(`${dup.name} has the same colour as another traveller on this trip. Save anyway?`)) throw Object.assign(new Error(""), { back: true });
+      for (const p of travellers.concat(extended)) { try { const before = personFor(p); p.pid = await rememberPerson(p);
+        if (p.color && before && upc(before.color) !== upc(p.color)) syncPersonColor({ ...before, id: p.pid, color: p.color }); } catch (e) { console.warn("people", e); } }
       const id = await data.saveTrip({ title: fd.get("title").trim(), start: fd.get("start"), end: fd.get("end"), travellers, extended, theme: fd.get("theme") || "ink" }, isNew ? null : t.id);
       if (isNew) { ui.person = travellers[0].code; localStorage.setItem("tp.person", ui.person); routeTo(id); }
     }, isNew ? null : async () => {
@@ -256,7 +259,8 @@ function tripForm(t) {
     if (!per) return;
     if ([...form.querySelectorAll(".prow")].some((r) => r.dataset.pid === per.id || r.querySelector(".pcode").value.trim().toUpperCase() === per.code)) return toast(`${per.name} is already on this trip`);
     const used2 = [...form.querySelectorAll('.prow[data-kind="t"]')].map((r) => r.dataset.color);
-    const color = kind === "t" ? (per.color && !used2.includes(upc(per.color)) ? upc(per.color) : nextColor()) : "";
+    const color = kind === "t" ? upc(per.color) || nextColor() : "";
+    if (kind === "t" && used2.includes(color)) toast(`${per.name}'s colour is already used on this trip - change one of them`);
     form.querySelector(kind === "t" ? "#trav" : "#ext").insertAdjacentHTML("beforeend", row({ code: per.code, name: per.name, fullName: per.fullName, color, pid: per.id }, kind));
   });
   form.addEventListener("click", (e) => {
@@ -283,6 +287,7 @@ const I = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
   star: SV('<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/>'),
   eat: SV('<path d="M7 3v8M4 3v5a3 3 0 0 0 6 0V3M7 11v10M17 21V3c-2 1-3.5 3.5-3.5 7 0 2 1.5 3 3.5 3"/>'),
+  lock: SV('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
 const ICON = {
@@ -326,7 +331,8 @@ const THEMES = [["ink", "Ink & Violet", ["#16141F", "#2F6FED", "#7A4BD6", "#5D65
   ["midnight", "Midnight (dark)", ["#000000", "#6E9BFF", "#A47BFF", "#9AA3B2", "#FF5FA2"]]];
 function pcolor(code) {
   const tr = store.trip?.travellers || []; const k = tr.findIndex((t) => t.code === code);
-  return (k >= 0 && upc(tr[k].color)) || TDEFAULT[Math.max(0, k) % TDEFAULT.length];
+  const per = k >= 0 && tr[k].pid && store.people.find((x) => x.id === tr[k].pid);   // the traveller's profile colour wins (editors)
+  return (per && upc(per.color)) || (k >= 0 && upc(tr[k].color)) || TDEFAULT[Math.max(0, k) % TDEFAULT.length];
 }
 const inkOn = (hex) => { const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255; return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#16141F" : "#FFFFFF"; };
 function applyTheme() {
@@ -358,7 +364,7 @@ function header(opts = {}) {
       ${isEditor() ? `<button class="iconbtn" data-act="add" aria-label="Add booking" title="Add booking">${ICON.plus}</button>` : ""}
       <details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span>
-        ${isEditor() ? `<button data-act="settings">Trip Setup</button><button data-act="people">People & Documents</button><button data-act="import">Import Trip Data</button><button data-act="export">Download Backup</button><button data-act="bulk">Attach Documents…</button>` : ""}
+        ${isEditor() ? `<button data-act="settings">Trip Setup</button><button data-act="people">Traveller Profiles</button><button data-act="import">Import Trip Data</button><button data-act="export">Download Backup</button><button data-act="bulk">Attach Documents…</button>` : ""}
         <button data-act="album">Export Album (Word)</button>
         <button data-act="signout">Sign Out</button></div></details>
     </div>
@@ -659,7 +665,8 @@ function budgetForm() {
     if (!per) return;
     if ([...form.querySelectorAll(".prow")].some((r) => r.dataset.pid === per.id || r.querySelector(".pcode").value.trim().toUpperCase() === per.code)) return toast(`${per.name} is already on this trip`);
     const used2 = [...form.querySelectorAll('.prow[data-kind="t"]')].map((r) => r.dataset.color);
-    const color = kind === "t" ? (per.color && !used2.includes(upc(per.color)) ? upc(per.color) : nextColor()) : "";
+    const color = kind === "t" ? upc(per.color) || nextColor() : "";
+    if (kind === "t" && used2.includes(color)) toast(`${per.name}'s colour is already used on this trip - change one of them`);
     form.querySelector(kind === "t" ? "#trav" : "#ext").insertAdjacentHTML("beforeend", row({ code: per.code, name: per.name, fullName: per.fullName, color, pid: per.id }, kind));
   });
   form.addEventListener("click", (e) => {
@@ -1157,7 +1164,7 @@ function checkDocAlerts() {
   try { sessionStorage.setItem("tp.docalert", sig); } catch (e) { /* ignore */ }
   infoBox(`<h2>Check Travel Documents</h2>
     <ul class="dalerts">${list.map((x) => `<li class="${x.st.level}"><b>${esc(x.per.name || x.per.code)}</b> - ${esc(x.st.text)}<button type="button" class="lnk" data-openp="${esc(x.per.id)}">Open</button></li>`).join("")}</ul>
-    <p class="muted small">Update the document in People & Documents once it's renewed. This message shows again only if something changes.</p>`);
+    <p class="muted small">Update the document in Traveller Profiles once it's renewed. This message shows again only if something changes.</p>`);
 }
 function infoBox(html) {
   const m = document.createElement("div"); m.className = "modal";
@@ -1169,66 +1176,124 @@ function infoBox(html) {
 }
 function peopleList() {
   const ppl = [...store.people].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  infoBox(`<h2>People & Documents</h2>
+  infoBox(`<h2>Traveller Profiles</h2>
     ${store.peopleError ? `<p class="jwarn small">${esc(store.peopleError)}</p>` : ""}
-    <p class="muted small">Everyone you add to a trip is saved here, so next time you can pick them in Trip Setup. Add passports, visas and other documents to each person.</p>
+    <p class="muted small">Everyone you add to a trip gets a profile, so next time you can pick them in Trip Setup. A profile keeps the person's colour on every trip, their documents and private details.</p>
     <div class="plist">${ppl.map((x) => { const st = personStatus(x);
       return `<button type="button" class="prow2" data-openp="${esc(x.id)}" style="--pc:${upc(x.color) || "var(--muted)"}"><span class="pchip tp"><b>${esc(x.code)}</b></span><span class="pn">${esc(x.name || "")}<small>${(x.docs || []).length ? (x.docs || []).map((d) => docName(d.type)).join(", ") : "No documents yet"}</small></span>${st.level !== "ok" ? `<span class="dstat ${st.level}" title="${esc(st.text)}">!</span>` : ""}</button>`; }).join("") || `<p class="muted">Nobody saved yet - people are saved when you save a Trip Setup.</p>`}</div>
-    <button type="button" class="btn small" data-newp>+ Add Person</button>`);
+    <button type="button" class="btn small" data-newp>+ Add Traveller Profile</button>`);
   const m = [...document.querySelectorAll(".modal")].pop();
   m.querySelector("[data-newp]").onclick = () => { m.remove(); personForm(null); };
 }
+// Copy a profile colour onto every trip the person is on (trips keep a copy so the family login, which can't read profiles, sees it too)
+async function syncPersonColor(per) {
+  const c = upc(per.color); if (!c) return;
+  for (const t of store.trips) {
+    const tr = t.travellers || []; let changed = false;
+    const next = tr.map((x) => ((x.pid === per.id || (!x.pid && x.code === per.code && (x.name || "") === (per.name || ""))) && upc(x.color) !== c ? (changed = true, { ...x, color: c, pid: per.id }) : x));
+    if (changed) await data.saveTrip({ travellers: next }, t.id).catch((e) => console.warn("colour sync", t.id, e));
+  }
+}
+// ---- the private part of a profile: unlocked for 14 minutes after confirming it's you (the rules allow 15)
+const secure = { until: 0, vault: {} };
+const unlocked = () => Date.now() < secure.until;
+async function unlock() { const at = await data.confirmIdentity(); secure.until = at + 14 * 60e3; }
+const VAULT_FIELDS = [
+  ["Personal", [["dob", "Date of Birth", "date"], ["nationality", "Nationality"], ["phone", "Mobile", "tel"], ["email", "Email", "email"]]],
+  ["Emergency Contact", [["emName", "Name"], ["emRelation", "Relationship"], ["emPhone", "Phone", "tel"]]],
+  ["Health", [["allergies", "Allergies"], ["conditions", "Medical Conditions"], ["medications", "Medications"], ["blood", "Blood Type"]]],
+  ["Travel Numbers", [["loyalty", "Frequent Flyer & Hotel Programs", "area", "One per line, e.g. Qantas FF 1234567"], ["ktn", "Known Traveller / Global Entry"], ["redress", "Redress Number"]]],
+  ["Other", [["vnotes", "Private Notes", "area"]]],
+];
+const PREFS = [["seat", "Seat Preference", ["", "Window", "Aisle", "No preference"]], ["meal", "Meal / Dietary", null], ["prefNotes", "Other Preferences", null]];
 function personForm(pid) {
   let per = store.people.find((x) => x.id === pid) || { code: "", name: "", fullName: "", docs: [] };
+  let vault = per.id && secure.vault[per.id] && unlocked() ? secure.vault[per.id] : null;
+  let color = upc(per.color) || "";
   const docsHtml = () => (per.docs || []).length ? (per.docs || []).slice().sort((a, b) => (a.expiry || "9").localeCompare(b.expiry || "9")).map((d) => { const st = docStatus(d, per);
+    const num = vault ? (vault.docNumbers || {})[d.id] || d.number || "" : "";
+    const hasFile = d.hasFile || d.file || (vault && (vault.files || {})[d.id]);
     return `<div class="drow ${st.level}"><div class="dmain"><b>${esc(docName(d.type))}${d.country ? ` · ${esc(d.country)}` : ""}</b>
-      <small>${[d.number, d.expiry ? "Expires " + longDate(d.expiry) : "", d.notes].filter(Boolean).map(esc).join(" · ")}</small>
+      <small>${[vault ? num || "No number" : "Number hidden", d.expiry ? "Expires " + longDate(d.expiry) : "", d.notes].filter(Boolean).map(esc).join(" · ")}</small>
       ${st.level !== "ok" ? `<small class="dmsg">${esc(st.text)}</small>` : ""}</div>
-      <div class="dacts">${d.file ? `<button type="button" class="ibtn" data-dfile="${esc(d.id)}" title="Open ${esc(d.file.name)}" aria-label="Open file">${I.file}</button>` : ""}
+      <div class="dacts">${hasFile ? `<button type="button" class="ibtn" data-dfile="${esc(d.id)}" title="Open the scan" aria-label="Open the scan">${I.file}</button>` : ""}
       <button type="button" class="btn tiny" data-dedit="${esc(d.id)}">Edit</button><button type="button" class="ibtn danger" data-ddel="${esc(d.id)}" title="Delete" aria-label="Delete">${I.trash}</button></div></div>`; }).join("")
     : `<p class="muted small">No documents yet.</p>`;
-  modal(`<h3>${per.id ? esc(per.name || per.code) : "New Person"}</h3>
+  const vaultHtml = () => !per.id ? `<p class="muted small">Save the profile first, then add private details.</p>`
+    : !vault ? `<div class="vlocked"><i class="ic16">${I.lock}</i><div><b>Private details are locked</b><small>Birth date, contacts, health, document numbers and scans. Confirm it's you with Google to open them for 15 minutes.</small></div><button type="button" class="btn small primary" data-unlock>Unlock</button></div>`
+    : VAULT_FIELDS.map(([g, fs]) => `<div class="vgroup"><p class="rlabel">${g}</p>${fs.map(([k, l, t, ph]) => t === "area"
+        ? `<label>${l}<textarea name="v_${k}" rows="2" placeholder="${esc(ph || "")}">${esc(vault[k] || "")}</textarea></label>`
+        : `<label>${l}<input name="v_${k}" type="${t || "text"}" value="${esc(vault[k] || "")}" autocomplete="off"></label>`).join("")}</div>`).join("")
+      + `<p class="muted small vtimer">Unlocked until ${new Date(secure.until).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}.</p>`;
+  modal(`<h3>${per.id ? esc(per.name || per.code) : "New Traveller Profile"}</h3>
     <div class="row"><label>Initials<input name="code" maxlength="6" value="${esc(per.code)}" required></label><label>Name<input name="name" value="${esc(per.name)}" required></label></div>
-    <label>Full Name (as on Bookings)<input name="fullName" value="${esc(per.fullName || "")}"></label>
+    <label>Full Name (as on Passport)<input name="fullName" value="${esc(per.fullName || "")}"></label>
+    <div><p class="rlabel">Colour (used on every trip)</p><div class="swrow pfsw" role="radiogroup" aria-label="Colour">${TCOLORS.map(([n, h]) => `<button type="button" class="swbtn${h === color ? " on" : ""}" style="--c:${h}" data-psw="${h}" role="radio" aria-checked="${h === color}" aria-label="${n}" title="${n}"></button>`).join("")}</div></div>
+    <fieldset class="pbox"><legend>Preferences</legend>${PREFS.map(([k, l, opts]) => opts
+      ? `<label>${l}<select name="p_${k}">${opts.map((o) => `<option value="${o}" ${(per.prefs || {})[k] === o ? "selected" : ""}>${o || "-"}</option>`).join("")}</select></label>`
+      : `<label>${l}<input name="p_${k}" value="${esc((per.prefs || {})[k] || "")}"></label>`).join("")}</fieldset>
     <fieldset class="pbox"><legend>Travel Documents</legend><div class="dlist">${docsHtml()}</div>
-      <button type="button" class="btn tiny" data-dadd>+ Add Document</button></fieldset>`,
+      <button type="button" class="btn tiny" data-dadd>+ Add Document</button></fieldset>
+    <fieldset class="pbox"><legend>Private Details</legend><div class="vbox">${vaultHtml()}</div></fieldset>`,
     async (fd) => {
       const code = String(fd.get("code")).trim().toUpperCase(), name = String(fd.get("name")).trim();
       if (!/^[A-Z0-9]{2,6}$/.test(code)) throw new Error("Initials: 2-6 letters, no spaces");
-      await data.savePerson({ ...(per.id ? { id: per.id } : {}), code, name, fullName: String(fd.get("fullName")).trim(), docs: per.docs || [] });
-    }, per.id ? async () => { await data.deletePerson(per); } : null);
+      const prefs = Object.fromEntries(PREFS.map(([k]) => [k, String(fd.get("p_" + k) || "").trim()]).filter(([, v]) => v));
+      const id = await data.savePerson({ ...(per.id ? { id: per.id } : {}), code, name, fullName: String(fd.get("fullName")).trim(), color, prefs, docs: per.docs || [] });
+      if (vault && unlocked()) { VAULT_FIELDS.forEach(([, fs]) => fs.forEach(([k]) => { const v = String(fd.get("v_" + k) ?? "").trim(); if (v) vault[k] = v; else delete vault[k]; }));
+        await data.saveVault(id, vault); secure.vault[id] = vault; }
+      if (color && color !== upc(per.color)) await syncPersonColor({ ...per, id, code, name, color });
+    }, per.id ? async () => { await unlock(); await data.deletePerson(per); } : null);
   const m = [...document.querySelectorAll(".modal")].pop(), form = m.querySelector("form");
   const redraw = () => { per = store.people.find((x) => x.id === per.id) || per; m.querySelector(".dlist").innerHTML = docsHtml(); refreshDocBtns(); };
   const ensure = async () => {   // a new person is saved before adding documents
     if (per.id) return true;
     const code = form.code.value.trim().toUpperCase(), name = form.name.value.trim();
     if (!code || !name) { toast("Enter the initials and name first"); return false; }
-    per.id = await data.savePerson({ code, name, fullName: form.fullName.value.trim(), docs: [] }); per = { ...per, code, name };
+    per.id = await data.savePerson({ code, name, fullName: form.fullName.value.trim(), color, docs: [] }); per = { ...per, code, name };
+    m.querySelector(".vbox").innerHTML = vaultHtml();
     return true;
   };
+  const openVault = async () => {   // confirm it's you, then load the private part
+    if (vault && unlocked()) return true;
+    try { await unlock(); vault = await data.getVault(per.id);
+      // documents saved before the vault existed: move their numbers and scans into it
+      (per.docs || []).forEach((d) => { if (d.number) (vault.docNumbers ||= {})[d.id] = d.number; if (d.file) (vault.files ||= {})[d.id] = d.file; });
+      secure.vault[per.id] = vault; m.querySelector(".vbox").innerHTML = vaultHtml(); m.querySelector(".dlist").innerHTML = docsHtml(); return true; }
+    catch (e) { toast(e.code === "permission-denied" ? "Private details need the new security rules (vault)" : /popup|cancel|closed|Not confirmed/i.test(e.code + e.message) ? "Not unlocked" : "Couldn't unlock: " + (e.code || e.message)); return false; }
+  };
   m.addEventListener("click", async (e) => {
+    const sw = e.target.closest("[data-psw]");
+    if (sw) { color = sw.dataset.psw; m.querySelectorAll("[data-psw]").forEach((b) => { b.classList.toggle("on", b === sw); b.setAttribute("aria-checked", b === sw); }); return; }
+    if (e.target.closest("[data-unlock]")) { await openVault(); return; }
     const t = e.target.closest("[data-dadd],[data-dedit],[data-ddel],[data-dfile]"); if (!t) return;
-    if (t.dataset.dadd !== undefined) { if (await ensure()) docForm(per, null, redraw); }
-    else if (t.dataset.dedit) docForm(per, (per.docs || []).find((d) => d.id === t.dataset.dedit), redraw);
-    else if (t.dataset.ddel) { const d = per.docs.find((x) => x.id === t.dataset.ddel); if (!confirm(`Delete ${docName(d.type)}${d.file ? " and its file" : ""}?`)) return;
-      try { if (d.file) await data.deletePersonFile(d.file).catch(() => {}); per.docs = per.docs.filter((x) => x.id !== d.id); await data.savePerson({ id: per.id, docs: per.docs }); redraw(); } catch (x) { toast(x.message); } }
-    else if (t.dataset.dfile) { const d = per.docs.find((x) => x.id === t.dataset.dfile); const w = window.open("", "_blank"); const u = await data.personFileUrl(d.file); if (w) w.location = u; else location.href = u; }
+    if (t.dataset.dadd !== undefined) { if (await ensure() && await openVault()) docForm(per, vault, null, redraw); }
+    else if (t.dataset.dedit) { if (await openVault()) docForm(per, vault, (per.docs || []).find((d) => d.id === t.dataset.dedit), redraw); }
+    else if (t.dataset.ddel) { const d = per.docs.find((x) => x.id === t.dataset.ddel); if (!confirm(`Delete ${docName(d.type)} and its scan?`) || !(await openVault())) return;
+      try { const f = (vault.files || {})[d.id] || d.file; if (f) await data.deletePersonFile(f).catch(() => {});
+        if (vault.files) delete vault.files[d.id]; if (vault.docNumbers) delete vault.docNumbers[d.id]; await data.saveVault(per.id, vault);
+        per.docs = per.docs.filter((x) => x.id !== d.id); await data.savePerson({ id: per.id, docs: per.docs }); redraw(); } catch (x) { toast(x.message); } }
+    else if (t.dataset.dfile) { const w = window.open("", "_blank"); if (!(await openVault())) { w && w.close(); return; }
+      const d = per.docs.find((x) => x.id === t.dataset.dfile), f = (vault.files || {})[d.id] || d.file;
+      try { const u = await data.personFileUrl(f); if (w) w.location = u; else location.href = u; } catch (x) { w && w.close(); toast("Couldn't open: " + (x.code || x.message)); } }
   });
 }
 function refreshDocBtns() {
   document.querySelectorAll(".prow[data-pid]").forEach((r) => { const per = store.people.find((x) => x.id === r.dataset.pid), b = r.querySelector("[data-docs]"); if (!per || !b) return;
-    const st = personStatus(per); b.className = "btn tiny pdocs" + (st.level !== "ok" ? " " + st.level : ""); b.title = st.text || "Passport, visas and other documents";
-    b.innerHTML = `<i class="ic16">${I.file}</i>Documents${per.docs?.length ? ` (${per.docs.length})` : ""}${st.level !== "ok" ? ` <span class="dwarn">!</span>` : ""}`; });
+    const st = personStatus(per); b.className = "btn tiny pdocs" + (st.level !== "ok" ? " " + st.level : ""); b.title = st.text || "Profile, passport, visas and other documents";
+    b.innerHTML = `<i class="ic16">${I.file}</i>Profile${per.docs?.length ? ` · ${per.docs.length} doc${per.docs.length > 1 ? "s" : ""}` : ""}${st.level !== "ok" ? ` <span class="dwarn">!</span>` : ""}`;
+    if (per.color && r.dataset.kind === "t") { const c = upc(per.color); r.dataset.color = c; r.style.setProperty("--pc", c); r.querySelectorAll("[data-sw]").forEach((x) => { x.classList.toggle("on", x.dataset.sw === c); x.setAttribute("aria-checked", x.dataset.sw === c); }); } });
 }
-function docForm(per, doc, done) {
+// Document: type, country, expiry and notes go in the profile (they drive the expiry warnings); the number and the scan go in the vault.
+function docForm(per, vault, doc, done) {
   const isNew = !doc; doc = doc || { id: "d" + Date.now().toString(36), type: "passport" };
-  let file = null;
+  let file = null; const curFile = (vault.files || {})[doc.id] || doc.file;
   const m0 = document.createElement("div"); m0.className = "modal";
   m0.innerHTML = `<form class="sheet"><h3>${isNew ? "Add Document" : "Edit " + esc(docName(doc.type))} · ${esc(per.name || per.code)}</h3>
-    <div class="extract"><label class="btn small pdfbtn"><i class="ic16">${I.scan}</i>${doc.file ? "Replace File" : "Add File (PDF or Photo)"}<input type="file" hidden accept="application/pdf,image/*" data-dfilein></label>
-      <span class="extract-status muted small">${doc.file ? "Attached: " + esc(doc.file.name) : "The details are read from the file - check them before saving."}</span></div>
+    <div class="extract"><label class="btn small pdfbtn"><i class="ic16">${I.scan}</i>${curFile ? "Replace Scan" : "Add Scan (PDF or Photo)"}<input type="file" hidden accept="application/pdf,image/*" data-dfilein></label>
+      <span class="extract-status muted small">${curFile ? "Attached: " + esc(curFile.name) : "The details are read from the scan - check them before saving."}</span></div>
     <label>Type<select name="type">${DOC_TYPES.map(([k, n]) => `<option value="${k}" ${doc.type === k ? "selected" : ""}>${n}</option>`).join("")}</select></label>
-    <div class="row"><label>Number<input name="number" value="${esc(doc.number || "")}"></label><label>Country<input name="country" value="${esc(doc.country || "")}" placeholder="Issued by / for"></label></div>
+    <div class="row"><label>Number<input name="number" value="${esc((vault.docNumbers || {})[doc.id] || doc.number || "")}" autocomplete="off"></label><label>Country<input name="country" value="${esc(doc.country || "")}" placeholder="Issued by / for"></label></div>
     <label>Expiry Date<input type="date" name="expiry" value="${esc(doc.expiry || "")}"></label>
     <label>Notes<input name="notes" value="${esc(doc.notes || "")}" placeholder="e.g. multiple entry"></label>
     <div class="row end"><span class="grow"></span><button type="button" class="btn" data-cancel>Cancel</button><button class="btn primary">Save</button></div></form>`;
@@ -1248,14 +1313,21 @@ function docForm(per, doc, done) {
   f.onsubmit = async (ev) => {
     ev.preventDefault(); const btn = f.querySelector("button.primary"); btn.disabled = true;
     try {
-      const next = { ...doc, type: f.type.value, number: f.number.value.trim(), country: f.country.value.trim(), expiry: f.expiry.value, notes: f.notes.value.trim() };
-      if (file) { const old = doc.file; next.file = await data.uploadPersonFile(per.id, file); if (old) data.deletePersonFile(old).catch(() => {}); }
+      if (!unlocked()) await unlock();
+      const next = { id: doc.id, type: f.type.value, country: f.country.value.trim(), expiry: f.expiry.value, notes: f.notes.value.trim() };
+      const num = f.number.value.trim();
+      vault.docNumbers ||= {}; if (num) vault.docNumbers[doc.id] = num; else delete vault.docNumbers[doc.id];
+      vault.files ||= {};
+      if (file) { const nf = await data.uploadPersonFile(per.id, file); if (curFile) data.deletePersonFile(curFile).catch(() => {}); vault.files[doc.id] = nf; }
+      else if (doc.file && !vault.files[doc.id]) vault.files[doc.id] = doc.file;
+      if (vault.files[doc.id]) next.hasFile = true;
       Object.keys(next).forEach((k) => next[k] === "" && delete next[k]);
+      await data.saveVault(per.id, vault);
       const docs = (per.docs || []).filter((d) => d.id !== doc.id).concat(next);
       await data.savePerson({ id: per.id, docs }); per.docs = docs;
       close(); done && done(); toast("Saved");
       const st = docStatus(next, per); if (st.level !== "ok") infoBox(`<h2>Check This Document</h2><ul class="dalerts"><li class="${st.level}"><b>${esc(per.name)}</b> - ${esc(st.text)}</li></ul>`);
-    } catch (e) { btn.disabled = false; toast("Couldn't save: " + (e.code || e.message)); }
+    } catch (e) { btn.disabled = false; toast(e.code === "permission-denied" || e.code === "storage/unauthorized" ? "Needs the new security rules (vault) - or confirm it's you again" : "Couldn't save: " + (e.code || e.message)); }
   };
 }
 

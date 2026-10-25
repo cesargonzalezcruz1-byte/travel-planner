@@ -18,7 +18,7 @@ const now = () => new Date().toISOString();
 const clearTrip = () => Object.assign(store, { trip: null, items: [], entries: [], priv: {}, files: [], journal: [], journalError: "" });
 
 // ---------------- demo store (local testing only)
-const demo = { trips: {}, people: {} };   // id -> {trip, items, entries, priv, files}
+const demo = { trips: {}, people: {}, vault: {} };   // id -> {trip, items, entries, priv, files}
 function demoLoad(id) {
   const t = demo.trips[id]; if (!t) { clearTrip(); return; }
   Object.assign(store, { trip: t.trip, items: t.items, entries: t.entries, priv: store.role === "editor" ? t.priv : {}, files: store.role === "editor" ? t.files : [], journal: (t.journal = t.journal || []) });
@@ -70,7 +70,29 @@ export async function signInEditor() {
     else throw e;
   }
 }
-export async function signOut() { if (DEMO) { location.href = location.pathname; return; } await fb.authM.signOut(fb.auth); }
+// Signing out also wipes this device's offline copy of the data (trips, people) so nothing stays behind.
+export async function signOut() {
+  if (DEMO) { location.href = location.pathname; return; }
+  try { await fb.fsM.terminate(fb.db); await fb.fsM.clearIndexedDbPersistence(fb.db); } catch (e) { console.warn("clear cache", e); }
+  await fb.authM.signOut(fb.auth); location.reload();
+}
+
+// ---------------- recent sign-in ("confirm it's you") for private details - also enforced by the security rules (15 minutes)
+const demoAuth = { at: Date.now() - 3600e3 };
+export async function signedInAt() {
+  if (DEMO) return demoAuth.at;
+  const r = await fb.auth.currentUser.getIdTokenResult();
+  return Number(r.claims.auth_time) * 1000;
+}
+export async function confirmIdentity(maxMin = 14) {
+  if (Date.now() - (await signedInAt()) < maxMin * 60e3) return signedInAt();
+  if (DEMO) { if (!confirm("Demo: confirm it's you (Google sign-in)")) throw new Error("Not confirmed"); demoAuth.at = Date.now(); return demoAuth.at; }
+  const u = fb.auth.currentUser, provider = new fb.authM.GoogleAuthProvider();
+  provider.setCustomParameters({ login_hint: u.email || "", prompt: "login" });
+  await fb.authM.reauthenticateWithPopup(u, provider);
+  await u.getIdToken(true);
+  return signedInAt();
+}
 
 // ------------------------------------------------------------------ trips list + open trip
 let listUnsub = null, tripUnsubs = [];
@@ -157,9 +179,23 @@ export async function savePerson(p) {
   return id;
 }
 export async function deletePerson(p) {
-  for (const d of p.docs || []) if (d.file?.path) await deletePersonFile(d.file).catch(() => {});
-  if (DEMO) { delete demo.people[p.id]; demoPeople(); emit(); return; }
+  const v = await getVault(p.id).catch(() => ({}));
+  for (const f of Object.values(v.files || {}).concat((p.docs || []).map((d) => d.file).filter(Boolean))) if (f?.path) await deletePersonFile(f).catch(() => {});
+  if (DEMO) { delete demo.people[p.id]; delete demo.vault[p.id]; demoPeople(); emit(); return; }
+  await fb.fsM.deleteDoc(fb.fsM.doc(fb.db, "people", p.id, "vault", "main")).catch(() => {});
   await fb.fsM.deleteDoc(fb.fsM.doc(fb.db, "people", p.id));
+}
+// people/{id}/vault/main: the private part of a profile (birth date, contacts, medical, document numbers and scans).
+// Only readable by an editor who signed in (or confirmed it's them) in the last 15 minutes - see firestore.rules.
+export async function getVault(pid) {
+  if (DEMO) return JSON.parse(JSON.stringify(demo.vault[pid] || {}));
+  const s = await fb.fsM.getDocFromServer(fb.fsM.doc(fb.db, "people", pid, "vault", "main"));
+  return s.exists() ? s.data() : {};
+}
+export async function saveVault(pid, v) {
+  const data = clean({ ...v, updatedBy: store.email, updatedAt: now() });
+  if (DEMO) { demo.vault[pid] = data; return; }
+  await fb.fsM.setDoc(fb.fsM.doc(fb.db, "people", pid, "vault", "main"), data);
 }
 export async function uploadPersonFile(pid, file) {
   const fid = uid("pf"), meta = { name: file.name, size: file.size, contentType: file.type || "application/octet-stream" };

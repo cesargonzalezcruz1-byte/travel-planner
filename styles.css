@@ -4,7 +4,7 @@
   --clash1:#D97706; --clash1-t:#FDE7C4; --clash1-x:#7A4300; --clash2:#DC2626; --clash2-t:#FCDADA; --clash2-x:#8A1C1C;
   /* ---- theme 1: Ink & Violet (default) ---- */
   --accent:#16141F; --dark:#16141F; --ink:#16141F; --ink2:#3A3747; --muted:#5E5A6E; --bg:#F4F3F8; --card:#FFFFFF; --soft:#F3F2F7;
-  --line:#ECEAF2; --line2:#D9D6E3; --row-alt:#FAF9FC; --row-wk:#F1EDF9; --ov-wk:#FFF5D9; --wk-ink:#6D3FD1;
+  --line:#ECEAF2; --line2:#D9D6E3; --row-alt:#FAF9FC; --row-wk:#F1EDF9; --ov-wk:#EFEEF4; --wk-ink:#6D3FD1;
   --flight:#2F6FED; --flight-t:#DDE8FD; --flight-x:#173E8C;
   --stay:#7A4BD6;   --stay-t:#ECE3FC;   --stay-t2:#D9C7F7; --stay-x:#3E1E7A;
   --car:#5D6573;    --car-t:#ECEDF1;    --car-t2:#D6D9E0;  --car-x:#2E3340;
@@ -17,7 +17,7 @@
 /* ---- theme 2: Lavender & Pink ---- */
 :root[data-theme="lavender"]{
   --accent:#4B2A8C; --dark:#2E1B57; --ink:#241A3A; --ink2:#43385A; --muted:#6A6080; --bg:#F7F4FB; --card:#FFFFFF; --soft:#F5F1FA;
-  --line:#EEE8F6; --line2:#DCD3EA; --row-alt:#FBF9FD; --row-wk:#F6EEF8; --ov-wk:#FFF4DC; --wk-ink:#C2367A;
+  --line:#EEE8F6; --line2:#DCD3EA; --row-alt:#FBF9FD; --row-wk:#F6EEF8; --ov-wk:#F0EDF5; --wk-ink:#C2367A;
   --flight:#3D6BE0; --flight-t:#DCE6FB; --flight-x:#1D3F8F;
   --stay:#C2367A;   --stay-t:#FBE1EC;   --stay-t2:#F5C6DA; --stay-x:#7A1846;
   --car:#5D6573;    --car-t:#E9EAEE;    --car-t2:#D3D6DD;  --car-x:#2F3340;
@@ -28,7 +28,7 @@
 :root[data-theme="midnight"]{
   --clash1:#F5A524; --clash1-t:#3E2C0C; --clash1-x:#FFD58F; --clash2:#FF6B6B; --clash2-t:#421A1A; --clash2-x:#FFB8B8;
   --accent:#000000; --dark:#2E2C3A; --ink:#F2F1F7; --ink2:#D6D4E0; --muted:#A09DB0; --bg:#0F0F14; --card:#1A1A22; --soft:#23222C;
-  --line:#2A2933; --line2:#3A3846; --row-alt:#1E1E27; --row-wk:#24212F; --ov-wk:#2C2716; --wk-ink:#FF6FAE;
+  --line:#2A2933; --line2:#3A3846; --row-alt:#1E1E27; --row-wk:#24212F; --ov-wk:#25242E; --wk-ink:#FF6FAE;
   --flight:#6E9BFF; --flight-t:#1F3159; --flight-x:#C9DAFF;
   --stay:#A47BFF;   --stay-t:#2E2350;   --stay-t2:#40306E; --stay-x:#DDD0FF;
   --car:#9AA3B2;    --car-t:#2A2D36;    --car-t2:#3A3E49;  --car-x:#D9DDE6;
@@ -575,3 +575,7 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .swbtn{display:grid;place-items:center;transition:transform .12s}
 .swbtn:hover{transform:scale(1.08)}
 .swbtn.on::after{content:"";width:11px;height:6px;border:solid #fff;border-width:0 0 2.5px 2.5px;transform:translate(0,-1px) rotate(-45deg)}
+
+/* ---------- overview colours: stays in violet, cars in pink (all themes) ---------- */
+.ov{--stay:#7A4BD6;--stay-t:#ECE3FC;--stay-t2:#D9C7F7;--stay-x:#3E1E7A;--car:#C2367A;--car-t:#FBE1EC;--car-t2:#F5C6DA;--car-x:#7A1846}
+:root[data-theme="midnight"] .ov{--stay:#A47BFF;--stay-t:#2E2350;--stay-t2:#40306E;--stay-x:#DDD0FF;--car:#FF5FA2;--car-t:#3A1F2E;--car-t2:#552A42;--car-x:#FFC2DC}

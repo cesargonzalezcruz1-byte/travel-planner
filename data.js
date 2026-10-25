@@ -307,6 +307,14 @@ export async function uploadFile(file, { itemId = "", entryId = "", date = "" } 
   await fb.fsM.setDoc(fb.fsM.doc(col("files"), id), { ...meta, path });
 }
 export async function fileUrl(f) { return DEMO ? f.demoUrl || "#" : fb.stM.getDownloadURL(fb.stM.ref(fb.storage, f.path)); }
+// The file's bytes (for the zip archive): straight through the security rules, or via its download link if the browser can't.
+export async function fileBlob(f) {
+  if (DEMO) return (await fetch(f.demoUrl)).blob();
+  const r = fb.stM.ref(fb.storage, f.path);
+  try { return await fb.stM.getBlob(r); }
+  catch (e) { if (e.code === "storage/unauthorized" || e.code === "storage/object-not-found") throw e;
+    const res = await fetch(await fb.stM.getDownloadURL(r)); if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.blob(); }
+}
 export async function deleteFile(f) {
   if (DEMO) { const t = mem(); t.files = t.files.filter((x) => x.id !== f.id); demoLoad(store.tripId); emit(); return; }
   try { await fb.stM.deleteObject(fb.stM.ref(fb.storage, f.path)); } catch (e) { /* already gone */ }

@@ -364,7 +364,7 @@ function header(opts = {}) {
       ${isEditor() ? `<button class="iconbtn" data-act="add" aria-label="Add booking" title="Add booking">${ICON.plus}</button>` : ""}
       <details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span>
-        ${isEditor() ? `<button data-act="settings">Trip Setup</button><button data-act="people">Traveller Profiles</button><button data-act="import">Import Trip Data</button><button data-act="export">Download Backup</button><button data-act="bulk">Attach Documents…</button>` : ""}
+        ${isEditor() ? `<button data-act="settings">Trip Setup</button><button data-act="people">Traveller Profiles</button><button data-act="import">Import Trip Data</button><button data-act="export">Download Backup</button><button data-act="bulk">Attach Documents…</button><button data-act="archive">Archive Documents (Zip)…</button>` : ""}
         <button data-act="album">Export Album (Word)</button>
         <button data-act="signout">Sign Out</button></div></details>
     </div>
@@ -1403,6 +1403,58 @@ function docForm(per, vault, doc, done) {
   };
 }
 
+// ------------------------------------------------------------------ archive: all of a trip's documents in one zip, then (optionally) delete them from the app
+let zipLib = null;
+const loadZip = () => (zipLib ||= new Promise((ok, bad) => { if (window.JSZip) return ok(window.JSZip);
+  const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+  sc.onload = () => ok(window.JSZip); sc.onerror = () => { zipLib = null; bad(new Error("Couldn't load the zip tool (offline?)")); }; document.head.appendChild(sc); }));
+const safeName = (t) => String(t || "").replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 80) || "file";
+function archiveFolder(f) {   // which folder a file goes in: its booking, activity or day
+  const it = f.itemId && store.items.find((i) => i.id === f.itemId), en = f.entryId && store.entries.find((e) => e.id === f.entryId);
+  if (it) return `${it.start} ${it.type === "flight" ? `Flight ${it.route || ""} ${it.number || ""}` : it.type === "stay" ? `Stay ${it.short || it.name || ""}` : `Car ${it.company || ""}`}`;
+  if (en) return `${en.date} Activity ${firstText(en.text)}`;
+  if (f.date) return `${f.date} Day documents`;
+  return "Other";
+}
+function archiveDocs() {
+  const t = store.trip, files = store.files || [], size = files.reduce((a, f) => a + (f.size || 0), 0);
+  const ended = t.end < iso(new Date());
+  infoBox(`<h2>Archive Documents</h2>
+    <p>${files.length ? `<b>${files.length}</b> document${files.length > 1 ? "s" : ""} (${(size / 1048576).toFixed(1)} MB) on <b>${esc(t.title)}</b>.` : "This trip has no documents."}</p>
+    ${files.length ? `<p class="muted small">Downloads one zip with a folder per booking, activity and day, plus a list of what's inside. Keep it somewhere safe on your computer.</p>
+    <label class="chk"><input type="checkbox" data-zdel ${ended ? "checked" : ""}> Then delete them from the app${ended ? "" : ` <span class="muted small">(this trip hasn't finished yet)</span>`}</label>
+    <p class="muted small">Deleting only removes the files - bookings, activities, the journal and the budget stay. Profiles (passports, visas) aren't touched.</p>
+    <p class="zstatus muted small"></p>
+    <button type="button" class="btn primary" data-zgo>Download Zip</button>` : ""}`);
+  const m = [...document.querySelectorAll(".modal")].pop(), go = m.querySelector("[data-zgo]"); if (!go) return;
+  const st = (x) => (m.querySelector(".zstatus").textContent = x);
+  go.onclick = async () => {
+    const del = m.querySelector("[data-zdel]").checked;
+    if (del && !confirm(`Download, then delete all ${files.length} documents of "${t.title}" from the app?\n\nOnly continue once the zip is saved on your computer.`)) return;
+    go.disabled = true;
+    try {
+      const JSZip = await loadZip(), zip = new JSZip(), used = new Set(), lines = [];
+      let n = 0;
+      for (const f of [...files].sort((a, b) => archiveFolder(a).localeCompare(archiveFolder(b)))) {
+        st(`Downloading ${++n} of ${files.length}: ${f.name}`);
+        const blob = await data.fileBlob(f);
+        let path = `${safeName(archiveFolder(f))}/${safeName(f.name)}`, k = 1;
+        while (used.has(path)) path = path.replace(/(\.[^.]*)?$/, (ext) => ` (${++k})${ext || ""}`);
+        used.add(path); zip.file(path, blob); lines.push(`${path}   (${Math.max(1, Math.round((f.size || blob.size) / 1024))} KB)`);
+      }
+      zip.file("Contents.txt", `${t.title} (${fmtDate(t.start)} to ${fmtDate(t.end)})\nDocuments archived ${fmtDate(iso(new Date()))} from Travel Planner\n\n${lines.join("\n")}\n`);
+      st("Making the zip…");
+      const out = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(out);
+      a.download = `${safeName((t.title || "Trip").replace(/&/g, "and"))} Documents.zip`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      if (!del) { st(`Done - ${files.length} documents in the zip.`); toast("Zip downloaded"); go.disabled = false; return; }
+      if (!confirm(`The zip has been downloaded (${(out.size / 1048576).toFixed(1)} MB). Check it's in your Downloads, then press OK to delete the ${files.length} documents from the app.`)) { st("Zip downloaded - nothing deleted."); go.disabled = false; return; }
+      n = 0; for (const f of files) { st(`Deleting ${++n} of ${files.length}…`); await data.deleteFile(f); }
+      st(`Done - ${files.length} documents archived and removed from the app.`); toast("Documents archived");
+    } catch (e) { go.disabled = false; st(`Stopped - nothing was deleted. ${e.code || e.message}`); console.error(e); }
+  };
+}
+
 // ------------------------------------------------------------------ bulk attach (editors)
 // Pick many files (or a whole folder); each is matched to a booking by its confirmation number, flight number, names and dates -
 // first from the file name, then (PDFs and photos) by reading it with AI. Everything can be checked and changed before uploading.
@@ -2043,6 +2095,7 @@ const actions = {
   },
   bulk: () => bulkAttach(),
   people: () => peopleList(),
+  archive: () => archiveDocs(),
   import: () => {
     const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
     inp.onchange = async () => {

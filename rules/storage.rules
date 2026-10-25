@@ -11,6 +11,11 @@ service firebase.storage {
       allow read, delete: if isEditor();
       allow create, update: if isEditor() && request.resource.size < 25 * 1024 * 1024;
     }
+    // Travel documents of saved people (passport, visa scans): editors only, max 25 MB per file
+    match /people/{personId}/{fileId}/{fileName} {
+      allow read, delete: if isEditor();
+      allow create, update: if isEditor() && request.resource.size < 25 * 1024 * 1024;
+    }
     match /{allPaths=**} { allow read, write: if false; }
   }
 }

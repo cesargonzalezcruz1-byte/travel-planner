@@ -40,6 +40,9 @@ service cloud.firestore {
       match /files/{id}   { allow read, write: if isEditor(); }
     }
 
+    // Saved people and their travel documents (passports, visas...): editors only
+    match /people/{id} { allow read, write: if isEditor(); }
+
     // Everything else is locked
     match /{document=**} { allow read, write: if false; }
   }

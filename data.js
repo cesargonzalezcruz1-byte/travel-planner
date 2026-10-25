@@ -8,7 +8,7 @@ export const DEMO = isLocal && new URLSearchParams(location.search).has("demo");
 
 let fb = null;
 const listeners = new Set();
-export const store = { role: null, email: null, trips: [], tripsLoaded: false, tripId: null, trip: null,
+export const store = { role: null, email: null, trips: [], tripsLoaded: false, people: [], peopleError: "", tripId: null, trip: null,
                        items: [], entries: [], priv: {}, files: [], ready: false };
 const emit = () => listeners.forEach((fn) => fn(store));
 export const onChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
@@ -18,7 +18,7 @@ const now = () => new Date().toISOString();
 const clearTrip = () => Object.assign(store, { trip: null, items: [], entries: [], priv: {}, files: [], journal: [], journalError: "" });
 
 // ---------------- demo store (local testing only)
-const demo = { trips: {} };   // id -> {trip, items, entries, priv, files}
+const demo = { trips: {}, people: {} };   // id -> {trip, items, entries, priv, files}
 function demoLoad(id) {
   const t = demo.trips[id]; if (!t) { clearTrip(); return; }
   Object.assign(store, { trip: t.trip, items: t.items, entries: t.entries, priv: store.role === "editor" ? t.priv : {}, files: store.role === "editor" ? t.files : [], journal: (t.journal = t.journal || []) });
@@ -32,7 +32,7 @@ export async function init(onAuth) {
     demo.trips[seed.trip.id] = seedToMem(seed);
     const role = new URLSearchParams(location.search).get("demo") === "family" ? "family" : "editor";
     store.role = role; store.email = role === "editor" ? EDITORS[0] : FAMILY_EMAIL;
-    demoList(); store.ready = true; onAuth(store.role); emit();
+    demoList(); if (role === "editor") demoPeople(); store.ready = true; onAuth(store.role); emit();
     return;
   }
   const [appM, authM, fsM, stM] = await Promise.all([
@@ -54,6 +54,7 @@ export async function init(onAuth) {
     store.role = EDITORS.includes(email) ? "editor" : email === FAMILY_EMAIL ? "family" : "none";
     store.ready = true; onAuth(store.role);
     if (store.role === "editor" || store.role === "family") { subscribeList(); if (store.tripId) subscribeTrip(store.tripId); }
+    if (store.role === "editor") subscribePeople();
     emit();
   });
 }
@@ -73,7 +74,12 @@ export async function signOut() { if (DEMO) { location.href = location.pathname;
 
 // ------------------------------------------------------------------ trips list + open trip
 let listUnsub = null, tripUnsubs = [];
-function stopList() { if (listUnsub) listUnsub(); listUnsub = null; }
+function stopList() { if (listUnsub) listUnsub(); listUnsub = null; if (peopleUnsub) peopleUnsub(); peopleUnsub = null; store.people = []; }
+let peopleUnsub = null;
+function subscribePeople() {
+  peopleUnsub = fb.fsM.onSnapshot(fb.fsM.collection(fb.db, "people"), (s) => { store.people = s.docs.map((d) => ({ id: d.id, ...d.data() })); store.peopleError = ""; emit(); },
+    (e) => { console.warn("people", e); store.peopleError = e.code === "permission-denied" ? "Saved people need the new Firestore rules (people section)." : e.message; emit(); });
+}
 function stopTrip() { tripUnsubs.forEach((u) => u()); tripUnsubs = []; }
 function onErr(e) { console.error(e); store.error = e.code === "permission-denied" ? "This login doesn't have access." : e.message; emit(); }
 function subscribeList() {
@@ -140,6 +146,50 @@ export async function saveItem(item, priv) {
   if (priv) await fb.fsM.setDoc(fb.fsM.doc(col("private"), id), clean(priv));
   return id;
 }
+// ------------------------------------------------------------------ saved people + their travel documents (editors only)
+// people/{id}: { code, name, fullName, color, docs: [{ id, type, number, country, expiry, notes, file: { path, name, size, contentType } }] }
+const demoPeople = () => { store.people = Object.values(demo.people); };
+export async function savePerson(p) {
+  const id = p.id || uid("p");
+  const data = clean({ ...p, id: undefined, updatedBy: store.email, updatedAt: now() });
+  if (DEMO) { demo.people[id] = { id, ...(demo.people[id] || {}), ...data }; demoPeople(); emit(); return id; }
+  await fb.fsM.setDoc(fb.fsM.doc(fb.db, "people", id), data, { merge: true });
+  return id;
+}
+export async function deletePerson(p) {
+  for (const d of p.docs || []) if (d.file?.path) await deletePersonFile(d.file).catch(() => {});
+  if (DEMO) { delete demo.people[p.id]; demoPeople(); emit(); return; }
+  await fb.fsM.deleteDoc(fb.fsM.doc(fb.db, "people", p.id));
+}
+export async function uploadPersonFile(pid, file) {
+  const fid = uid("pf"), meta = { name: file.name, size: file.size, contentType: file.type || "application/octet-stream" };
+  if (DEMO) return { ...meta, path: "", demoUrl: URL.createObjectURL(file) };
+  const path = `people/${pid}/${fid}/${file.name}`;
+  await fb.stM.uploadBytes(fb.stM.ref(fb.storage, path), file, { contentType: meta.contentType });
+  return { ...meta, path };
+}
+export async function personFileUrl(f) { return DEMO ? f.demoUrl || "#" : fb.stM.getDownloadURL(fb.stM.ref(fb.storage, f.path)); }
+export async function deletePersonFile(f) { if (DEMO || !f?.path) return; await fb.stM.deleteObject(fb.stM.ref(fb.storage, f.path)); }
+const docSchema = () => req({
+  type: { type: "string", enum: ["passport", "visa", "esta", "licence", "idp", "insurance", "vaccination", "other"], description: "Kind of travel document" },
+  number: { type: "string", description: "Document / passport / visa / policy number" },
+  country: { type: "string", description: "Issuing country (or the country the visa/ESTA is for)" },
+  fullName: { type: "string", description: "Holder's full name as printed" },
+  expiry: { type: "string", description: "Expiry date YYYY-MM-DD" },
+  notes: { type: "string", description: "Anything important in a few words (e.g. multiple entry, valid for travel to USA)" },
+});
+export async function extractDocFromFile(file) {
+  if (DEMO) { await new Promise((r) => setTimeout(r, 400)); return { type: "passport", number: "PA1234567", country: "Australia", fullName: "Demo Person", expiry: "2027-03-01" }; }
+  const parts = [{ inlineData: { mimeType: file.type || "application/pdf", data: await toBase64(file) } },
+    { text: "Read this travel document (passport, visa, ESTA/eTA, driver licence, insurance, vaccination record...) and extract it into the JSON schema. Dates as YYYY-MM-DD. Use \"\" for anything not shown." }];
+  let lastErr;
+  for (let i = 0; i < AI_MODELS.length; i++) {
+    try { const m = await getModel(i, docSchema()); const res = await m.generateContent(parts); return dropEmpty(JSON.parse(res.response.text())); }
+    catch (e) { lastErr = e; if (!/not.?found|404|unsupported|model/i.test(String(e.message || e))) break; }
+  }
+  throw lastErr;
+}
+
 // ------------------------------------------------------------------ recommendations (Google Places, cached on the trip so the family sees them too)
 export async function saveRecs(key, rec) {
   if (DEMO) { const t = mem().trip; t.recs = { ...(t.recs || {}), [key]: clean(rec) }; demoLoad(store.tripId); emit(); return; }
@@ -283,12 +333,12 @@ const EXTRACT_SCHEMA = req({
   unsure: { type: "array", items: { type: "string" }, description: "Names of fields you guessed or could not read clearly, e.g. ['checkin','phone','who']; empty if all are clearly in the document" },
 });
 let aiModel = null;
-async function getModel(tryIndex = 0) {
+async function getModel(tryIndex = 0, schema = EXTRACT_SCHEMA) {
   const aiM = await import(`${FIREBASE_SDK}/firebase-ai.js`);
   const Backend = aiM.AgentPlatformBackend || aiM.VertexAIBackend;
   const ai = aiM.getAI(fb.app, { backend: new Backend(AI_LOCATION) });
   return aiM.getGenerativeModel(ai, { model: AI_MODELS[tryIndex],
-    generationConfig: { responseMimeType: "application/json", responseJsonSchema: EXTRACT_SCHEMA, temperature: 0 } });
+    generationConfig: { responseMimeType: "application/json", responseJsonSchema: schema, temperature: 0 } });
 }
 const dropEmpty = (o) => { for (const k of Object.keys(o)) { const v = o[k];
   if (v && typeof v === "object" && !Array.isArray(v)) dropEmpty(v); else if (v === "" || v === null) delete o[k]; } return o; };

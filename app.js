@@ -112,7 +112,7 @@ function render() {
   if (!store.ready) { root.innerHTML = `<div class="loading"><img class="logo-lg" src="icons/logo.svg" alt=""><br>Loading…</div>`; return; }
   if (!store.role) return renderLogin();
   if (store.role === "none") return renderNoAccess();
-  if (!ui.tripId) { data.openTrip(null); applyTheme(); return renderHome(); }
+  if (!ui.tripId) { data.openTrip(null); applyTheme(); if (isEditor()) setTimeout(checkDocAlerts, 300); return renderHome(); }
   data.openTrip(ui.tripId);
   if (!store.trip && !store.items.length) return renderEmpty();
   if (!PEOPLE().includes(ui.person)) ui.person = PEOPLE()[0];
@@ -122,6 +122,7 @@ function render() {
   if (ui.day) renderDay(); else if (ui.view === "journey") renderJourney(); else if (ui.view === "timeline") renderTimeline(); else if (ui.view === "budget") renderBudget(); else renderOverview();
   if (ui.slide) { root.querySelector(".ov,.tl,.journey,.dayview,.bd")?.classList.add(ui.slide); ui.slide = null; }
   if (isEditor() && store.trip) setTimeout(ensureRecs, 0);
+  if (isEditor()) setTimeout(checkDocAlerts, 300);
 }
 
 function renderLogin(err = "") {
@@ -183,7 +184,7 @@ function renderHome() {
       <span class="role ${store.role}">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span></div>
     <div class="menu">${isEditor() ? `<button class="btn small primary" data-act="newtrip">+ New Trip</button>` : ""}
       <details class="more"><summary class="btn small">⋯</summary><div class="pop">
-        ${isEditor() ? `<button data-act="import">Import a Trip File</button>` : ""}<button data-act="signout">Sign Out</button></div></details></div></header>
+        ${isEditor() ? `<button data-act="people">People & Documents</button><button data-act="import">Import a Trip File</button>` : ""}<button data-act="signout">Sign Out</button></div></details></div></header>
   <div class="home">
     ${!store.tripsLoaded ? `<p class="muted">Loading trips…</p>` : !trips.length ? `<div class="empty card"><h2>No Trips Yet</h2>
        ${isEditor() ? `<p>Create your first trip: name, dates and who's travelling.</p><button class="btn primary" data-act="newtrip">+ New Trip</button>` : `<p>Nothing has been planned yet.</p>`}</div>` : ""}
@@ -204,28 +205,31 @@ function tripForm(t) {
   const used = (t.travellers || []).map((x) => upc(x.color)).filter(Boolean);
   const nextColor = () => { const all = [...document.querySelectorAll('.prow[data-kind="t"]')].map((r) => r.dataset.color); return TDEFAULT.find((h) => !all.includes(h) && !used.includes(h)) || TDEFAULT[all.length % TDEFAULT.length]; };
   const row = (p, kind, k = 0) => { const c = upc(p.color) || (kind === "t" ? TDEFAULT[k % TDEFAULT.length] : "");
-    return `<div class="prow" data-kind="${kind}" ${kind === "t" ? `data-color="${c}" style="--pc:${c}"` : ""}>
+    const per = personFor(p), st = per ? personStatus(per) : null;
+    return `<div class="prow" data-kind="${kind}" data-pid="${esc(per?.id || "")}" ${kind === "t" ? `data-color="${c}" style="--pc:${c}"` : ""}>
       <input class="pcode" placeholder="Initials" maxlength="6" value="${esc(p.code || "")}" required>
       <input class="pname" placeholder="Name" value="${esc(p.name || "")}" ${kind === "t" ? "required" : ""}>
       <input class="pfull" placeholder="Full Name (as on Bookings)" value="${esc(p.fullName || "")}">
       <button type="button" class="btn tiny danger" data-rm title="Remove">✕</button>
+      <button type="button" class="btn tiny pdocs${st ? " " + st.level : ""}" data-docs title="${esc(st?.text || "Passport, visas and other documents")}"><i class="ic16">${I.file}</i>Documents${per?.docs?.length ? ` (${per.docs.length})` : ""}${st && st.level !== "ok" ? ` <span class="dwarn">!</span>` : ""}</button>
       ${kind === "t" ? `<div class="swrow" role="radiogroup" aria-label="Colour">${TCOLORS.map(([n, h]) => `<button type="button" class="swbtn${h === c ? " on" : ""}" style="--c:${h}" data-sw="${h}" role="radio" aria-checked="${h === c}" aria-label="${n}" title="${n}"></button>`).join("")}</div>` : ""}</div>`; };
+  const savedPick = (kind) => store.people.length ? `<select class="savedpick" data-pick="${kind}" aria-label="Add a saved person"><option value="">Add a saved person…</option>${[...store.people].sort((a, b) => (a.name || "").localeCompare(b.name || "")).map((x) => `<option value="${esc(x.id)}">${esc(x.name || x.code)} (${esc(x.code)})</option>`).join("")}</select>` : "";
   modal(`<h3>${isNew ? "New Trip" : "Trip Setup"}</h3>
     <label>Trip Name<input name="title" value="${esc(t.title)}" placeholder="e.g. Japan 2027" required></label>
     <div class="row"><label>Start<input type="date" name="start" value="${t.start || ""}" required></label><label>End<input type="date" name="end" value="${t.end || ""}" required></label></div>
     <fieldset class="pbox"><legend>Travellers (Each Gets Their Own Itinerary)</legend>
       <div id="trav">${(t.travellers || []).map((p, k) => row(p, "t", k)).join("")}</div>
-      <button type="button" class="btn tiny" data-addp="t">+ Add Traveller</button></fieldset>
+      <div class="addrow"><button type="button" class="btn tiny" data-addp="t">+ Add Traveller</button>${savedPick("t")}</div></fieldset>
     <fieldset class="pbox"><legend>Others Joining Sometimes (Optional)</legend>
       <div id="ext">${(t.extended || []).map((p) => row(p, "e")).join("")}</div>
-      <button type="button" class="btn tiny" data-addp="e">+ Add Person</button></fieldset>
+      <div class="addrow"><button type="button" class="btn tiny" data-addp="e">+ Add Person</button>${savedPick("e")}</div></fieldset>
     <p class="muted small">Initials are how people appear in the itinerary (e.g. CGC). Full names help the AI match names on bookings. The colour is each traveller's dot in the Overview.</p>
     <fieldset class="pbox"><legend>Colour Theme</legend><div class="themes">
       ${THEMES.map(([k, n, cs]) => `<label class="themecard"><input type="radio" name="theme" value="${k}" ${(t.theme || "ink") === k ? "checked" : ""}><span class="tsw">${cs.map((c) => `<i style="background:${c}"></i>`).join("")}</span><b>${n}</b></label>`).join("")}</div></fieldset>`,
     async (fd, form) => {
       const read = (kind) => [...form.querySelectorAll(`.prow[data-kind="${kind}"]`)].map((r) => ({
-        code: r.querySelector(".pcode").value.trim().toUpperCase(), name: r.querySelector(".pname").value.trim(), fullName: r.querySelector(".pfull").value.trim(), color: r.dataset.color || "" }))
-        .filter((p) => p.code).map(({ fullName, color, ...p }) => ({ ...p, ...(fullName ? { fullName } : {}), ...(color ? { color } : {}) }));
+        code: r.querySelector(".pcode").value.trim().toUpperCase(), name: r.querySelector(".pname").value.trim(), fullName: r.querySelector(".pfull").value.trim(), color: r.dataset.color || "", pid: r.dataset.pid || "" }))
+        .filter((p) => p.code).map(({ fullName, color, pid, ...p }) => ({ ...p, ...(fullName ? { fullName } : {}), ...(color ? { color } : {}), ...(pid ? { pid } : {}) }));
       const travellers = read("t"), extended = read("e");
       if (!travellers.length) throw new Error("Add at least one traveller");
       const codes = travellers.concat(extended).map((p) => p.code);
@@ -236,6 +240,8 @@ function tripForm(t) {
         const removed = (t.travellers || []).map((p) => p.code).filter((c) => !travellers.some((p) => p.code === c));
         if (removed.length && !confirm(`Remove ${removed.join(", ")} from the travellers? Their bookings stay but won't show in an itinerary.`)) throw new Error("Cancelled");
       }
+      // remember everyone for next time (saved people), and link each row to its saved person
+      for (const p of travellers.concat(extended)) { try { p.pid = await rememberPerson(p); } catch (e) { console.warn("people", e); } }
       const id = await data.saveTrip({ title: fd.get("title").trim(), start: fd.get("start"), end: fd.get("end"), travellers, extended, theme: fd.get("theme") || "ink" }, isNew ? null : t.id);
       if (isNew) { ui.person = travellers[0].code; localStorage.setItem("tp.person", ui.person); routeTo(id); }
     }, isNew ? null : async () => {
@@ -243,10 +249,24 @@ function tripForm(t) {
       if (typed !== "DELETE") throw new Error("Not deleted");
       await data.deleteTrip(t.id); routeTo(null);
     });
-  const form = document.querySelector(".sheet");
+  const form = [...document.querySelectorAll(".sheet")].pop();
+  form.addEventListener("change", (e) => {
+    const sel = e.target.closest("[data-pick]"); if (!sel || !sel.value) return;
+    const per = store.people.find((x) => x.id === sel.value), kind = sel.dataset.pick; sel.value = "";
+    if (!per) return;
+    if ([...form.querySelectorAll(".prow")].some((r) => r.dataset.pid === per.id || r.querySelector(".pcode").value.trim().toUpperCase() === per.code)) return toast(`${per.name} is already on this trip`);
+    const used2 = [...form.querySelectorAll('.prow[data-kind="t"]')].map((r) => r.dataset.color);
+    const color = kind === "t" ? (per.color && !used2.includes(upc(per.color)) ? upc(per.color) : nextColor()) : "";
+    form.querySelector(kind === "t" ? "#trav" : "#ext").insertAdjacentHTML("beforeend", row({ code: per.code, name: per.name, fullName: per.fullName, color, pid: per.id }, kind));
+  });
   form.addEventListener("click", (e) => {
     const rm = e.target.closest("[data-rm]"); if (rm) rm.closest(".prow").remove();
     const add = e.target.closest("[data-addp]"); if (add) form.querySelector(add.dataset.addp === "t" ? "#trav" : "#ext").insertAdjacentHTML("beforeend", row(add.dataset.addp === "t" ? { color: nextColor() } : {}, add.dataset.addp));
+    const dbtn = e.target.closest("[data-docs]");
+    if (dbtn) (async () => { const r = dbtn.closest(".prow");
+      const vals = { code: r.querySelector(".pcode").value.trim().toUpperCase(), name: r.querySelector(".pname").value.trim(), fullName: r.querySelector(".pfull").value.trim(), color: r.dataset.color || "", pid: r.dataset.pid };
+      if (!vals.code || !vals.name) return toast("Enter the initials and name first");
+      try { r.dataset.pid = await rememberPerson(vals); personForm(r.dataset.pid); } catch (x) { toast("Couldn't save the person: " + (x.code || x.message)); } })();
     const sw = e.target.closest("[data-sw]");
     if (sw) { const r = sw.closest(".prow"); r.dataset.color = sw.dataset.sw; r.style.setProperty("--pc", sw.dataset.sw);
       r.querySelectorAll("[data-sw]").forEach((b) => { b.classList.toggle("on", b === sw); b.setAttribute("aria-checked", b === sw); }); }
@@ -338,7 +358,7 @@ function header(opts = {}) {
       ${isEditor() ? `<button class="iconbtn" data-act="add" aria-label="Add booking" title="Add booking">${ICON.plus}</button>` : ""}
       <details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""}</span>
-        ${isEditor() ? `<button data-act="settings">Trip Setup</button><button data-act="import">Import Trip Data</button><button data-act="export">Download Backup</button><button data-act="bulk">Attach Documents…</button>` : ""}
+        ${isEditor() ? `<button data-act="settings">Trip Setup</button><button data-act="people">People & Documents</button><button data-act="import">Import Trip Data</button><button data-act="export">Download Backup</button><button data-act="bulk">Attach Documents…</button>` : ""}
         <button data-act="album">Export Album (Word)</button>
         <button data-act="signout">Sign Out</button></div></details>
     </div>
@@ -632,7 +652,16 @@ function budgetForm() {
       const methods = [...new Set(fd.getAll("pm").map((m) => m.trim()).filter(Boolean))];
       await data.savePrivate("_budget", { home: fd.get("home"), rates, total: +fd.get("total") || 0, cats, methods, ratesDate: form?.dataset.ratesDate || store.priv._budget?.ratesDate || "" });
     });
-  const form = document.querySelector(".sheet");
+  const form = [...document.querySelectorAll(".sheet")].pop();
+  form.addEventListener("change", (e) => {
+    const sel = e.target.closest("[data-pick]"); if (!sel || !sel.value) return;
+    const per = store.people.find((x) => x.id === sel.value), kind = sel.dataset.pick; sel.value = "";
+    if (!per) return;
+    if ([...form.querySelectorAll(".prow")].some((r) => r.dataset.pid === per.id || r.querySelector(".pcode").value.trim().toUpperCase() === per.code)) return toast(`${per.name} is already on this trip`);
+    const used2 = [...form.querySelectorAll('.prow[data-kind="t"]')].map((r) => r.dataset.color);
+    const color = kind === "t" ? (per.color && !used2.includes(upc(per.color)) ? upc(per.color) : nextColor()) : "";
+    form.querySelector(kind === "t" ? "#trav" : "#ext").insertAdjacentHTML("beforeend", row({ code: per.code, name: per.name, fullName: per.fullName, color, pid: per.id }, kind));
+  });
   form.addEventListener("click", (e) => {
     if (e.target.closest("[data-rm-pm]")) e.target.closest(".pmrow").remove();
     if (e.target.closest("[data-add-pm]")) { form.querySelector("#pmlist").insertAdjacentHTML("beforeend", `<div class="pmrow"><input name="pm" placeholder="e.g. Cash"><button type="button" class="btn tiny danger" data-rm-pm aria-label="Remove">✕</button></div>`); form.querySelector("#pmlist .pmrow:last-child input").focus(); }
@@ -1084,6 +1113,152 @@ function renderDay() {
   root.querySelectorAll("[data-attach-item]").forEach((inp) => (inp.onchange = () => upload(inp.files, { itemId: inp.dataset.attachItem })));
   root.querySelectorAll("[data-attach-day]").forEach((inp) => (inp.onchange = () => upload(inp.files, { date: inp.dataset.attachDay })));
 }
+// ------------------------------------------------------------------ saved people + travel documents (editors)
+const DOC_TYPES = [["passport", "Passport"], ["visa", "Visa"], ["esta", "ESTA / eTA"], ["licence", "Driver Licence"], ["idp", "International Driving Permit"], ["insurance", "Travel Insurance"], ["vaccination", "Vaccination"], ["other", "Other"]];
+const docName = (t) => (DOC_TYPES.find((x) => x[0] === t) || [, "Document"])[1];
+const addMonths = (s, n) => { const d = D(s); d.setMonth(d.getMonth() + n); return iso(d); };
+function personFor(p) {   // the saved person behind a trip row
+  if (!p) return null;
+  return store.people.find((x) => x.id === p.pid) || store.people.find((x) => x.code === p.code && (x.name || "").toLowerCase() === (p.name || "").toLowerCase()) || null;
+}
+async function rememberPerson(p) {
+  const ex = personFor(p) || store.people.find((x) => x.code === p.code && !p.name);
+  const rec = { code: p.code, name: p.name, ...(p.fullName ? { fullName: p.fullName } : {}), ...(p.color ? { color: p.color } : {}) };
+  if (ex) { if (ex.code !== rec.code || ex.name !== rec.name || (rec.fullName && ex.fullName !== rec.fullName) || (rec.color && ex.color !== rec.color)) await data.savePerson({ id: ex.id, ...rec }); return ex.id; }
+  return data.savePerson(rec);
+}
+const tripsOf = (per) => store.trips.filter((t) => t.end >= iso(new Date()) && (t.travellers || []).concat(t.extended || []).some((x) => x.pid === per.id || (!x.pid && x.code === per.code)));
+// one document's status: expired, runs out before/soon after a trip, or soon
+function docStatus(doc, per) {
+  if (!doc.expiry) return { level: "ok", text: "" };
+  const today = iso(new Date()), name = docName(doc.type);
+  if (doc.expiry < today) return { level: "bad", text: `${name} expired on ${longDate(doc.expiry)}` };
+  for (const t of tripsOf(per).sort((a, b) => a.start.localeCompare(b.start))) {
+    if (doc.expiry < t.end) return { level: "bad", text: `${name} expires ${longDate(doc.expiry)}, before the end of ${t.title} (${longDate(t.end)})` };
+    if (doc.type === "passport" && doc.expiry < addMonths(t.end, 6)) return { level: "warn", text: `Passport expires ${longDate(doc.expiry)}, less than 6 months after ${t.title} ends - many countries require 6 months' validity` };
+  }
+  const days = dayDiff(today, doc.expiry);
+  if (days <= 90) return { level: "warn", text: `${name} expires in ${days} day${days === 1 ? "" : "s"} (${longDate(doc.expiry)})` };
+  return { level: "ok", text: `Valid to ${longDate(doc.expiry)}` };
+}
+function personStatus(per) {
+  const sts = (per.docs || []).map((d) => docStatus(d, per)).filter((x) => x.level !== "ok");
+  return sts.find((x) => x.level === "bad") || sts[0] || { level: "ok", text: "" };
+}
+function docAlerts() {
+  return store.people.flatMap((per) => (per.docs || []).map((d) => ({ per, d, st: docStatus(d, per) })).filter((x) => x.st.level !== "ok"));
+}
+// pop-up when a document has a problem - once per session, again whenever the list of problems changes
+function checkDocAlerts() {
+  if (!isEditor() || !store.people.length || !store.tripsLoaded || document.querySelector(".modal")) return;
+  const list = docAlerts(); const sig = list.map((x) => x.per.id + x.d.id + x.st.level).join("|");
+  let seen = ""; try { seen = sessionStorage.getItem("tp.docalert") || ""; } catch (e) { /* ignore */ }
+  if (!list.length || sig === seen) return;
+  try { sessionStorage.setItem("tp.docalert", sig); } catch (e) { /* ignore */ }
+  infoBox(`<h2>Check Travel Documents</h2>
+    <ul class="dalerts">${list.map((x) => `<li class="${x.st.level}"><b>${esc(x.per.name || x.per.code)}</b> - ${esc(x.st.text)}<button type="button" class="lnk" data-openp="${esc(x.per.id)}">Open</button></li>`).join("")}</ul>
+    <p class="muted small">Update the document in People & Documents once it's renewed. This message shows again only if something changes.</p>`);
+}
+function infoBox(html) {
+  const m = document.createElement("div"); m.className = "modal";
+  m.innerHTML = `<div class="sheet">${html}<div class="row end"><span class="grow"></span><button type="button" class="btn primary" data-ok>OK</button></div></div>`;
+  document.body.appendChild(m);
+  const close = () => m.remove();
+  m.querySelector("[data-ok]").onclick = close; m.onclick = (e) => { if (e.target === m) close(); };
+  m.querySelectorAll("[data-openp]").forEach((b) => (b.onclick = () => { close(); personForm(b.dataset.openp); }));
+}
+function peopleList() {
+  const ppl = [...store.people].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  infoBox(`<h2>People & Documents</h2>
+    ${store.peopleError ? `<p class="jwarn small">${esc(store.peopleError)}</p>` : ""}
+    <p class="muted small">Everyone you add to a trip is saved here, so next time you can pick them in Trip Setup. Add passports, visas and other documents to each person.</p>
+    <div class="plist">${ppl.map((x) => { const st = personStatus(x);
+      return `<button type="button" class="prow2" data-openp="${esc(x.id)}" style="--pc:${upc(x.color) || "var(--muted)"}"><span class="pchip tp"><b>${esc(x.code)}</b></span><span class="pn">${esc(x.name || "")}<small>${(x.docs || []).length ? (x.docs || []).map((d) => docName(d.type)).join(", ") : "No documents yet"}</small></span>${st.level !== "ok" ? `<span class="dstat ${st.level}" title="${esc(st.text)}">!</span>` : ""}</button>`; }).join("") || `<p class="muted">Nobody saved yet - people are saved when you save a Trip Setup.</p>`}</div>
+    <button type="button" class="btn small" data-newp>+ Add Person</button>`);
+  const m = [...document.querySelectorAll(".modal")].pop();
+  m.querySelector("[data-newp]").onclick = () => { m.remove(); personForm(null); };
+}
+function personForm(pid) {
+  let per = store.people.find((x) => x.id === pid) || { code: "", name: "", fullName: "", docs: [] };
+  const docsHtml = () => (per.docs || []).length ? (per.docs || []).slice().sort((a, b) => (a.expiry || "9").localeCompare(b.expiry || "9")).map((d) => { const st = docStatus(d, per);
+    return `<div class="drow ${st.level}"><div class="dmain"><b>${esc(docName(d.type))}${d.country ? ` · ${esc(d.country)}` : ""}</b>
+      <small>${[d.number, d.expiry ? "Expires " + longDate(d.expiry) : "", d.notes].filter(Boolean).map(esc).join(" · ")}</small>
+      ${st.level !== "ok" ? `<small class="dmsg">${esc(st.text)}</small>` : ""}</div>
+      <div class="dacts">${d.file ? `<button type="button" class="ibtn" data-dfile="${esc(d.id)}" title="Open ${esc(d.file.name)}" aria-label="Open file">${I.file}</button>` : ""}
+      <button type="button" class="btn tiny" data-dedit="${esc(d.id)}">Edit</button><button type="button" class="ibtn danger" data-ddel="${esc(d.id)}" title="Delete" aria-label="Delete">${I.trash}</button></div></div>`; }).join("")
+    : `<p class="muted small">No documents yet.</p>`;
+  modal(`<h3>${per.id ? esc(per.name || per.code) : "New Person"}</h3>
+    <div class="row"><label>Initials<input name="code" maxlength="6" value="${esc(per.code)}" required></label><label>Name<input name="name" value="${esc(per.name)}" required></label></div>
+    <label>Full Name (as on Bookings)<input name="fullName" value="${esc(per.fullName || "")}"></label>
+    <fieldset class="pbox"><legend>Travel Documents</legend><div class="dlist">${docsHtml()}</div>
+      <button type="button" class="btn tiny" data-dadd>+ Add Document</button></fieldset>`,
+    async (fd) => {
+      const code = String(fd.get("code")).trim().toUpperCase(), name = String(fd.get("name")).trim();
+      if (!/^[A-Z0-9]{2,6}$/.test(code)) throw new Error("Initials: 2-6 letters, no spaces");
+      await data.savePerson({ ...(per.id ? { id: per.id } : {}), code, name, fullName: String(fd.get("fullName")).trim(), docs: per.docs || [] });
+    }, per.id ? async () => { await data.deletePerson(per); } : null);
+  const m = [...document.querySelectorAll(".modal")].pop(), form = m.querySelector("form");
+  const redraw = () => { per = store.people.find((x) => x.id === per.id) || per; m.querySelector(".dlist").innerHTML = docsHtml(); refreshDocBtns(); };
+  const ensure = async () => {   // a new person is saved before adding documents
+    if (per.id) return true;
+    const code = form.code.value.trim().toUpperCase(), name = form.name.value.trim();
+    if (!code || !name) { toast("Enter the initials and name first"); return false; }
+    per.id = await data.savePerson({ code, name, fullName: form.fullName.value.trim(), docs: [] }); per = { ...per, code, name };
+    return true;
+  };
+  m.addEventListener("click", async (e) => {
+    const t = e.target.closest("[data-dadd],[data-dedit],[data-ddel],[data-dfile]"); if (!t) return;
+    if (t.dataset.dadd !== undefined) { if (await ensure()) docForm(per, null, redraw); }
+    else if (t.dataset.dedit) docForm(per, (per.docs || []).find((d) => d.id === t.dataset.dedit), redraw);
+    else if (t.dataset.ddel) { const d = per.docs.find((x) => x.id === t.dataset.ddel); if (!confirm(`Delete ${docName(d.type)}${d.file ? " and its file" : ""}?`)) return;
+      try { if (d.file) await data.deletePersonFile(d.file).catch(() => {}); per.docs = per.docs.filter((x) => x.id !== d.id); await data.savePerson({ id: per.id, docs: per.docs }); redraw(); } catch (x) { toast(x.message); } }
+    else if (t.dataset.dfile) { const d = per.docs.find((x) => x.id === t.dataset.dfile); const w = window.open("", "_blank"); const u = await data.personFileUrl(d.file); if (w) w.location = u; else location.href = u; }
+  });
+}
+function refreshDocBtns() {
+  document.querySelectorAll(".prow[data-pid]").forEach((r) => { const per = store.people.find((x) => x.id === r.dataset.pid), b = r.querySelector("[data-docs]"); if (!per || !b) return;
+    const st = personStatus(per); b.className = "btn tiny pdocs" + (st.level !== "ok" ? " " + st.level : ""); b.title = st.text || "Passport, visas and other documents";
+    b.innerHTML = `<i class="ic16">${I.file}</i>Documents${per.docs?.length ? ` (${per.docs.length})` : ""}${st.level !== "ok" ? ` <span class="dwarn">!</span>` : ""}`; });
+}
+function docForm(per, doc, done) {
+  const isNew = !doc; doc = doc || { id: "d" + Date.now().toString(36), type: "passport" };
+  let file = null;
+  const m0 = document.createElement("div"); m0.className = "modal";
+  m0.innerHTML = `<form class="sheet"><h3>${isNew ? "Add Document" : "Edit " + esc(docName(doc.type))} · ${esc(per.name || per.code)}</h3>
+    <div class="extract"><label class="btn small pdfbtn"><i class="ic16">${I.scan}</i>${doc.file ? "Replace File" : "Add File (PDF or Photo)"}<input type="file" hidden accept="application/pdf,image/*" data-dfilein></label>
+      <span class="extract-status muted small">${doc.file ? "Attached: " + esc(doc.file.name) : "The details are read from the file - check them before saving."}</span></div>
+    <label>Type<select name="type">${DOC_TYPES.map(([k, n]) => `<option value="${k}" ${doc.type === k ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+    <div class="row"><label>Number<input name="number" value="${esc(doc.number || "")}"></label><label>Country<input name="country" value="${esc(doc.country || "")}" placeholder="Issued by / for"></label></div>
+    <label>Expiry Date<input type="date" name="expiry" value="${esc(doc.expiry || "")}"></label>
+    <label>Notes<input name="notes" value="${esc(doc.notes || "")}" placeholder="e.g. multiple entry"></label>
+    <div class="row end"><span class="grow"></span><button type="button" class="btn" data-cancel>Cancel</button><button class="btn primary">Save</button></div></form>`;
+  document.body.appendChild(m0);
+  const f = m0.querySelector("form"), close = () => m0.remove();
+  m0.querySelector("[data-cancel]").onclick = close;
+  f.querySelector("[data-dfilein]").onchange = async (ev) => {
+    file = ev.target.files[0]; if (!file) return;
+    if (file.size > 25 * 1024 * 1024) { file = null; return toast("Files must be under 25 MB"); }
+    const stEl = f.querySelector(".extract-status"); stEl.textContent = "Reading " + file.name + "…";
+    try { const x = await data.extractDocFromFile(file);
+      ["type", "number", "country", "expiry", "notes"].forEach((k) => { if (x[k] && f[k]) f[k].value = x[k]; });
+      stEl.textContent = `${file.name} - details filled in. Check them before saving.`;
+      if (x.fullName && per.fullName && x.fullName.toLowerCase().replace(/\s+/g, " ") !== per.fullName.toLowerCase().replace(/\s+/g, " ")) toast(`The document says "${x.fullName}" - is it ${per.name}'s?`);
+    } catch (e) { stEl.textContent = `${file.name} will be attached (couldn't read the details: ${e.code || e.message}).`; }
+  };
+  f.onsubmit = async (ev) => {
+    ev.preventDefault(); const btn = f.querySelector("button.primary"); btn.disabled = true;
+    try {
+      const next = { ...doc, type: f.type.value, number: f.number.value.trim(), country: f.country.value.trim(), expiry: f.expiry.value, notes: f.notes.value.trim() };
+      if (file) { const old = doc.file; next.file = await data.uploadPersonFile(per.id, file); if (old) data.deletePersonFile(old).catch(() => {}); }
+      Object.keys(next).forEach((k) => next[k] === "" && delete next[k]);
+      const docs = (per.docs || []).filter((d) => d.id !== doc.id).concat(next);
+      await data.savePerson({ id: per.id, docs }); per.docs = docs;
+      close(); done && done(); toast("Saved");
+      const st = docStatus(next, per); if (st.level !== "ok") infoBox(`<h2>Check This Document</h2><ul class="dalerts"><li class="${st.level}"><b>${esc(per.name)}</b> - ${esc(st.text)}</li></ul>`);
+    } catch (e) { btn.disabled = false; toast("Couldn't save: " + (e.code || e.message)); }
+  };
+}
+
 // ------------------------------------------------------------------ bulk attach (editors)
 // Pick many files (or a whole folder); each is matched to a booking by its confirmation number, flight number, names and dates -
 // first from the file name, then (PDFs and photos) by reading it with AI. Everything can be checked and changed before uploading.
@@ -1723,6 +1898,7 @@ const actions = {
     const b = document.querySelector(".modal button.primary"); if (b) b.textContent = "Download";
   },
   bulk: () => bulkAttach(),
+  people: () => peopleList(),
   import: () => {
     const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
     inp.onchange = async () => {

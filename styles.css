@@ -646,3 +646,9 @@ fieldset{min-width:0}
 .bmore{color:var(--flight-x);font-weight:600}
 .bvd{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--act-x)}
 .bvd .dmy{flex:1;max-width:180px} .bvd .dmy-face{padding:6px 10px;border-radius:10px;font-size:13px}
+/* ⋯ menus: icon + full label, never cut off */
+.more .pop{min-width:230px;max-width:calc(100vw - 24px);width:max-content;padding:4px 0 6px}
+.more .pop button{display:flex;align-items:center;gap:12px;white-space:nowrap;padding:11px 18px 11px 16px;color:var(--ink)}
+.more .pop button .ic16{color:var(--muted)} .more .pop button:hover .ic16{color:var(--ink)}
+.more .pop hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+.more .pop button[data-act="signout"]{color:var(--danger)} .more .pop button[data-act="signout"] .ic16{color:var(--danger)}

@@ -1468,6 +1468,10 @@ const BMON = { jan: 0, ene: 0, enero: 0, feb: 1, mar: 2, apr: 3, abr: 3, may: 4,
 function fileDates(name) {
   const out = [], t = store.trip || {}, y0 = +(t.start || "2000").slice(0, 4), re = /(\d{1,2})\s*[-_ ]?\s*(enero|jan|ene|feb|mar|apr|abr|may|jun|jul|aug|ago|sep|oct|nov|dec|dic)[a-z]*|(enero|jan|ene|feb|mar|apr|abr|may|jun|jul|aug|ago|sep|oct|nov|dec|dic)[a-z]*\s*[-_ ]?\s*(\d{1,2})(?!\d)/gi;
   const nm = String(name).replace(/(\d{1,2})\s*-\s*(\d{1,2})\s*([a-z]{3,5})/gi, "$1$3 $2$3").replace(/([a-z]{3,5})\s*(\d{1,2})\s*-\s*(\d{1,2})(?!\d)/gi, "$1$2 $1$3");
+  for (const m of String(name).matchAll(/(?<!\d)(20\d\d)[-_.](\d\d)[-_.](\d\d)(?!\d)|(?<!\d)(\d\d)[-_.]?(\d\d)[-_.]?(20\d\d)(?!\d)/g)) {   // 2026-09-18, 18092026, 18-09-2026
+    const [y, mo, d] = m[1] ? [m[1], m[2], m[3]] : [m[6], m[5], m[4]], iso2 = `${y}-${mo}-${d}`;
+    if (+mo >= 1 && +mo <= 12 && +d >= 1 && +d <= 31 && iso2 >= t.start && iso2 <= t.end) out.push(iso2);
+  }
   for (const m of nm.matchAll(re)) {
     const d = +(m[1] || m[4]), mo = BMON[(m[2] || m[3]).toLowerCase()]; if (!(d >= 1 && d <= 31)) continue;
     for (const y of [y0, y0 + 1]) { const iso2 = `${y}-${String(mo + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`; if (iso2 >= t.start && iso2 <= t.end) { out.push(iso2); break; } }
@@ -1529,6 +1533,25 @@ async function addOtherJourneys(x, file) {
     toast(`${j.route} on ${fmtDate(j.start)} added`);
   }
 }
+// Open-dated vouchers (e.g. "valid 6 months"): ask which day to use it instead of filling every day of the trip
+const needsDate = (x) => x && x.type === "activity" && (x.flexible || !x.start || (x.end && dayDiff(x.start, x.end) > 2));
+function voucherDefault(x, fileName, prefer) {
+  const t = store.trip, inTrip = (d) => d && d >= t.start && d <= t.end;
+  return [fileDates(fileName || "")[0], prefer, x.start, iso(new Date())].find(inTrip) || t.start;
+}
+function askVoucherDate(x, fileName, prefer) {
+  return new Promise((done) => {
+    const t = store.trip, from = [t.start, x.validFrom || ""].sort().at(-1), to = [t.end, x.validTo || "9999"].sort()[0];
+    const def = voucherDefault(x, fileName, prefer), m = document.createElement("div"); m.className = "modal";
+    m.innerHTML = `<form class="sheet"><h2>When Will You Use It?</h2>
+      <p class="muted small">${esc(x.text || x.name || "This voucher")} ${x.validFrom || x.validTo ? `can be used ${x.validFrom ? "from " + fmtDate(x.validFrom) : ""} ${x.validTo ? "until " + fmtDate(x.validTo) : ""}` : "has no fixed date"}. Choose the day to put it in the itinerary - you can change it later.</p>
+      <label>Date<input type="date" name="d" value="${def}" min="${from}" max="${to}" required></label>
+      <div class="row end"><span class="grow"></span>${x.start && x.end && x.start !== x.end ? `<button type="button" class="btn" data-range>Every Day ${fmtDate(x.start)} – ${fmtDate(x.end)}</button>` : ""}<button class="btn primary">Use This Date</button></div></form>`;
+    document.body.appendChild(m);
+    m.querySelector("[data-range]")?.addEventListener("click", () => { m.remove(); done(null); });
+    m.querySelector("form").onsubmit = (ev) => { ev.preventDefault(); const d = m.querySelector("[name=d]").value; m.remove(); done(d); };
+  });
+}
 // A booking built from what the AI read in a confirmation (bulk attach, when the trip doesn't have it yet)
 function aiLabel(x) {
   const d = x.start ? shortDate(x.start) + (x.end && x.end !== x.start ? "–" + shortDate(x.end) : "") : "";
@@ -1589,8 +1612,10 @@ function bulkAttach() {
     list.innerHTML = rows.map((r, i) => `<div class="brow ${r.target === "new" ? "new" : r.target ? "ok" : "none"}${r.state === "dup" ? " dup" : ""}">
       <div class="bname"><i class="ic16">${I.file}</i><span>${esc(r.file.name)}</span></div>
       <select data-bi="${i}" aria-label="Booking for ${esc(r.file.name)}" ${r.state === "reading" ? "disabled" : ""}>${opts(r.target, r)}</select>
+      ${r.vdate && r.target === "new" ? `<label class="bvd small">Voucher - use it on <input type="date" data-bvd="${i}" value="${r.vdate}" min="${store.trip.start}" max="${store.trip.end}"></label>` : ""}
       ${r.more?.length && r.target ? `<div class="bmore small">Also: ${r.more.map((m) => `${esc(aiLabel(m.ai))} (${m.target === "new" ? "new booking" : "matched"})`).join(" · ")}</div>` : ""}
       <div class="bwhy small">${r.state === "reading" ? "Reading the document…" : r.state === "dup" ? "Already attached to this booking - will be skipped" : r.target === "new" ? esc(r.why) : r.target ? "Matched: " + esc(r.why) : esc(r.why || "No match found - choose the booking, or leave it out")}</div></div>`).join("");
+    list.querySelectorAll("[data-bvd]").forEach((d) => (d.onchange = () => { const r = rows[+d.dataset.bvd]; if (d.value) { r.vdate = d.value; r.ai.start = r.ai.end = d.value; } }));
     list.querySelectorAll("[data-bi]").forEach((s) => (s.onchange = () => { const r = rows[+s.dataset.bi]; r.target = s.value; r.why = "chosen by you"; r.state = isDup(r) ? "dup" : "done"; draw(); }));
     const ready = rows.filter((r) => r.target && r.state !== "dup").length;
     btn.disabled = !ready || rows.some((r) => r.state === "reading"); btn.textContent = ready ? `Upload ${ready}` : "Upload";
@@ -1614,6 +1639,7 @@ function bulkAttach() {
         const x = await data.extractFromFile(r.file, "stay", { travellers: store.trip?.travellers || [], extended: store.trip?.extended || [], start: store.trip?.start, end: store.trip?.end });
         const best = targets.map((t) => { const a = scoreAI(t, x), n = scoreName(t, r.file.name, r.folder); return [t, a[0] + n[0] / 2, a[1] || n[1]]; }).sort((a, b) => b[1] - a[1])[0];
         r.ai = x;
+        if (needsDate(x)) { r.vdate = voucherDefault(x, r.file.name); x.start = x.end = r.vdate; }   // open-dated voucher: one day, editable in the row
         r.more = journeysOf(x).map((j) => { const b = targets.map((t) => [t, scoreAI(t, j)[0]]).sort((a, c) => c[1] - a[1])[0];
           return { ai: j, target: b && b[1] >= 50 ? b[0].kind + ":" + b[0].id : "new" }; });
         if (best && best[1] >= 50) { r.target = best[0].kind + ":" + best[0].id; r.why = best[2]; }
@@ -2111,6 +2137,8 @@ function entryForm(e) {
     const txt = [r.text || r.name, r.time ? "at " + r.time : ""].filter(Boolean).join(" ");
     setVal(form, "text", txt); setVal(form, "place", r.place || r.address); setVal(form, "pcost", r.private?.cost); setVal(form, "date", r.start || r.date); setVal(form, "endDate", r.end || r.start || r.date);
     if (Array.isArray(r.who) && r.who.length) form.querySelectorAll("input[name=who]").forEach((cb) => (cb.checked = r.who.includes(cb.value)));
+    const day0 = form.dataset.day0 || (form.dataset.day0 = form.querySelector("[name=date]")?.defaultValue || "");
+    if (needsDate(r)) askVoucherDate(r, form._pendingFile?.name, day0).then((d) => { if (d) { setVal(form, "date", d); setVal(form, "endDate", d); } });
     return "activity";
   });
 }

@@ -374,6 +374,8 @@ const EXTRACT_SCHEMA = req({
   pickup: S("Car pick-up location, short, e.g. MIA airport"), dropoff: S("Car drop-off location, short"),
   pickupTime: S("Car pick-up time HH:MM"), dropoffTime: S("Car drop-off time HH:MM"),
   text: S("Activity: short description, e.g. 'Xcaret full day + evening show'"),
+  flexible: { type: "boolean", description: "true if this is an open-dated voucher, pass or ticket usable on any day within a validity period (no booked visit date)" },
+  validFrom: S("Open-dated voucher: first day it can be used YYYY-MM-DD"), validTo: S("Open-dated voucher: last day it can be used YYYY-MM-DD"),
   place: S("Activity: place name for Google Maps"), time: S("Activity start time HH:MM"),
   note: S("One short practical note for the family, e.g. room type, breakfast included, parking, shuttle (no confirmation numbers or prices)"),
   private: req({
@@ -410,6 +412,7 @@ function splitJourneys(x) {
 export async function extractFromFile(file, hint, ctx) {
   if (DEMO) {
     await new Promise((r) => setTimeout(r, 600));
+    if (/sky|voucher/i.test(file.name)) return { type: "activity", who: ctx.travellers.map((t) => t.code), text: "Sky Tower Single Entry e-voucher", place: "Sky Tower, Auckland", flexible: true, validFrom: "2026-08-15", validTo: "2027-02-15", start: "", end: "", private: { confirmation: "RMKY17M", cost: "NZD 121.14" } };
     if (/return/i.test(file.name)) return splitJourneys({ type: "flight", who: ctx.travellers.map((t) => t.code), airline: "Air New Zealand", private: { confirmation: "5XFRSH" },
       journeys: [{ route: "CHC-BNE", number: "NZ205", start: "2027-01-20", end: "2027-01-20", dep: "06:00", arr: "07:05" }, { route: "BNE-AKL", number: "NZ148", start: "2027-01-10", end: "2027-01-11", dep: "19:35", arr: "00:45 (11-Jan)" }] });
     return { type: hint === "activity" ? "activity" : "stay", who: ctx.travellers.map((t) => t.code), start: "2027-01-14", end: "2027-01-15",
@@ -424,6 +427,8 @@ Traveller codes: ${people}. Put in "who" only the codes of these main travellers
 The user expects a "${hint}" booking but set "type" to what the document really is.
 Read the WHOLE document, every page, and fill EVERY field that applies to this type of booking - address, times, confirmation number,
 price, payment, cancellation policy and phone are almost always somewhere in a confirmation, often in small print.
+For an open-dated voucher or pass (valid for a period, no booked visit date): set "flexible" true, put the validity period in validFrom/validTo, and leave start/end "" unless a visit date is booked. Never use the purchase / order date as the activity date.
+The file is called "${file.name}" - its name may contain the intended date.
 For a return or multi-city flight booking, list EVERY separate journey in "journeys" (e.g. BNE-AKL on 17 Sep and CHC-BNE on 5 Oct) and fill the top-level flight fields with the FIRST journey only.
 For a hotel, "end" is the check-out date (a 1-night stay from 8 Jan has end 9 Jan). Hotel check-in/check-out times are often in the policies section.
 Dates as YYYY-MM-DD, times as 24h HH:MM. Use "" only for fields that really are not in the document or don't apply to this type. Keep texts short.`;

@@ -644,3 +644,5 @@ fieldset{min-width:0}
 .chk{display:flex;gap:8px;align-items:center;font-weight:600}
 .brow.new{border-left-color:var(--flight)} .brow.new .bwhy{color:var(--flight-x)}
 .bmore{color:var(--flight-x);font-weight:600}
+.bvd{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--act-x)}
+.bvd .dmy{flex:1;max-width:180px} .bvd .dmy-face{padding:6px 10px;border-radius:10px;font-size:13px}

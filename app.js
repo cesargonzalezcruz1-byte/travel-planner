@@ -1245,15 +1245,17 @@ function personForm(pid, opts = {}) {
         : `<label>${l}<input name="v_${k}" type="${t || "text"}" value="${esc(vault[k] || "")}" autocomplete="off"></label>`).join("")}</div>`).join("")
       + `<p class="muted small vtimer">Unlocked until ${new Date(secure.until).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}.</p>`;
   modal(`<h3>${per.id ? esc(per.name || per.code) : opts.title || "New Traveller Profile"}</h3>
-    <div class="row"><label>Initials<input name="code" maxlength="6" value="${esc(per.code)}" required></label><label>Name<input name="name" value="${esc(per.name)}" required></label></div>
+    <div class="row"><label>Initials<input name="code" maxlength="6" value="${esc(per.code)}" required></label><label>Preferred Name<input name="name" value="${esc(per.name)}" placeholder="What everyone calls them"></label></div>
     <label>Full Name (as on Passport)<input name="fullName" value="${esc(per.fullName || "")}"></label>
     <div><p class="rlabel">Colour (used on every trip)</p><div class="swrow pfsw" role="radiogroup" aria-label="Colour">${TCOLORS.map(([n, h]) => `<button type="button" class="swbtn${h === color ? " on" : ""}" style="--c:${h}" data-psw="${h}" role="radio" aria-checked="${h === color}" aria-label="${n}" title="${n}"></button>`).join("")}</div></div>
     <fieldset class="pbox"><legend>Travel Documents</legend><div class="dlist">${docsHtml()}</div>
       <button type="button" class="btn tiny" data-dadd>+ Add Document</button></fieldset>
     <fieldset class="pbox"><legend>Private Details</legend><div class="vbox">${vaultHtml()}</div></fieldset>`,
     async (fd) => {
-      const code = String(fd.get("code")).trim().toUpperCase(), name = String(fd.get("name")).trim();
+      const code = String(fd.get("code")).trim().toUpperCase(), full = String(fd.get("fullName")).trim();
+      const name = String(fd.get("name")).trim() || titleCase(full.split(/\s+/)[0] || "");   // blank: their first name
       if (!/^[A-Z0-9]{2,6}$/.test(code)) throw new Error("Initials: 2-6 letters, no spaces");
+      if (!name) throw new Error("Enter a preferred name or the full name");
       const id = await data.savePerson({ ...(per.id ? { id: per.id } : {}), code, name, fullName: String(fd.get("fullName")).trim(), color, docs: per.docs || [] });
       if (vault && unlocked()) { VAULT_FIELDS.forEach(([, fs]) => fs.forEach(([k]) => { const v = String(fd.get("v_" + k) ?? "").trim(); if (v) vault[k] = v; else delete vault[k]; }));
         await data.saveVault(id, vault); secure.vault[id] = vault; }
@@ -1265,8 +1267,8 @@ function personForm(pid, opts = {}) {
   const redraw = () => { per = store.people.find((x) => x.id === per.id) || per; m.querySelector(".dlist").innerHTML = docsHtml(); refreshDocBtns(); };
   const ensure = async () => {   // a new person is saved before adding documents
     if (per.id) return true;
-    const code = form.code.value.trim().toUpperCase(), name = form.name.value.trim();
-    if (!code || !name) { toast("Enter the initials and name first"); return false; }
+    const code = form.code.value.trim().toUpperCase(), name = form.name.value.trim() || titleCase(form.fullName.value.trim().split(/\s+/)[0] || "");
+    if (!/^[A-Z0-9]{2,6}$/.test(code)) { toast("Enter the initials first (2-6 letters)"); return false; }
     per.id = await data.savePerson({ code, name, fullName: form.fullName.value.trim(), color, docs: [] }); per = { ...per, code, name };
     m.querySelector(".vbox").innerHTML = vaultHtml();
     return true;
@@ -1314,6 +1316,7 @@ async function reconcileProfile(per, vault, x) {
     ["nationality", "Nationality", cur("v_nationality", vault.nationality), x.nationality && titleCase(x.nationality), sameCountry, (v) => v],
   ];
   const set = {}, filled = [], clashes = [];
+  if (!cur("name", per.name) && x.fullName) { set.name = titleCase(x.fullName.trim().split(/\s+/)[0]); filled.push("preferred name"); }
   fields.forEach(([k, label, mine, theirs, same, show]) => {
     if (!theirs) return;
     if (!mine) { set[k] = theirs; filled.push(label.toLowerCase()); }
@@ -1339,11 +1342,12 @@ function askProfileClash(per, clashes) {
 }
 function applyProfileFix(per, vault, set) {
   if (set.fullName) per.fullName = set.fullName;
+  if (set.name) per.name = set.name;
   if (set.dob) vault.dob = set.dob;
   if (set.nationality) vault.nationality = set.nationality;
   // keep the open profile form in step, so saving it doesn't put the old values back
   const pf = profileFormOpen();
-  if (pf) { if (set.fullName) pf.fullName.value = set.fullName; if (set.dob && pf.v_dob) pf.v_dob.value = set.dob; if (set.nationality && pf.v_nationality) pf.v_nationality.value = set.nationality; }
+  if (pf) { if (set.name && !pf.name.value.trim()) pf.name.value = set.name; if (set.fullName) pf.fullName.value = set.fullName; if (set.dob && pf.v_dob) pf.v_dob.value = set.dob; if (set.nationality && pf.v_nationality) pf.v_nationality.value = set.nationality; }
 }
 // Document: type, country, expiry and notes go in the profile (they drive the expiry warnings); the number and the scan go in the vault.
 function docForm(per, vault, doc, done) {
@@ -1390,7 +1394,7 @@ function docForm(per, vault, doc, done) {
       await data.saveVault(per.id, vault);
       step = "saving the profile";
       const docs = (per.docs || []).filter((d) => d.id !== doc.id).concat(next);
-      await data.savePerson({ id: per.id, docs, ...(profileFix?.set.fullName ? { fullName: profileFix.set.fullName } : {}) }); per.docs = docs;
+      await data.savePerson({ id: per.id, docs, ...(profileFix?.set.fullName ? { fullName: profileFix.set.fullName } : {}), ...(profileFix?.set.name ? { name: profileFix.set.name } : {}) }); per.docs = docs;
       close(); done && done(); toast("Saved");
       const st = docStatus(next, per); if (st.level !== "ok") infoBox(`<h2>Check This Document</h2><ul class="dalerts"><li class="${st.level}"><b>${esc(per.name)}</b> - ${esc(st.text)}</li></ul>`);
     } catch (e) { btn.disabled = false; console.error(step, e);

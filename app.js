@@ -175,7 +175,7 @@ function renderHome() {
     return `<article class="tripcard" data-open="${esc(t.id)}" role="button" tabindex="0">
       <div class="tc-top"><h3>${esc(t.title || "Untitled Trip")}</h3>${status}</div>
       <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
-      <div class="tc-people">${(t.travellers || []).map((p, k) => `<span class="pchip tp" style="--pc:${upc(p.color) || TCOLORS[k % TCOLORS.length][1]}" title="${esc(p.name || p.code)}"><b>${esc(p.code)}</b></span>`).join("")}</div>
+      <div class="tc-people">${(t.travellers || []).map((p, k) => `<span class="pchip tp" style="--pc:${upc(p.color) || TDEFAULT[k % TDEFAULT.length]}" title="${esc(p.name || p.code)}"><b>${esc(p.code)}</b></span>`).join("")}</div>
       ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
     </article>`;
   };
@@ -202,8 +202,8 @@ function renderHome() {
 function tripForm(t) {
   const isNew = !t; t = t || { title: "", start: "", end: "", travellers: [{ code: "", name: "" }], extended: [] };
   const used = (t.travellers || []).map((x) => upc(x.color)).filter(Boolean);
-  const nextColor = () => { const all = [...document.querySelectorAll('.prow[data-kind="t"]')].map((r) => r.dataset.color); return (TCOLORS.find(([, h]) => !all.includes(h) && !used.includes(h)) || TCOLORS[all.length % TCOLORS.length])[1]; };
-  const row = (p, kind, k = 0) => { const c = upc(p.color) || (kind === "t" ? TCOLORS[k % TCOLORS.length][1] : "");
+  const nextColor = () => { const all = [...document.querySelectorAll('.prow[data-kind="t"]')].map((r) => r.dataset.color); return TDEFAULT.find((h) => !all.includes(h) && !used.includes(h)) || TDEFAULT[all.length % TDEFAULT.length]; };
+  const row = (p, kind, k = 0) => { const c = upc(p.color) || (kind === "t" ? TDEFAULT[k % TDEFAULT.length] : "");
     return `<div class="prow" data-kind="${kind}" ${kind === "t" ? `data-color="${c}" style="--pc:${c}"` : ""}>
       <input class="pcode" placeholder="Initials" maxlength="6" value="${esc(p.code || "")}" required>
       <input class="pname" placeholder="Name" value="${esc(p.name || "")}" ${kind === "t" ? "required" : ""}>
@@ -293,17 +293,20 @@ const codesOf = (route) => String(route || "").split(/[-–>]+/).map((c) => c.tr
 const withText = (p, date) => { const w = PEOPLE().filter((o) => o !== p && together(p, o, date)).map(NAME); return w.length ? "With " + w.join(" & ") : ""; };
 
 // ---------------------------------------------------------------- traveller colours (picked in Trip Setup; none of them is used by a theme)
-// Traveller colours: all dark enough for white initials (contrast 4.5:1 or more), none clashing with the theme colours
-const TCOLORS = [["Teal", "#0F7C72"], ["Coral", "#D2442C"], ["Ochre", "#A15F08"], ["Forest", "#2E7D32"], ["Ocean", "#0B76A0"], ["Olive", "#5B7A14"], ["Rust", "#9A3F24"], ["Mocha", "#7A5C3E"]];
-// earlier, lighter versions -> their darker replacement (so trips set up before keep the same choice)
-const OLDC = { "#14B8A6": "#0F7C72", "#FF7A59": "#D2442C", "#F2A93B": "#A15F08", "#22A06B": "#2E7D32", "#17B2D9": "#0B76A0", "#8BBF2B": "#5B7A14", "#C8553D": "#9A3F24", "#C9A66B": "#7A5C3E" };
+// Traveller colours: a rainbow, every one dark enough for white initials (contrast 5:1 or more) and clearly different from its neighbours
+const TCOLORS = [["Red", "#C62828"], ["Orange", "#B35300"], ["Gold", "#856A00"], ["Green", "#2E7D32"], ["Teal", "#00796B"], ["Blue", "#1565C0"], ["Violet", "#6A35C9"], ["Magenta", "#B0186E"]];
+// new travellers get colours far apart from each other first
+const TDEFAULT = ["#1565C0", "#B35300", "#2E7D32", "#B0186E", "#00796B", "#C62828", "#6A35C9", "#856A00"];
+// earlier palettes -> nearest rainbow colour (so trips set up before keep a similar choice)
+const OLDC = { "#14B8A6": "#00796B", "#0F7C72": "#00796B", "#FF7A59": "#C62828", "#D2442C": "#C62828", "#F2A93B": "#856A00", "#A15F08": "#856A00",
+  "#22A06B": "#2E7D32", "#17B2D9": "#1565C0", "#0B76A0": "#1565C0", "#8BBF2B": "#2E7D32", "#5B7A14": "#2E7D32", "#C8553D": "#B35300", "#9A3F24": "#B35300", "#C9A66B": "#B0186E", "#7A5C3E": "#B0186E" };
 const upc = (h) => (h && OLDC[h.toUpperCase()]) || h;
 const THEMES = [["ink", "Ink & Violet", ["#16141F", "#2F6FED", "#7A4BD6", "#5D6573", "#E0457B"]],
   ["lavender", "Lavender & Pink", ["#4B2A8C", "#3D6BE0", "#C2367A", "#5D6573", "#7C4DDB"]],
   ["midnight", "Midnight (dark)", ["#000000", "#6E9BFF", "#A47BFF", "#9AA3B2", "#FF5FA2"]]];
 function pcolor(code) {
   const tr = store.trip?.travellers || []; const k = tr.findIndex((t) => t.code === code);
-  return (k >= 0 && upc(tr[k].color)) || TCOLORS[Math.max(0, k) % TCOLORS.length][1];
+  return (k >= 0 && upc(tr[k].color)) || TDEFAULT[Math.max(0, k) % TDEFAULT.length];
 }
 const inkOn = (hex) => { const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255; return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#16141F" : "#FFFFFF"; };
 function applyTheme() {

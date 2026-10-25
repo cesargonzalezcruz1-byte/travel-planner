@@ -572,3 +572,6 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .ov-swap svg{width:12px;height:12px;display:block;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .ov-swap.c1{background:var(--clash1)} .ov-swap.c2{background:var(--clash2)}
 .ov-lab.loc b{font-weight:500}
+.swbtn{display:grid;place-items:center;transition:transform .12s}
+.swbtn:hover{transform:scale(1.08)}
+.swbtn.on::after{content:"";width:11px;height:6px;border:solid #fff;border-width:0 0 2.5px 2.5px;transform:translate(0,-1px) rotate(-45deg)}

@@ -12,7 +12,7 @@ service firebase.storage {
       allow create, update: if isEditor() && request.resource.size < 25 * 1024 * 1024;
     }
     function recentAuth() {
-      return request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(15, 'm');
+      return request.auth.token.auth_time * 1000 > request.time.toMillis() - 15 * 60 * 1000;
     }
     // Passport / visa scans: editors who signed in (or confirmed it's them) in the last 15 minutes, max 25 MB per file
     match /people/{personId}/{fileId}/{fileName} {

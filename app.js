@@ -1311,23 +1311,28 @@ function docForm(per, vault, doc, done) {
     } catch (e) { stEl.textContent = `${file.name} will be attached (couldn't read the details: ${e.code || e.message}).`; }
   };
   f.onsubmit = async (ev) => {
-    ev.preventDefault(); const btn = f.querySelector("button.primary"); btn.disabled = true;
+    ev.preventDefault(); const btn = f.querySelector("button.primary"); btn.disabled = true; let step = "confirming it's you";
     try {
       if (!unlocked()) await unlock();
       const next = { id: doc.id, type: f.type.value, country: f.country.value.trim(), expiry: f.expiry.value, notes: f.notes.value.trim() };
       const num = f.number.value.trim();
       vault.docNumbers ||= {}; if (num) vault.docNumbers[doc.id] = num; else delete vault.docNumbers[doc.id];
       vault.files ||= {};
+      step = "uploading the scan";
       if (file) { const nf = await data.uploadPersonFile(per.id, file); if (curFile) data.deletePersonFile(curFile).catch(() => {}); vault.files[doc.id] = nf; }
       else if (doc.file && !vault.files[doc.id]) vault.files[doc.id] = doc.file;
       if (vault.files[doc.id]) next.hasFile = true;
       Object.keys(next).forEach((k) => next[k] === "" && delete next[k]);
+      step = "saving the private details";
       await data.saveVault(per.id, vault);
+      step = "saving the profile";
       const docs = (per.docs || []).filter((d) => d.id !== doc.id).concat(next);
       await data.savePerson({ id: per.id, docs }); per.docs = docs;
       close(); done && done(); toast("Saved");
       const st = docStatus(next, per); if (st.level !== "ok") infoBox(`<h2>Check This Document</h2><ul class="dalerts"><li class="${st.level}"><b>${esc(per.name)}</b> - ${esc(st.text)}</li></ul>`);
-    } catch (e) { btn.disabled = false; toast(e.code === "permission-denied" || e.code === "storage/unauthorized" ? "Needs the new security rules (vault) - or confirm it's you again" : "Couldn't save: " + (e.code || e.message)); }
+    } catch (e) { btn.disabled = false; console.error(step, e);
+      if (e.code === "permission-denied" || e.code === "storage/unauthorized") secure.until = 0;   // ask Google again next time
+      toast(`Couldn't save while ${step}: ${e.code || e.message}${e.code === "permission-denied" || e.code === "storage/unauthorized" ? " - tap Save again to confirm it's you" : ""}`); }
   };
 }
 

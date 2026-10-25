@@ -11,11 +11,18 @@ const shortDate = (s) => { const d = D(s); return `${d.getDate()} ${MON[d.getMon
 const firstLine = (t) => String(t || "").split("\n")[0].trim();
 const joinNames = (a) => (a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " & " + a.at(-1));
 
-function areaOf(i) {
+// Town or city of a stay, from its address (or the Town / City field). Skips street, postcode, state/region and country parts.
+const COUNTRY = /^(USA|US|U\.S\.A?\.?|United States( of America)?|America|Mexico|México|Australia|Canada|New Zealand|NZ|Aotearoa|United Kingdom|UK|Great Britain|England|Scotland|Wales|Ireland|Japan|France|Spain|España|Italy|Italia|Germany|Deutschland|Portugal|Greece|Netherlands|Switzerland|Austria|Thailand|Indonesia|Bali|Singapore|Malaysia|Fiji|China|Hong Kong|Korea|South Korea|Vietnam|Philippines|India|Brazil|Argentina|Chile|Peru|Colombia|Costa Rica|Cuba|Canada)$/i;
+const REGION = /\b(region|state|province|county|prefecture|district|territory|estado|municipality)\b|^(Northland|Waikato|Bay of Plenty|Gisborne|Hawke's Bay|Taranaki|Manawatu-Whanganui|Wellington Region|Tasman|Marlborough|West Coast|Canterbury|Otago|Southland|Queensland|New South Wales|Tasmania|Western Australia|South Australia|Northern Territory|Quintana Roo|Baja California|Baja California Sur|Yucatán|Yucatan|Jalisco|Florida|California|Texas|Hawaii|Nevada)$/i;
+const STREET = /\b(street|st|road|rd|drive|dr|avenue|ave|av|highway|hwy|sh|lane|ln|place|pl|boulevard|blvd|way|terrace|tce|crescent|cres|parade|pde|court|ct|close|grove|calle|carretera|lote|km|rue|via|unit|suite|level|floor|apt|building|po box)\b\.?/i;
+export function areaOf(i) {
   if (i.area) return i.area;
-  const parts = String(i.address || "").split(",").map((x) => x.trim()).filter(Boolean);
-  const cand = parts.filter((x) => !/\d/.test(x) && !/^[A-Z]{2,3}$/.test(x) && !/^(USA|US|United States( of America)?|Mexico|México|Australia|Canada)$/i.test(x));
-  return parts.length > 1 && cand.length ? cand.at(-1) : "";
+  const raw = String(i.address || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (raw.length < 2) return "";
+  const parts = raw.map((x, k) => ({ k, digits: /\d/.test(x), t: x.replace(/\b\d[\d-]*\b/g, " ").replace(/\s+/g, " ").trim().replace(/\s+[A-Z]{2,3}$/, "") }));
+  const cand = parts.filter((p) => p.t && !(p.k === 0 && /^\d/.test(raw[0])) && !/^[A-Z]{2,3}$/.test(p.t) && !COUNTRY.test(p.t) && !REGION.test(p.t) && !STREET.test(p.t));
+  const withCode = cand.filter((p) => p.digits);   // "Queenstown 9371", "75001 Paris": the part with the postcode is usually the town
+  return (withCode.at(-1) || cand.at(-1))?.t || "";
 }
 
 const C = { accent: "6E4BD8", ink: "1F1B2E", muted: "6B6880", star: "E59A0B", line: "D9D4EA" };

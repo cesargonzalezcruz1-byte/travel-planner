@@ -368,6 +368,7 @@ const EXTRACT_SCHEMA = req({
   dep: S("Flight departure time HH:MM (24h)"), arr: S("Flight arrival time HH:MM (24h); add (dd-Mon) if next day"),
   name: S("Hotel / property / activity full name"), short: S("Short hotel name for a small grid cell, max 14 characters"),
   address: S("Full street address of the hotel / property / activity / pick-up desk"),
+  area: S("Hotel / property: the town or city it is in, e.g. Queenstown (not the region or country)"),
   checkin: S("Hotel check-in time HH:MM (24h), e.g. 15:00"), checkout: S("Hotel check-out time HH:MM (24h), e.g. 11:00"),
   company: S("Car rental company"), vehicle: S("Short vehicle description, e.g. 7-seat SUV"),
   pickup: S("Car pick-up location, short, e.g. MIA airport"), dropoff: S("Car drop-off location, short"),

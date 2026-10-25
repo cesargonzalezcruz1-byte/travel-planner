@@ -1,6 +1,6 @@
 import * as data from "./data.js";
 import { drawDayMap, mapsReady, searchPlaces } from "./map.js";
-import { buildAlbum } from "./album.js";
+import { buildAlbum, areaOf } from "./album.js";
 // Preview another date: add ?today=2027-01-14 to the address to see the app as it will look on that day
 (() => { const m = location.search.match(/[?&]today=(\d{4}-\d{2}-\d{2})/); if (!m) return;
   const R = Date, off = new R(m[1] + "T12:00:00").getTime() - R.now();   // shift the clock, keep it ticking
@@ -687,12 +687,6 @@ function budgetForm() {
 // ---------------------------------------------------------------- Overview (the spreadsheet, phone-sized)
 // Stays and cars use two half-columns: a booking starts in the right half of its first day, fills both halves in between
 // and ends in the left half of its last day, so hand-overs read like the spreadsheet. Each booking is one SVG shape.
-function areaOf(i) {
-  if (i.area) return i.area;
-  const parts = String(i.address || "").split(",").map((x) => x.trim()).filter(Boolean);
-  const cand = parts.filter((x) => !/\d/.test(x) && !/^[A-Z]{2,3}$/.test(x) && !/^(USA|US|United States( of America)?|Mexico|México|Australia|Canada)$/i.test(x));
-  return parts.length > 1 && cand.length ? cand.at(-1) : "";
-}
 const placeCode = (x) => { const m = String(x || "").trim().match(/^([A-Z]{3})\b/); return m ? m[1] : String(x || "").replace(/\s*airport$/i, "").trim(); };
 const ROW_H = 34;
 function renderOverview() {
@@ -1541,7 +1535,7 @@ function aiLabel(x) {
   const what = x.type === "flight" ? `Flight ${x.route || ""} ${x.number || ""}` : x.type === "stay" ? `Stay ${x.short || x.name || ""}` : x.type === "car" ? `Car ${x.company || ""}` : `Activity ${x.text || x.name || ""}`;
   return `${what.trim()} · ${d}`;
 }
-const AI_FIELDS = { flight: ["route", "airline", "number", "dep", "arr"], stay: ["name", "short", "address", "checkin", "checkout"], car: ["company", "vehicle", "pickup", "dropoff", "pickupTime", "dropoffTime", "address"] };
+const AI_FIELDS = { flight: ["route", "airline", "number", "dep", "arr"], stay: ["name", "short", "address", "area", "checkin", "checkout"], car: ["company", "vehicle", "pickup", "dropoff", "pickupTime", "dropoffTime", "address"] };
 async function createFromAI(x) {
   const who = (x.who || []).filter((c) => PEOPLE().includes(c)); const people = who.length ? who : PEOPLE();
   const priv = Object.fromEntries(Object.entries(x.private || {}).filter(([, v]) => v));
@@ -1862,7 +1856,7 @@ async function upload(files, where) {
 // ---------------------------------------------------------------- forms
 const FIELDS = {
   flight: [["route", "Route (e.g. BNE-LAX)"], ["airline", "Airline"], ["number", "Flight Number"], ["dep", "Departs"], ["arr", "Arrives"]],
-  stay: [["name", "Hotel Name"], ["short", "Short Name (for the Itinerary)"], ["address", "Address"], ["checkin", "Check-In Time"], ["checkout", "Check-Out Time"]],
+  stay: [["name", "Hotel Name"], ["short", "Short Name (for the Itinerary)"], ["address", "Address"], ["area", "Town / City (for the Itinerary)"], ["checkin", "Check-In Time"], ["checkout", "Check-Out Time"]],
   car: [["company", "Company"], ["vehicle", "Vehicle"], ["pickup", "Pick-Up Location"], ["dropoff", "Drop-Off Location"], ["pickupTime", "Pick-Up Time"], ["dropoffTime", "Drop-Off Time"]],
 };
 const PRIV_KEYS = ["confirmation", "tickets", "seats", "cost", "paidWith", "dueAtHotel", "cancel", "phone", "notes"];

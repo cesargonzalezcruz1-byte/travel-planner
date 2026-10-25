@@ -216,12 +216,14 @@ const docSchema = () => req({
   type: { type: "string", enum: ["passport", "visa", "esta", "licence", "idp", "insurance", "vaccination", "other"], description: "Kind of travel document" },
   number: { type: "string", description: "Document / passport / visa / policy number" },
   country: { type: "string", description: "Issuing country (or the country the visa/ESTA is for)" },
-  fullName: { type: "string", description: "Holder's full name as printed" },
+  fullName: { type: "string", description: "Holder's full name as printed, given names first, e.g. Cesar Gonzalez Cruz" },
+  dob: { type: "string", description: "Holder's date of birth YYYY-MM-DD" },
+  nationality: { type: "string", description: "Holder's nationality as a country name, e.g. Australia" },
   expiry: { type: "string", description: "Expiry date YYYY-MM-DD" },
   notes: { type: "string", description: "Anything important in a few words (e.g. multiple entry, valid for travel to USA)" },
 });
 export async function extractDocFromFile(file) {
-  if (DEMO) { await new Promise((r) => setTimeout(r, 400)); return { type: "passport", number: "PA1234567", country: "Australia", fullName: "Demo Person", expiry: "2027-03-01" }; }
+  if (DEMO) { await new Promise((r) => setTimeout(r, 400)); return { type: "passport", number: "PA1234567", country: "Australia", fullName: "Demo Person", dob: "1990-02-03", nationality: "Australia", expiry: "2027-03-01" }; }
   const parts = [{ inlineData: { mimeType: file.type || "application/pdf", data: await toBase64(file) } },
     { text: "Read this travel document (passport, visa, ESTA/eTA, driver licence, insurance, vaccination record...) and extract it into the JSON schema. Dates as YYYY-MM-DD. Use \"\" for anything not shown." }];
   let lastErr;

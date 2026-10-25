@@ -1120,6 +1120,26 @@ function renderDay() {
   root.querySelectorAll("[data-attach-item]").forEach((inp) => (inp.onchange = () => upload(inp.files, { itemId: inp.dataset.attachItem })));
   root.querySelectorAll("[data-attach-day]").forEach((inp) => (inp.onchange = () => upload(inp.files, { date: inp.dataset.attachDay })));
 }
+// ------------------------------------------------------------------ date fields shown as dd-mmm-yy everywhere
+// The browser's own date box follows the computer's region (e.g. mm/dd/yyyy); each one is covered by a label in our format,
+// while the real (invisible) date input underneath still opens the calendar and holds the value.
+const dmy = (v) => { if (!/^\d{4}-\d\d-\d\d$/.test(v || "")) return ""; const [y, m, d] = v.split("-"); return `${d}-${MON[+m - 1]}-${y.slice(2)}`; };
+function enhanceDate(inp) {
+  if (inp.dataset.dmy) return; inp.dataset.dmy = "1";
+  const wrap = document.createElement("span"); wrap.className = "dmy";
+  inp.parentNode.insertBefore(wrap, inp); wrap.appendChild(inp);
+  const face = document.createElement("span"); face.className = "dmy-face"; face.setAttribute("aria-hidden", "true"); wrap.appendChild(face);
+  const show = () => { const t = dmy(inp.value); face.textContent = t || "dd-mmm-yy"; face.classList.toggle("empty", !t); };
+  const proto = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+  Object.defineProperty(inp, "value", { get() { return proto.get.call(this); }, set(v) { proto.set.call(this, v); show(); }, configurable: true });
+  inp.addEventListener("input", show); inp.addEventListener("change", show);
+  inp.addEventListener("click", () => { try { inp.showPicker(); } catch (e) { /* older browsers open it themselves */ } });
+  show();
+}
+new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType !== 1) return;
+  if (n.matches?.('input[type="date"]')) enhanceDate(n); n.querySelectorAll?.('input[type="date"]').forEach(enhanceDate); })))
+  .observe(document.documentElement, { childList: true, subtree: true });
+
 // ------------------------------------------------------------------ saved people + travel documents (editors)
 const DOC_TYPES = [["passport", "Passport"], ["visa", "Visa"], ["esta", "ESTA / eTA"], ["licence", "Driver Licence"], ["idp", "International Driving Permit"], ["insurance", "Travel Insurance"], ["vaccination", "Vaccination"], ["other", "Other"]];
 const docName = (t) => (DOC_TYPES.find((x) => x[0] === t) || [, "Document"])[1];
@@ -1284,10 +1304,54 @@ function refreshDocBtns() {
     b.innerHTML = `<i class="ic16">${I.file}</i>Profile${per.docs?.length ? ` · ${per.docs.length} doc${per.docs.length > 1 ? "s" : ""}` : ""}${st.level !== "ok" ? ` <span class="dwarn">!</span>` : ""}`;
     if (per.color && r.dataset.kind === "t") { const c = upc(per.color); r.dataset.color = c; r.style.setProperty("--pc", c); r.querySelectorAll("[data-sw]").forEach((x) => { x.classList.toggle("on", x.dataset.sw === c); x.setAttribute("aria-checked", x.dataset.sw === c); }); } });
 }
+// After reading a document: fill empty profile fields from it, and ask which value is right when they differ.
+const titleCase = (t) => String(t || "").toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+const sameName = (a, b) => { const k = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").split(/[^a-z]+/).filter(Boolean).sort().join(" "); return k(a) === k(b); };
+const sameCountry = (a, b) => { const k = (x) => String(x || "").toLowerCase().replace(/[^a-z]/g, "").replace(/(ian|ean|an|n)$/, ""); return k(a) === k(b) || k(a).startsWith(k(b)) || k(b).startsWith(k(a)); };
+const profileFormOpen = () => [...document.querySelectorAll(".modal form")].find((f) => f.fullName && f.querySelector("[data-dadd]"));
+async function reconcileProfile(per, vault, x) {
+  const pf = profileFormOpen(), cur = (k, fallback) => (pf && pf[k] ? pf[k].value.trim() : fallback) || "";   // what's typed in the open profile counts
+  const fields = [
+    ["fullName", "Full Name", cur("fullName", per.fullName), x.fullName && titleCase(x.fullName), sameName, (v) => v],
+    ["dob", "Date of Birth", cur("v_dob", vault.dob), x.dob, (a, b) => a === b, (v) => (v && /^\d{4}-\d\d-\d\d$/.test(v) ? dmy(v) : v)],
+    ["nationality", "Nationality", cur("v_nationality", vault.nationality), x.nationality && titleCase(x.nationality), sameCountry, (v) => v],
+  ];
+  const set = {}, filled = [], clashes = [];
+  fields.forEach(([k, label, mine, theirs, same, show]) => {
+    if (!theirs) return;
+    if (!mine) { set[k] = theirs; filled.push(label.toLowerCase()); }
+    else if (!same(mine, theirs)) clashes.push({ k, label, mine, theirs, show });
+  });
+  if (clashes.length) Object.assign(set, await askProfileClash(per, clashes));
+  return { set, filled };
+}
+function askProfileClash(per, clashes) {
+  return new Promise((done) => {
+    const m = document.createElement("div"); m.className = "modal";
+    m.innerHTML = `<form class="sheet"><h2>Which Is Correct?</h2>
+      <p class="muted small">The document doesn't match ${esc(per.name)}'s profile. Choose the right value for each - the profile is updated when you save the document.</p>
+      ${clashes.map((c, i) => `<fieldset class="pbox clash"><legend>${esc(c.label)}</legend>
+        <label class="pick"><input type="radio" name="c${i}" value="mine" checked><span><small>In the profile</small><b>${esc(c.show(c.mine))}</b></span></label>
+        <label class="pick"><input type="radio" name="c${i}" value="theirs"><span><small>On the document</small><b>${esc(c.show(c.theirs))}</b></span></label></fieldset>`).join("")}
+      <div class="row end"><span class="grow"></span><button class="btn primary">Use Selected</button></div></form>`;
+    document.body.appendChild(m);
+    m.querySelector("form").onsubmit = (ev) => { ev.preventDefault(); const out = {};
+      clashes.forEach((c, i) => { if (m.querySelector(`[name=c${i}]:checked`).value === "theirs") out[c.k] = c.theirs; });
+      m.remove(); done(out); };
+  });
+}
+function applyProfileFix(per, vault, set) {
+  if (set.fullName) per.fullName = set.fullName;
+  if (set.dob) vault.dob = set.dob;
+  if (set.nationality) vault.nationality = set.nationality;
+  // keep the open profile form in step, so saving it doesn't put the old values back
+  const pf = profileFormOpen();
+  if (pf) { if (set.fullName) pf.fullName.value = set.fullName; if (set.dob && pf.v_dob) pf.v_dob.value = set.dob; if (set.nationality && pf.v_nationality) pf.v_nationality.value = set.nationality; }
+}
 // Document: type, country, expiry and notes go in the profile (they drive the expiry warnings); the number and the scan go in the vault.
 function docForm(per, vault, doc, done) {
   const isNew = !doc; doc = doc || { id: "d" + Date.now().toString(36), type: "passport" };
-  let file = null; const curFile = (vault.files || {})[doc.id] || doc.file;
+  let file = null, profileFix = null; const curFile = (vault.files || {})[doc.id] || doc.file;
   const m0 = document.createElement("div"); m0.className = "modal";
   m0.innerHTML = `<form class="sheet"><h3>${isNew ? "Add Document" : "Edit " + esc(docName(doc.type))} · ${esc(per.name || per.code)}</h3>
     <div class="extract"><label class="btn small pdfbtn"><i class="ic16">${I.scan}</i>${curFile ? "Replace Scan" : "Add Scan (PDF or Photo)"}<input type="file" hidden accept="application/pdf,image/*" data-dfilein></label>
@@ -1307,7 +1371,8 @@ function docForm(per, vault, doc, done) {
     try { const x = await data.extractDocFromFile(file);
       ["type", "number", "country", "expiry", "notes"].forEach((k) => { if (x[k] && f[k]) f[k].value = x[k]; });
       stEl.textContent = `${file.name} - details filled in. Check them before saving.`;
-      if (x.fullName && per.fullName && x.fullName.toLowerCase().replace(/\s+/g, " ") !== per.fullName.toLowerCase().replace(/\s+/g, " ")) toast(`The document says "${x.fullName}" - is it ${per.name}'s?`);
+      profileFix = await reconcileProfile(per, vault, x);
+      if (profileFix.filled.length) stEl.textContent += ` Profile updated: ${profileFix.filled.join(", ")}.`;
     } catch (e) { stEl.textContent = `${file.name} will be attached (couldn't read the details: ${e.code || e.message}).`; }
   };
   f.onsubmit = async (ev) => {
@@ -1323,11 +1388,12 @@ function docForm(per, vault, doc, done) {
       else if (doc.file && !vault.files[doc.id]) vault.files[doc.id] = doc.file;
       if (vault.files[doc.id]) next.hasFile = true;
       Object.keys(next).forEach((k) => next[k] === "" && delete next[k]);
+      if (profileFix) applyProfileFix(per, vault, profileFix.set);
       step = "saving the private details";
       await data.saveVault(per.id, vault);
       step = "saving the profile";
       const docs = (per.docs || []).filter((d) => d.id !== doc.id).concat(next);
-      await data.savePerson({ id: per.id, docs }); per.docs = docs;
+      await data.savePerson({ id: per.id, docs, ...(profileFix?.set.fullName ? { fullName: profileFix.set.fullName } : {}) }); per.docs = docs;
       close(); done && done(); toast("Saved");
       const st = docStatus(next, per); if (st.level !== "ok") infoBox(`<h2>Check This Document</h2><ul class="dalerts"><li class="${st.level}"><b>${esc(per.name)}</b> - ${esc(st.text)}</li></ul>`);
     } catch (e) { btn.disabled = false; console.error(step, e);

@@ -1522,9 +1522,32 @@ function scoreAI(t, x) {
   if (hits.length) { sc += Math.min(40, hits.length * 20); why.push("name matches"); }
   return [sc, why.join(", ")];
 }
+// A booking built from what the AI read in a confirmation (bulk attach, when the trip doesn't have it yet)
+function aiLabel(x) {
+  const d = x.start ? shortDate(x.start) + (x.end && x.end !== x.start ? "–" + shortDate(x.end) : "") : "";
+  const what = x.type === "flight" ? `Flight ${x.route || ""} ${x.number || ""}` : x.type === "stay" ? `Stay ${x.short || x.name || ""}` : x.type === "car" ? `Car ${x.company || ""}` : `Activity ${x.text || x.name || ""}`;
+  return `${what.trim()} · ${d}`;
+}
+const AI_FIELDS = { flight: ["route", "airline", "number", "dep", "arr"], stay: ["name", "short", "address", "checkin", "checkout"], car: ["company", "vehicle", "pickup", "dropoff", "pickupTime", "dropoffTime", "address"] };
+async function createFromAI(x) {
+  const who = (x.who || []).filter((c) => PEOPLE().includes(c)); const people = who.length ? who : PEOPLE();
+  const priv = Object.fromEntries(Object.entries(x.private || {}).filter(([, v]) => v));
+  if (x.type === "activity") {
+    const id = await data.saveEntry({ kind: "activity", status: "planned", confirmed: true, date: x.start, endDate: x.end || x.start, who: people,
+      text: [x.time, x.text || x.name].filter(Boolean).join(" ") || "Activity", place: x.place || x.name || "", ...(x.note ? { note: x.note } : {}) });
+    if (Object.keys(priv).length) await data.savePrivate(id, priv);
+    return { kind: "entry", id, type: "activity", start: x.start, end: x.end || x.start, rec: { text: x.text || x.name || "", place: x.place || "" }, conf: bnorm(priv.confirmation), names: [x.text, x.name, x.place] };
+  }
+  const item = { type: x.type, who: people, start: x.start, end: x.end || x.start, status: "booked", ...(x.note ? { note: x.note } : {}) };
+  (AI_FIELDS[x.type] || []).forEach((k) => { if (x[k]) item[k] = x[k]; });
+  if (x.type === "stay" && !item.short && item.name) item.short = item.name.slice(0, 14);
+  const id = await data.saveItem(item, Object.keys(priv).length ? priv : null);
+  return { kind: "item", id, type: x.type, start: item.start, end: item.end, rec: item, conf: bnorm(priv.confirmation), names: x.type === "flight" ? [x.number, x.airline] : x.type === "stay" ? [x.name, x.short] : [x.company, x.vehicle] };
+}
 function bulkAttach() {
   const targets = bulkTargets();
-  const opts = (sel) => `<option value="">Don't attach</option>` + targets.map((t) => `<option value="${t.kind}:${t.id}" ${sel === t.kind + ":" + t.id ? "selected" : ""}>${esc(t.label)}</option>`).join("");
+  const opts = (sel, r) => `<option value="">Don't attach</option>` + (r && r.ai && r.ai.type && r.ai.start ? `<option value="new" ${sel === "new" ? "selected" : ""}>+ New booking: ${esc(aiLabel(r.ai))}</option>` : "")
+    + targets.map((t) => `<option value="${t.kind}:${t.id}" ${sel === t.kind + ":" + t.id ? "selected" : ""}>${esc(t.label)}</option>`).join("");
   let rows = [];   // { file, target, why, state }
   modal(`<h2>Attach Documents</h2>
     <p class="muted small">Choose the confirmations, tickets and vouchers (or a whole folder). Each is matched to its booking - check the matches, change any that are wrong, then upload.</p>
@@ -1533,28 +1556,33 @@ function bulkAttach() {
     <p class="bstatus muted small"></p><div class="blist"></div>`, async () => {
     const go = rows.filter((r) => r.target && r.state !== "dup");
     if (!go.length) { toast("Nothing to attach"); throw Object.assign(new Error(""), { back: true }); }
-    let n = 0;
+    let n = 0; const made = [];   // bookings created in this upload (a second file for the same booking joins it)
     for (const r of go) {
+      if (r.target === "new") {
+        const same = made.find((m) => scoreAI(m.t, r.ai)[0] >= 80);
+        if (same) r.target = same.t.kind + ":" + same.t.id;
+        else { setStatus(`Creating ${aiLabel(r.ai)}…`); const t = await createFromAI(r.ai); made.push({ t }); r.target = t.kind + ":" + t.id; }
+      }
       const [kind, id] = r.target.split(":");
       setStatus(`Uploading ${++n} of ${go.length}: ${r.file.name}`);
       if (kind === "item") await data.uploadFile(r.file, { itemId: id });
       else { const e = store.entries.find((x) => x.id === id); await data.uploadFile(r.file, { entryId: id, date: e?.date || "" }); if (e && !e.confirmed) await data.saveEntry({ ...e, confirmed: true }); }
     }
-    toast(`${go.length} document${go.length > 1 ? "s" : ""} attached`);
+    toast(`${go.length} document${go.length > 1 ? "s" : ""} attached${made.length ? `, ${made.length} new booking${made.length > 1 ? "s" : ""} created - check them` : ""}`);
   });
   const m = [...document.querySelectorAll(".modal")].pop(), list = m.querySelector(".blist"), btn = m.querySelector("button.primary");
   const setStatus = (t) => (m.querySelector(".bstatus").textContent = t);
   btn.textContent = "Upload"; btn.disabled = true;
   const draw = () => {
-    list.innerHTML = rows.map((r, i) => `<div class="brow ${r.target ? "ok" : "none"}${r.state === "dup" ? " dup" : ""}">
+    list.innerHTML = rows.map((r, i) => `<div class="brow ${r.target === "new" ? "new" : r.target ? "ok" : "none"}${r.state === "dup" ? " dup" : ""}">
       <div class="bname"><i class="ic16">${I.file}</i><span>${esc(r.file.name)}</span></div>
-      <select data-bi="${i}" aria-label="Booking for ${esc(r.file.name)}" ${r.state === "reading" ? "disabled" : ""}>${opts(r.target)}</select>
-      <div class="bwhy small">${r.state === "reading" ? "Reading the document…" : r.state === "dup" ? "Already attached to this booking - will be skipped" : r.target ? "Matched: " + esc(r.why) : esc(r.why || "No match found - choose the booking, or leave it out")}</div></div>`).join("");
+      <select data-bi="${i}" aria-label="Booking for ${esc(r.file.name)}" ${r.state === "reading" ? "disabled" : ""}>${opts(r.target, r)}</select>
+      <div class="bwhy small">${r.state === "reading" ? "Reading the document…" : r.state === "dup" ? "Already attached to this booking - will be skipped" : r.target === "new" ? esc(r.why) : r.target ? "Matched: " + esc(r.why) : esc(r.why || "No match found - choose the booking, or leave it out")}</div></div>`).join("");
     list.querySelectorAll("[data-bi]").forEach((s) => (s.onchange = () => { const r = rows[+s.dataset.bi]; r.target = s.value; r.why = "chosen by you"; r.state = isDup(r) ? "dup" : "done"; draw(); }));
     const ready = rows.filter((r) => r.target && r.state !== "dup").length;
     btn.disabled = !ready || rows.some((r) => r.state === "reading"); btn.textContent = ready ? `Upload ${ready}` : "Upload";
   };
-  const isDup = (r) => { if (!r.target) return false; const [kind, id] = r.target.split(":"); return store.files.some((f) => f.name === r.file.name && (kind === "item" ? f.itemId === id : f.entryId === id)); };
+  const isDup = (r) => { if (!r.target || r.target === "new") return false; const [kind, id] = r.target.split(":"); return store.files.some((f) => f.name === r.file.name && (kind === "item" ? f.itemId === id : f.entryId === id)); };
   const pick = async (files) => {
     files = [...files].filter((f) => !/^\./.test(f.name) && !/\.(ds_store|ini|tmp)$/i.test(f.name));
     const big = files.filter((f) => f.size > 25 * 1024 * 1024); if (big.length) toast(`Skipped ${big.length} file(s) over 25 MB`);
@@ -1572,13 +1600,17 @@ function bulkAttach() {
       try {
         const x = await data.extractFromFile(r.file, "stay", { travellers: store.trip?.travellers || [], extended: store.trip?.extended || [], start: store.trip?.start, end: store.trip?.end });
         const best = targets.map((t) => { const a = scoreAI(t, x), n = scoreName(t, r.file.name, r.folder); return [t, a[0] + n[0] / 2, a[1] || n[1]]; }).sort((a, b) => b[1] - a[1])[0];
+        r.ai = x;
         if (best && best[1] >= 50) { r.target = best[0].kind + ":" + best[0].id; r.why = best[2]; }
+        else if (!r.target && x.type && x.start) {   // no booking for it yet: offer to create one from what the AI read
+          r.target = "new"; const out = x.start < store.trip.start || x.start > store.trip.end;
+          r.why = `Not in the itinerary yet - a new booking will be created from the file${out ? " (its dates are outside this trip - check)" : ""}`; }
         else if (!r.target) r.why = "Couldn't tell which booking - choose it, or leave it out";
       } catch (e) { r.why = r.target ? r.why : "Couldn't read it (" + (e.code || e.message || "error").toString().slice(0, 60) + ") - choose the booking"; }
       r.state = isDup(r) ? "dup" : "done"; draw();
     }
-    const matched = rows.filter((r) => r.target).length;
-    setStatus(`${rows.length} file${rows.length > 1 ? "s" : ""} · ${matched} matched${rows.length - matched ? ` · ${rows.length - matched} to choose` : ""}`);
+    const fresh2 = rows.filter((r) => r.target === "new").length, matched = rows.filter((r) => r.target && r.target !== "new").length, none = rows.length - matched - fresh2;
+    setStatus(`${rows.length} file${rows.length > 1 ? "s" : ""} · ${matched} matched${fresh2 ? ` · ${fresh2} not in the itinerary yet (bookings will be created)` : ""}${none ? ` · ${none} to choose` : ""}`);
   };
   m.querySelector("[data-bfiles]").onchange = (ev) => pick(ev.target.files);
   m.querySelector("[data-bfolder]").onchange = (ev) => pick(ev.target.files);

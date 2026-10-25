@@ -642,3 +642,4 @@ fieldset{min-width:0}
 .prow.pcard[data-kind="e"] .pchip.tp{background:var(--soft);border-color:var(--line2);color:var(--ink2)} .prow.pcard[data-kind="e"] .pchip.tp b{color:var(--ink2)}
 .addrow{margin-top:8px}
 .chk{display:flex;gap:8px;align-items:center;font-weight:600}
+.brow.new{border-left-color:var(--flight)} .brow.new .bwhy{color:var(--flight-x)}

@@ -204,7 +204,13 @@ export async function uploadPersonFile(pid, file) {
   await fb.stM.uploadBytes(fb.stM.ref(fb.storage, path), file, { contentType: meta.contentType });
   return { ...meta, path };
 }
-export async function personFileUrl(f) { return DEMO ? f.demoUrl || "#" : fb.stM.getDownloadURL(fb.stM.ref(fb.storage, f.path)); }
+// Scans are fetched through the security rules each time (no shareable link); a link is only the fallback if the browser can't fetch directly.
+export async function personFileUrl(f) {
+  if (DEMO) return f.demoUrl || "#";
+  const r = fb.stM.ref(fb.storage, f.path);
+  try { return URL.createObjectURL(await fb.stM.getBlob(r)); }
+  catch (e) { if (e.code === "storage/unauthorized") throw e; console.warn("getBlob", e); return fb.stM.getDownloadURL(r); }
+}
 export async function deletePersonFile(f) { if (DEMO || !f?.path) return; await fb.stM.deleteObject(fb.stM.ref(fb.storage, f.path)); }
 const docSchema = () => req({
   type: { type: "string", enum: ["passport", "visa", "esta", "licence", "idp", "insurance", "vaccination", "other"], description: "Kind of travel document" },

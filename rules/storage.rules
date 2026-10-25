@@ -16,7 +16,8 @@ service firebase.storage {
     }
     // Passport / visa scans: editors who signed in (or confirmed it's them) in the last 15 minutes, max 25 MB per file
     match /people/{personId}/{fileId}/{fileName} {
-      allow read, create, update: if isEditor() && recentAuth() && (request.resource == null || request.resource.size < 25 * 1024 * 1024);
+      allow read: if isEditor() && recentAuth();
+      allow create, update: if isEditor() && recentAuth() && request.resource.size < 25 * 1024 * 1024;
       allow delete: if isEditor();
     }
     match /{allPaths=**} { allow read, write: if false; }

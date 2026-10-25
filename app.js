@@ -1225,7 +1225,6 @@ const VAULT_FIELDS = [
   ["Travel Numbers", [["loyalty", "Frequent Flyer & Hotel Programs", "area", "One per line, e.g. Qantas FF 1234567"], ["ktn", "Known Traveller / Global Entry"], ["redress", "Redress Number"]]],
   ["Other", [["vnotes", "Private Notes", "area"]]],
 ];
-const PREFS = [["seat", "Seat Preference", ["", "Window", "Aisle", "No preference"]], ["meal", "Meal / Dietary", null], ["prefNotes", "Other Preferences", null]];
 function personForm(pid) {
   let per = store.people.find((x) => x.id === pid) || { code: "", name: "", fullName: "", docs: [] };
   let vault = per.id && secure.vault[per.id] && unlocked() ? secure.vault[per.id] : null;
@@ -1249,17 +1248,13 @@ function personForm(pid) {
     <div class="row"><label>Initials<input name="code" maxlength="6" value="${esc(per.code)}" required></label><label>Name<input name="name" value="${esc(per.name)}" required></label></div>
     <label>Full Name (as on Passport)<input name="fullName" value="${esc(per.fullName || "")}"></label>
     <div><p class="rlabel">Colour (used on every trip)</p><div class="swrow pfsw" role="radiogroup" aria-label="Colour">${TCOLORS.map(([n, h]) => `<button type="button" class="swbtn${h === color ? " on" : ""}" style="--c:${h}" data-psw="${h}" role="radio" aria-checked="${h === color}" aria-label="${n}" title="${n}"></button>`).join("")}</div></div>
-    <fieldset class="pbox"><legend>Preferences</legend>${PREFS.map(([k, l, opts]) => opts
-      ? `<label>${l}<select name="p_${k}">${opts.map((o) => `<option value="${o}" ${(per.prefs || {})[k] === o ? "selected" : ""}>${o || "-"}</option>`).join("")}</select></label>`
-      : `<label>${l}<input name="p_${k}" value="${esc((per.prefs || {})[k] || "")}"></label>`).join("")}</fieldset>
     <fieldset class="pbox"><legend>Travel Documents</legend><div class="dlist">${docsHtml()}</div>
       <button type="button" class="btn tiny" data-dadd>+ Add Document</button></fieldset>
     <fieldset class="pbox"><legend>Private Details</legend><div class="vbox">${vaultHtml()}</div></fieldset>`,
     async (fd) => {
       const code = String(fd.get("code")).trim().toUpperCase(), name = String(fd.get("name")).trim();
       if (!/^[A-Z0-9]{2,6}$/.test(code)) throw new Error("Initials: 2-6 letters, no spaces");
-      const prefs = Object.fromEntries(PREFS.map(([k]) => [k, String(fd.get("p_" + k) || "").trim()]).filter(([, v]) => v));
-      const id = await data.savePerson({ ...(per.id ? { id: per.id } : {}), code, name, fullName: String(fd.get("fullName")).trim(), color, prefs, docs: per.docs || [] });
+      const id = await data.savePerson({ ...(per.id ? { id: per.id } : {}), code, name, fullName: String(fd.get("fullName")).trim(), color, docs: per.docs || [] });
       if (vault && unlocked()) { VAULT_FIELDS.forEach(([, fs]) => fs.forEach(([k]) => { const v = String(fd.get("v_" + k) ?? "").trim(); if (v) vault[k] = v; else delete vault[k]; }));
         await data.saveVault(id, vault); secure.vault[id] = vault; }
       if (color && color !== upc(per.color)) await syncPersonColor({ ...per, id, code, name, color });

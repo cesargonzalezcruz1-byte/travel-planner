@@ -329,6 +329,9 @@ const WD3 = (s) => WD[D(s).getDay()].slice(0, 3).toUpperCase();
 const minus1 = (t) => { const [h, m] = t.split(":").map(Number); const x = Math.max(0, h * 60 + (m || 0) - 1); return String(Math.floor(x / 60)).padStart(2, "0") + ":" + String(x % 60).padStart(2, "0"); };
 const cleanTime = (t) => String(t || "").replace(/\s*\(.*\)\s*$/, "").trim();
 const codesOf = (route) => String(route || "").split(/[-–>]+/).map((c) => c.trim()).filter(Boolean);
+// the same filled initials pills as on the day screen, for whoever is travelling with p
+const pillsFor = (codes) => codes.length ? `<span class="tpills">${codes.map((o) => `<span class="tpill" style="--pc:${pcolor(o)}" title="${esc(NAME(o))}">${esc(o)}</span>`).join("")}</span>` : "";
+const withPills = (p, date) => pillsFor(PEOPLE().filter((o) => o !== p && together(p, o, date)));
 const withText = (p, date) => { const w = PEOPLE().filter((o) => o !== p && together(p, o, date)).map(NAME); return w.length ? "With " + w.join(" & ") : ""; };
 
 // ---------------------------------------------------------------- traveller colours (picked in Trip Setup; none of them is used by a theme)
@@ -874,6 +877,16 @@ function dayInfo(p, date) {
     .forEach((e) => steps.push({ k: "act", time: "", key: "12:00", title: e.text, rich: true, sub: e.place && !e.text.includes(e.place) ? e.place : "" }));
   const sortKey = (s) => s.time || s.key || "12:00";
   steps.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  // travel order across time zones (see nowSteps): check-outs / car returns at the origin before a flight, check-ins / car pick-ups at the destination after it
+  const byId = (id) => store.items.find((x) => x.id === id);
+  steps.filter((s) => s.k === "flight" && byId(s.id)?.start === date).forEach((f) => {
+    const c = codesOf(byId(f.id).route), from = c[0], to = c.at(-1);
+    const it = (s) => (s.id ? byId(s.id) : null);
+    const after = (s) => { const i = it(s); return i && ((s.k === "stay" && i.start === date) || (s.k === "car" && i.start === date && placeCode(i.pickup) === to)); };
+    const before = (s) => { const i = it(s); return i && ((s.k === "stay" && i.end === date && i.start !== date) || (s.k === "car" && i.end === date && placeCode(i.dropoff) === from)); };
+    for (const s of steps.filter(after)) { const k = steps.indexOf(s); if (k < steps.indexOf(f)) { steps.splice(k, 1); steps.splice(steps.indexOf(f) + 1, 0, s); } }
+    for (const s of steps.filter(before)) { const k = steps.indexOf(s); if (k > steps.indexOf(f)) { steps.splice(k, 1); steps.splice(steps.indexOf(f), 0, s); } }
+  });
   const comments = ents.filter((e) => e.kind === "comment");
   return { allDay, steps, comments, travel: steps.some((s) => s.k !== "act") };
 }
@@ -960,7 +973,7 @@ function renderNow() {
   const status = phase === "before" ? `Trip starts ${inWords(dayDiff(today, t.start) * 1440)} · ${fmtDate(t.start)}` : phase === "after" ? `Trip finished ${fmtDate(t.end)}` : `Day ${day} of ${N}${stay ? " · " + (areaOf(stay) || stay.short || stay.name) : ""}`;
   root.innerHTML = `${header({ views: true })}
   <div class="now">
-    <p class="nstatus">${esc(status)}${w ? ` · <span class="muted">${esc(w)}</span>` : ""}</p>
+    <p class="nstatus">${esc(status)}${w ? ` · <span class="muted">with</span> ${withPills(p, date)}` : ""}</p>
     ${phase === "after" ? `<section class="ncard"><h3>Welcome home</h3><p class="muted">Relive it in the Journey or the Journal, or make the photo album.</p>
         <div class="nacts"><button class="btn small" data-act="album"><i class="ic16">${I.book}</i>Export Album (Word)</button>${isEditor() ? `<button class="btn small" data-act="archive"><i class="ic16">${I.archive}</i>Archive Documents</button>` : ""}</div></section>`
     : next ? `<section class="ncard next k-${next.k}${next.tbc ? " tbc" : ""}">
@@ -992,7 +1005,7 @@ function renderTimeline() {
     return `<section class="dcard${travel ? " travel" : ""}${date === today ? " today" : ""}" id="d-${date}" data-day="${date}" role="button" tabindex="0" aria-label="${WD[D(date).getDay()]} ${longDate(date)}">
       <div class="dc-head">
         <span class="dnum"><small>${WD3(date)}</small><b>${D(date).getDate()}</b></span>
-        <span class="dc-title"><b>${WD[D(date).getDay()]} ${shortDate(date)}</b>${w ? `<small>${esc(w)}</small>` : ""}</span>
+        <span class="dc-title"><b>${WD[D(date).getDay()]} ${shortDate(date)}</b>${w ? withPills(p, date) : ""}</span>
         ${date === today ? `<span class="tbadge now">Today</span>` : travel ? `<span class="tbadge">Travel Day</span>` : ""}
         ${isEditor() ? `<button class="iconbtn sm" data-add-on="${date}" aria-label="Add booking on ${shortDate(date)}" title="Add booking">${ICON.plus}</button>` : ""}
       </div>
@@ -1033,7 +1046,7 @@ function renderJourney() {
       return `<li class="jrow station${i.status === "tbc" ? " tbc" : ""}">
         <span class="jnode k-stay">${ICON.stay}</span>
         <div class="jn-body">
-          <button class="jcard${i.start <= today && today < i.end ? " today" : ""}" data-day="${i.start}"><b>${esc(i.name)}${i.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>
+          <button class="jcard${i.start <= today && today < i.end ? " today" : ""}" data-day="${i.start}"><span class="jl-top"><b>${esc(i.name)}${i.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>${pillsFor((i.who || []).filter((o) => o !== p && PEOPLE().includes(o)))}</span>
             <small>${shortDate(i.start)} – ${shortDate(i.end)} · ${N} night${N === 1 ? "" : "s"}${i.address ? " · " + esc(i.address) : ""}</small></button>
           ${inner.length ? `<div class="jdays">${chips(inner)}</div>` : ""}
         </div></li>`;
@@ -1045,7 +1058,7 @@ function renderJourney() {
     return `<li class="jrow leg">
       <span class="jnode k-${k}">${ICON[k]}</span>
       <div class="jn-body"><button class="jleg k-${k}${i.status === "tbc" ? " tbc" : ""}${i.start === today ? " today" : ""}" data-day="${i.start}">
-        <span class="jl-top"><b>${esc(title)}</b><span class="jl-date">${WD3(i.start)} ${D(i.start).getDate()}</span></span>
+        <span class="jl-top"><b>${esc(title)}</b>${pillsFor((i.who || []).filter((o) => o !== p && PEOPLE().includes(o)))}<span class="jl-date">${WD3(i.start)} ${D(i.start).getDate()}</span></span>
         <small>${esc(sub)}</small></button>${extra[i.id] ? `<div class="jdays">${chips(extra[i.id])}</div>` : ""}</div></li>`;
   }).join("");
   const t = store.trip;

@@ -685,3 +685,9 @@ fieldset{min-width:0}
 .nstep.done{opacity:.45} .nstep.done b{text-decoration:line-through}
 .nstep.is-next .ntime{color:var(--today)} .nstep.is-next b{color:var(--today-ink)}
 .nday{justify-self:center}
+/* initials pills for travel companions (Now, Timeline, Journey) - same look as the day screen */
+.tpills{display:inline-flex;flex-wrap:nowrap;flex:none;gap:4px;vertical-align:middle}
+.tpill{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:18px;padding:0 7px;border-radius:9px;background:var(--pc);color:#fff;font-size:10px;font-weight:800;letter-spacing:.03em;line-height:1}
+.dc-title .tpills{margin-top:3px}
+.jl-top .tpills{margin-left:auto} .jl-top .tpills+.jl-date{margin-left:6px}
+.jcard .jl-top{display:flex;align-items:center;gap:8px;width:100%}

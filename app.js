@@ -857,7 +857,7 @@ function dayInfo(p, date) {
     const tbc = i.status === "tbc", N = dayDiff(i.start, i.end), n = dayDiff(i.start, date) + 1;
     if (i.type === "flight") {
       const c = codesOf(i.route); const fl = [i.airline, i.number].filter(Boolean).join(" ");
-      if (date === i.start) steps.push({ k: "flight", time: cleanTime(i.dep), title: c.join(" → ") || "Flight", sub: [fl, i.arr && "lands " + i.arr].filter(Boolean).join(" · "), id: i.id });
+      if (date === i.start) steps.push({ k: "flight", time: cleanTime(i.dep), title: c.join(" → ") || "Flight", sub: [fl, i.arr && "lands " + i.arr + landTz(i)].filter(Boolean).join(" · "), id: i.id });
       else if (date === i.end) steps.push({ k: "flight", time: cleanTime(i.arr), title: "Land in " + (c.at(-1) || ""), sub: fl, id: i.id });
       else allDay.push({ k: "flight", title: "In flight", sub: fl });
     } else if (i.type === "stay") {
@@ -891,6 +891,45 @@ function dayInfo(p, date) {
   return { allDay, steps, comments, travel: steps.some((s) => s.k !== "act") };
 }
 
+// ---------------------------------------------------------------- time zones on flight days
+// Clock times are local. On a day with a flight between time zones, each time gets its zone (e.g. AEST, PST) underneath.
+const AIRPORT_TZ = Object.entries({
+  "Australia/Brisbane": "BNE OOL CNS TSV MKY ROK HTI PPP",
+  "Australia/Sydney": "SYD CBR NTL BNK", "Australia/Melbourne": "MEL AVV", "Australia/Hobart": "HBA LST", "Australia/Adelaide": "ADL", "Australia/Perth": "PER", "Australia/Darwin": "DRW", "Australia/Lord_Howe": "LDH",
+  "Pacific/Auckland": "AKL WLG CHC ZQN DUD NSN ROT NPL NPE PMR TRG HLZ IVC WKA TEU", "Pacific/Fiji": "NAN SUV", "Pacific/Honolulu": "HNL OGG KOA LIH ITO", "Pacific/Tahiti": "PPT", "Pacific/Noumea": "NOU", "Pacific/Port_Moresby": "POM",
+  "Asia/Singapore": "SIN", "Asia/Tokyo": "NRT HND KIX ITM NGO CTS FUK OKA", "Asia/Seoul": "ICN GMP", "Asia/Hong_Kong": "HKG", "Asia/Shanghai": "PVG SHA PEK PKX CAN SZX CTU", "Asia/Taipei": "TPE", "Asia/Bangkok": "BKK DMK HKT CNX USM",
+  "Asia/Makassar": "DPS", "Asia/Jakarta": "CGK", "Asia/Kuala_Lumpur": "KUL", "Asia/Manila": "MNL CEB", "Asia/Ho_Chi_Minh": "SGN", "Asia/Dubai": "DXB DWC", "Asia/Qatar": "DOH", "Asia/Kolkata": "DEL BOM BLR MAA",
+  "America/Los_Angeles": "LAX SFO SAN SJC OAK SMF BUR SNA ONT LGB PSP SEA PDX LAS RNO", "America/Phoenix": "PHX TUS", "America/Denver": "DEN SLC ABQ BOI", "America/Chicago": "ORD MDW DFW DAL IAH HOU AUS SAT MSP MSY STL MCI BNA MEM OKC",
+  "America/New_York": "JFK LGA EWR BOS IAD DCA BWI PHL ATL MIA FLL MCO TPA RSW PBI CLT DTW CLE PIT RDU CVG IND CMH BUF EYW", "America/Anchorage": "ANC", "America/Toronto": "YYZ YOW YUL", "America/Vancouver": "YVR YYJ", "America/Edmonton": "YYC YEG",
+  "America/Cancun": "CUN TQO CZM", "America/Mexico_City": "MEX NLU GDL MTY OAX PVR SJD BJX QRO VER MID", "America/Tijuana": "TIJ", "America/Mazatlan": "MZT", "America/Hermosillo": "HMO", "America/Bogota": "BOG MDE CTG", "America/Lima": "LIM CUZ",
+  "America/Santiago": "SCL", "America/Argentina/Buenos_Aires": "EZE AEP", "America/Sao_Paulo": "GRU GIG", "America/Panama": "PTY", "America/Costa_Rica": "SJO LIR", "America/Havana": "HAV",
+  "Europe/London": "LHR LGW STN LTN MAN EDI", "Europe/Dublin": "DUB", "Europe/Paris": "CDG ORY NCE", "Europe/Madrid": "MAD BCN AGP", "Europe/Rome": "FCO MXP VCE", "Europe/Berlin": "FRA MUC BER", "Europe/Amsterdam": "AMS", "Europe/Zurich": "ZRH", "Europe/Lisbon": "LIS", "Europe/Athens": "ATH", "Europe/Istanbul": "IST",
+}).reduce((m, [tz, codes]) => { codes.split(" ").forEach((c) => (m[c] = tz)); return m; }, {});
+// " PST" after a landing time when the flight arrives in another time zone
+function landTz(f) {
+  const c = codesOf(f.route), a = tzLabel(AIRPORT_TZ[c.at(-1)], f.end || f.start), d = tzLabel(AIRPORT_TZ[c[0]], f.start);
+  return a && d && a !== d ? " " + a : "";
+}
+function tzLabel(tz, date) {
+  if (!tz) return "";
+  const at = new Date(`${date}T12:00:00Z`);
+  const name = (loc) => { try { return new Intl.DateTimeFormat(loc, { timeZone: tz, timeZoneName: "short" }).formatToParts(at).find((x) => x.type === "timeZoneName")?.value || ""; } catch (e) { return ""; } };
+  const au = name("en-AU"); if (au && !/^(GMT|UTC)/.test(au)) return au;
+  const us = name("en-US"); return us && !/^(GMT|UTC)/.test(us) ? us : (au || us).replace("GMT", "UTC");
+}
+// steps: in travel order; flightOf(step) -> the flight item if the step is that flight; returns a zone label per step, or null when the day has one zone
+function stepZones(steps, date, flightOf) {
+  const fl = steps.map(flightOf).filter((f) => f && codesOf(f.route).length);
+  if (!fl.length) return null;
+  const tzOf = (code) => AIRPORT_TZ[String(code || "").toUpperCase()] || "";
+  let cur = fl[0].start === date ? tzOf(codesOf(fl[0].route)[0]) : tzOf(codesOf(fl[0].route).at(-1));
+  const out = steps.map((st) => { const f = flightOf(st); if (!f) return cur;
+    const c = codesOf(f.route);
+    if (f.start === date) { const z = tzOf(c[0]); cur = tzOf(c.at(-1)) || cur; return z; }
+    cur = tzOf(c.at(-1)) || cur; return cur; });
+  const labels = out.map((z) => tzLabel(z, date));
+  return new Set(labels.filter(Boolean)).size > 1 ? labels : null;
+}
 // ---------------------------------------------------------------- Now: what's next today, with directions, check-in and status links
 const CHECKIN = [   // airline online check-in pages
   [/delta/i, "https://www.delta.com/mytrips/"], [/united/i, "https://www.united.com/en/us/checkin"], [/american/i, "https://www.aa.com/reservation/view/find-your-trip"],
@@ -913,7 +952,7 @@ function nowSteps(p, date) {
     const base = { item: i, k: i.type, tbc: i.status === "tbc" };
     if (i.type === "flight") {
       const c = codesOf(i.route), fl = [i.airline, i.number].filter(Boolean).join(" ");
-      if (date === i.start) out.push({ ...base, time: cleanTime(i.dep), title: `Fly ${c[0] || ""} → ${c.at(-1) || ""}`, sub: [fl, i.arr && "lands " + i.arr].filter(Boolean).join(" · "), where: apt(c[0] || ""), flight: true });
+      if (date === i.start) out.push({ ...base, time: cleanTime(i.dep), title: `Fly ${c[0] || ""} → ${c.at(-1) || ""}`, sub: [fl, i.arr && "lands " + i.arr + landTz(i)].filter(Boolean).join(" · "), where: apt(c[0] || ""), flight: true });
       if (date === i.end && i.end !== i.start) out.push({ ...base, time: cleanTime(i.arr), title: `Land in ${c.at(-1) || ""}`, sub: fl, where: apt(c.at(-1) || "") });
     } else if (i.type === "stay") {
       if (date === i.end) out.push({ ...base, time: cleanTime(i.checkout), key: "10:00", title: `Check out of ${i.short || i.name}`, sub: i.checkout ? `by ${cleanTime(i.checkout)}` : "", where: i.address || i.name });
@@ -968,7 +1007,10 @@ function renderNow() {
   if (!next && tmSteps.length) { next = tmSteps[0]; nextDate = tomorrow; }
   const stay = phase === "after" ? null : tonightStay(p, date);
   const w = withText(p, date);
-  const line = (s, d) => `<li class="nstep k-${s.k}${done(s) && d === date ? " done" : ""}${s === next ? " is-next" : ""}"><span class="ntime">${esc(s.time || "")}</span><span class="nic">${ICON[KIND[s.k] || s.k] || ""}</span><span class="nt"><b>${esc(s.title)}</b>${s.sub ? `<small>${esc(s.sub)}</small>` : ""}</span></li>`;
+  const zf = (st) => (st.flight || (st.k === "flight" && st.item) ? st.item : null);
+  const zToday = stepZones(steps, date, zf), zTom = stepZones(tmSteps, tomorrow, zf);
+  const zoneOf = (s, d) => { const list = d === date ? steps : tmSteps, z = d === date ? zToday : zTom, k = list.indexOf(s); return z && k >= 0 && s.time ? z[k] : ""; };
+  const line = (s, d) => `<li class="nstep k-${s.k}${done(s) && d === date ? " done" : ""}${s === next ? " is-next" : ""}"><span class="ntime">${esc(s.time || "")}${zoneOf(s, d) ? `<small class="tz">${esc(zoneOf(s, d))}</small>` : ""}</span><span class="nic">${ICON[KIND[s.k] || s.k] || ""}</span><span class="nt"><b>${esc(s.title)}</b>${s.sub ? `<small>${esc(s.sub)}</small>` : ""}</span></li>`;
   const countdown = next ? (next.time ? inWords(minsUntil(nextDate, next.time)) : nextDate === today ? "today" : nextDate === tomorrow ? "tomorrow" : inWords(dayDiff(today, nextDate) * 1440)) : "";
   const status = phase === "before" ? `Trip starts ${inWords(dayDiff(today, t.start) * 1440)} · ${fmtDate(t.start)}` : phase === "after" ? `Trip finished ${fmtDate(t.end)}` : `Day ${day} of ${N}${stay ? " · " + (areaOf(stay) || stay.short || stay.name) : ""}`;
   root.innerHTML = `${header({ views: true })}
@@ -979,7 +1021,7 @@ function renderNow() {
     : next ? `<section class="ncard next k-${next.k}${next.tbc ? " tbc" : ""}">
         <div class="nhead"><span class="nlabel">${phase === "before" ? "First up" : "Next up"}${nextDate !== today && phase !== "before" ? " · tomorrow" : ""}</span><span class="ncount">${esc(countdown)}</span></div>
         <div class="nmain"><span class="nbig">${ICON[KIND[next.k] || next.k] || ""}</span><div><div class="ntitle">${esc(next.title)}</div>
-          <div class="nsub">${[next.time && `${phase === "before" ? fmtDate(nextDate) + " · " : ""}${next.time}`, next.sub].filter(Boolean).map(esc).join(" · ")}</div></div></div>
+          <div class="nsub">${[next.time && `${phase === "before" ? fmtDate(nextDate) + " · " : ""}${next.time}${zoneOf(next, nextDate) ? " " + zoneOf(next, nextDate) : ""}`, next.sub].filter(Boolean).map(esc).join(" · ")}</div></div></div>
         ${next.flight ? `<p class="nhint small">Online check-in usually opens 24–48 hours before departure${next.time && minsUntil(nextDate, next.time) <= 48 * 60 ? " - it may be open now" : ""}.</p>` : ""}
         ${stepActions(next, nextDate)}</section>`
     : `<section class="ncard"><h3>Nothing else planned today</h3><p class="muted">Free time! Check the Recommended places on the day screen.</p></section>`}
@@ -1001,6 +1043,7 @@ function renderTimeline() {
   const p = ui.person, ds = days(), today = iso(new Date());
   const cards = ds.map((date) => {
     const { allDay, steps, comments, travel } = dayInfo(p, date);
+    const zones = stepZones(steps, date, (st) => (st.k === "flight" && st.id ? store.items.find((x) => x.id === st.id) : null));
     const w = withText(p, date);
     return `<section class="dcard${travel ? " travel" : ""}${date === today ? " today" : ""}" id="d-${date}" data-day="${date}" role="button" tabindex="0" aria-label="${WD[D(date).getDay()]} ${longDate(date)}">
       <div class="dc-head">
@@ -1010,7 +1053,7 @@ function renderTimeline() {
         ${isEditor() ? `<button class="iconbtn sm" data-add-on="${date}" aria-label="Add booking on ${shortDate(date)}" title="Add booking">${ICON.plus}</button>` : ""}
       </div>
       ${allDay.length ? `<div class="allday">${allDay.map((s) => `<span class="chip k-${s.k}${s.tbc ? " tbc" : ""}"><span class="ic">${ICON[s.k]}</span>${esc(s.title)}${s.sub ? ` <span class="cs">· ${esc(s.sub)}</span>` : ""}</span>`).join("")}</div>` : ""}
-      ${steps.length ? `<ol class="steps">${steps.map((s) => `<li><span class="st-time">${esc(s.time) || "–"}</span><span class="st-dot k-${s.k}"></span>${pillHtml(s)}</li>`).join("")}</ol>` : ""}
+      ${steps.length ? `<ol class="steps">${steps.map((s, k) => `<li><span class="st-time">${esc(s.time) || "–"}${zones && zones[k] && s.time ? `<small class="tz">${esc(zones[k])}</small>` : ""}</span><span class="st-dot k-${s.k}"></span>${pillHtml(s)}</li>`).join("")}</ol>` : ""}
       ${!allDay.length && !steps.length ? `<p class="dc-empty">Nothing booked yet</p>` : ""}
       ${comments.map((c) => `<p class="dcom">${ICON.chat}<span>${fmt(c.text)}</span></p>`).join("")}
     </section>`;

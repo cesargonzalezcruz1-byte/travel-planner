@@ -691,3 +691,6 @@ fieldset{min-width:0}
 .dc-title .tpills{margin-top:3px}
 .jl-top .tpills{margin-left:auto} .jl-top .tpills+.jl-date{margin-left:6px}
 .jcard .jl-top{display:flex;align-items:center;gap:8px;width:100%}
+/* time zone under a time (flight days that cross zones) */
+.st-time,.ntime{display:flex;flex-direction:column;line-height:1.1}
+.tz{display:block;font-size:9.5px;font-weight:700;color:var(--muted);letter-spacing:.02em;margin-top:2px;white-space:nowrap}

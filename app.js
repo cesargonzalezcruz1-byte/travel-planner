@@ -143,6 +143,7 @@ try { ui.split = JSON.parse(localStorage.getItem("tp.splitViews") || "null"); } 
 if (!Array.isArray(ui.split) || ui.split.length !== 2) ui.split = ["now", "journey"];
 try { ui.splitPeople = JSON.parse(localStorage.getItem("tp.splitPeople") || "null"); } catch (e) { /* ignore */ }
 if (!Array.isArray(ui.splitPeople) || ui.splitPeople.length !== 2) ui.splitPeople = [null, null];   // null = the main traveller
+ui.splitDay = [null, null];   // a day open on that side (split view)
 function renderSplit() {
   appRoot.classList.add("is-split");
   const ok = (v) => viewsFor().some((x) => x[0] === v) ? v : "overview";
@@ -151,9 +152,12 @@ function renderSplit() {
   appRoot.innerHTML = `<div class="split"><div class="pane" data-pane="0"></div><div class="pane" data-pane="1"></div></div>`;
   const panes = appRoot.querySelectorAll(".pane"), saved = ui.view, me = ui.person;
   ui.splitPeople = ui.splitPeople.map((x) => (x && PEOPLE().includes(x) ? x : null));
-  [[0, ui.split[0]], [1, ui.day ? "day" : ui.split[1]]].forEach(([k, v]) => {   // each side: its own view and its own traveller
-    root = panes[k]; ui.pane = k; ui.person = ui.splitPeople[k] || me; if (v !== "day") ui.view = v; renderView(v); if (keep[k]) panes[k].scrollTop = keep[k]; });
-  ui.view = saved; ui.pane = null; ui.person = me; root = panes[1];
+  if (ui.day) { ui.splitDay[1] = ui.day; ui.day = null; }   // a day from the address opens on the right
+  [0, 1].forEach((k) => {   // each side: its own view, traveller and open day
+    const v = ui.splitDay[k] ? "day" : ui.split[k];
+    root = panes[k]; ui.pane = k; ui.person = ui.splitPeople[k] || me; ui.day = ui.splitDay[k]; if (v !== "day") ui.view = v;
+    renderView(v); if (keep[k]) panes[k].scrollTop = keep[k]; });
+  ui.view = saved; ui.pane = null; ui.person = me; ui.day = null; root = panes[1];
 }
 const splitToggle = () => (splitWide() && ui.tripId ? `<button class="iconbtn splitbtn" data-split aria-label="${splitOn() ? "One view" : "Two views side by side"}" title="${splitOn() ? "One view" : "Two views side by side"}">${splitOn() ? ICON.single : ICON.split}</button>` : "");
 let splitWas = null;
@@ -334,7 +338,7 @@ const I = {
   phone: SV('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v79";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v80";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -433,8 +437,8 @@ function wireHeader() {
     ui.person = b.dataset.person; localStorage.setItem("tp.person", ui.person); render(); }));
   root.querySelectorAll("[data-view]").forEach((b) => (b.onclick = () => {
     const pane = b.closest(".pane");
-    if (pane) { ui.split[+pane.dataset.pane] = b.dataset.view; if (pane.dataset.pane === "1") ui.day = null; try { localStorage.setItem("tp.splitViews", JSON.stringify(ui.split)); } catch (e) { /* ignore */ }
-      if (pane.dataset.pane === "1" && location.hash.split("/").length > 3) { routeTo(ui.tripId, null); return; } render(); return; }
+    if (pane) { const k = +pane.dataset.pane; ui.split[k] = b.dataset.view; ui.splitDay[k] = null; try { localStorage.setItem("tp.splitViews", JSON.stringify(ui.split)); } catch (e) { /* ignore */ }
+      render(); return; }
     ui.view = b.dataset.view; try { localStorage.setItem("tp.view", ui.view); } catch (e) { /* ignore */ } sessionStorage.removeItem("tp.wscroll"); render(); }));
   root.querySelectorAll("[data-split]").forEach((b) => (b.onclick = () => { try { localStorage.setItem("tp.split", splitOn() ? "0" : "1"); } catch (e) { /* ignore */ } render(); }));
   root.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.(b)));
@@ -660,7 +664,8 @@ function wireCharts() {
   };
   const hide = () => { tip.hidden = true; root.querySelectorAll(".cross-dot").forEach((d) => { d.setAttribute("cx", -20); d.setAttribute("cy", -20); }); };
   root.querySelectorAll(".chart [data-tip]").forEach((el) => { el.onpointermove = el.onpointerenter = (ev) => show(el, ev); el.onpointerleave = hide; });
-  root.querySelectorAll(".chart [data-day]").forEach((el) => (el.onclick = () => { hide(); openDay(el.dataset.day); }));
+  const cpane = ui.pane;
+  root.querySelectorAll(".chart [data-day]").forEach((el) => (el.onclick = () => { hide(); openDay(el.dataset.day, cpane); }));
   root.querySelectorAll("[data-chart-mode]").forEach((b) => (b.onclick = () => { ui.chartMode = b.dataset.chartMode; const y = scrollY; render(); scrollTo(0, y); }));
   hide();
 }
@@ -820,7 +825,7 @@ function renderOverview() {
       <div class="ov-head"><span class="l">DAY</span><span class="k-flight">FLIGHT</span><span class="k-stay" style="grid-column:3 / span 2">STAY</span><span class="k-car" style="grid-column:5 / span 2">CAR</span></div>
       <div class="ov-grid" style="--n:${N}">${cells.join("")}<svg class="ov-svg" aria-hidden="true"></svg></div>
       ${legend}</div></div>`;
-  const svgEl = root.querySelector(".ov-svg"); if (svgEl) svgEl._shapes = shapes; drawOverviewShapes(svgEl);
+  const svgEl = root.querySelector(".ov-svg"); if (svgEl) { svgEl._shapes = shapes; svgEl._pane = ui.pane; } drawOverviewShapes(svgEl);
   wireHeader(); wireDays();
   root.querySelectorAll("[data-swap]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); const k = b.dataset.swap; ui.swap[k] = (ui.swap[k] || 0) + 1;
     try { localStorage.setItem("tp.swap", JSON.stringify(ui.swap)); } catch (e) { /* ignore */ } const y = scrollY; render(); scrollTo(0, y); }));
@@ -863,7 +868,7 @@ function drawOverviewShapes(svg) {
     const stroke = x.tbc ? `stroke:var(--${x.clash ? "clash" + x.clash : x.type});stroke-width:1.5;stroke-dasharray:4 3;` : "";
     return `<path data-day="${x.day}" d="${pathOf(outline(x.half * (PAIR + GAP), x.s, x.e, x.cutTop, x.cutBot), x.tbc ? INSET + 0.75 : INSET)}" style="fill:${fill};${stroke}"></path>`;
   }).join("");
-  svg.querySelectorAll("[data-day]").forEach((el) => (el.onclick = () => openDay(el.dataset.day)));
+  svg.querySelectorAll("[data-day]").forEach((el) => (el.onclick = () => openDay(el.dataset.day, svg._pane)));
 }
 window.addEventListener("resize", () => document.querySelectorAll(".ov-svg").forEach((svg) => drawOverviewShapes(svg)));
 // swipe left / right on the itinerary to move between Overview, Timeline and Journey (phones)
@@ -871,7 +876,7 @@ window.addEventListener("resize", () => document.querySelectorAll(".ov-svg").for
   let x0 = 0, y0 = 0, t0 = 0, ok = false;
   document.addEventListener("touchstart", (e) => {
     const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now();
-    ok = e.touches.length === 1 && !!ui.tripId && !document.querySelector(".modal") && !e.target.closest(".seg,.vseg,.daymap,.pop,input,textarea,select");
+    ok = e.touches.length === 1 && !!ui.tripId && !splitOn() && !document.querySelector(".modal") && !e.target.closest(".seg,.vseg,.daymap,.pop,input,textarea,select");
   }, { passive: true });
   document.addEventListener("touchend", (e) => {
     if (!ok) return; ok = false;
@@ -1161,13 +1166,15 @@ function wireDays() {
     ev.stopPropagation(); const date = b.dataset.addOn; const others = PEOPLE().filter((o) => o !== ui.person);
     itemForm({ type: "stay", who: [ui.person, ...others.filter((o) => together(ui.person, o, date))], start: date, end: addDays(date, 1), status: "booked" });
   }));
+  const pane = ui.pane;
   root.querySelectorAll("[data-day]").forEach((el) => {
-    el.onclick = (ev) => { if (ev.target.closest("[data-add-on]")) return; ev.stopPropagation(); openDay(el.dataset.day); };
-    if (el.tagName !== "BUTTON") el.onkeydown = (e) => { if (e.key === "Enter") openDay(el.dataset.day); };
+    el.onclick = (ev) => { if (ev.target.closest("[data-add-on]")) return; ev.stopPropagation(); openDay(el.dataset.day, pane); };
+    if (el.tagName !== "BUTTON") el.onkeydown = (e) => { if (e.key === "Enter") openDay(el.dataset.day, pane); };
   });
 }
 
-function openDay(date) {
+function openDay(date, pane = null) {
+  if (pane !== null && pane !== undefined && splitOn()) { ui.splitDay[pane] = date; return render(); }   // split view: the day opens on the side it was picked
   sessionStorage.setItem("tp.wscroll", window.scrollY);
   routeTo(ui.tripId, date); window.scrollTo(0, 0);
 }
@@ -1306,7 +1313,8 @@ function renderDay() {
     ${journalHtml(date)}
   </div>`;
   wireHeader();
-  root.querySelector("[data-back]").onclick = () => routeTo(ui.tripId, null);
+  const dpane = ui.pane;
+  root.querySelector("[data-back]").onclick = () => (dpane !== null && dpane !== undefined ? (ui.splitDay[dpane] = null, render()) : routeTo(ui.tripId, null));
   if (isEditor()) wireBudget();
   wireJournal(date); wireRecs(p, date, others);
   root.querySelectorAll("[data-with]").forEach((b) => (b.onclick = async () => {
@@ -1316,7 +1324,9 @@ function renderDay() {
   }));
   const mapBox = root.querySelector("#daymap");
   if (mapBox) drawDayMap(mapBox, mapPins, root.querySelector(".daymap-msg")).catch((x) => { mapBox.hidden = true; const m = root.querySelector(".daymap-msg"); if (m) m.textContent = "Map unavailable: " + x.message; });
-  root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => { ui.slide = +b.dataset.go > 0 ? "from-right" : "from-left"; routeTo(ui.tripId, ds[idx + +b.dataset.go], true); }));
+  root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => { const d2 = ds[idx + +b.dataset.go];
+    if (dpane !== null && dpane !== undefined) { ui.splitDay[dpane] = d2; return render(); }
+    ui.slide = +b.dataset.go > 0 ? "from-right" : "from-left"; routeTo(ui.tripId, d2, true); }));
   root.querySelectorAll("[data-edit-item]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.editItem))));
   root.querySelectorAll("[data-edit-entry]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.editEntry))));
   root.querySelectorAll("[data-new-entry]").forEach((b) => (b.onclick = () => entryForm({ kind: b.dataset.newEntry, date, endDate: date, who: [p, ...others.filter((o) => together(p, o, date))], status: "planned", confirmed: false, text: "", place: "" })));

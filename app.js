@@ -1,6 +1,7 @@
 import * as data from "./data.js";
 import { drawDayMap, mapsReady, searchPlaces } from "./map.js";
 import { buildAlbum, areaOf } from "./album.js";
+import { AIRPORT_TZ, checkinUrl, checkinInfo, timeIn } from "./checkin-core.js";
 // Preview another date: add ?today=2027-01-14 to the address to see the app as it will look on that day
 (() => { const m = location.search.match(/[?&]today=(\d{4}-\d{2}-\d{2})/); if (!m) return;
   const R = Date, off = new R(m[1] + "T12:00:00").getTime() - R.now();   // shift the clock, keep it ticking
@@ -339,7 +340,7 @@ const I = {
   phone: SV('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v82";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v83";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -943,18 +944,6 @@ function dayInfo(p, date) {
 
 // ---------------------------------------------------------------- time zones on flight days
 // Clock times are local. On a day with a flight between time zones, each time gets its zone (e.g. AEST, PST) underneath.
-const AIRPORT_TZ = Object.entries({
-  "Australia/Brisbane": "BNE OOL CNS TSV MKY ROK HTI PPP",
-  "Australia/Sydney": "SYD CBR NTL BNK", "Australia/Melbourne": "MEL AVV", "Australia/Hobart": "HBA LST", "Australia/Adelaide": "ADL", "Australia/Perth": "PER", "Australia/Darwin": "DRW", "Australia/Lord_Howe": "LDH",
-  "Pacific/Auckland": "AKL WLG CHC ZQN DUD NSN ROT NPL NPE PMR TRG HLZ IVC WKA TEU", "Pacific/Fiji": "NAN SUV", "Pacific/Honolulu": "HNL OGG KOA LIH ITO", "Pacific/Tahiti": "PPT", "Pacific/Noumea": "NOU", "Pacific/Port_Moresby": "POM",
-  "Asia/Singapore": "SIN", "Asia/Tokyo": "NRT HND KIX ITM NGO CTS FUK OKA", "Asia/Seoul": "ICN GMP", "Asia/Hong_Kong": "HKG", "Asia/Shanghai": "PVG SHA PEK PKX CAN SZX CTU", "Asia/Taipei": "TPE", "Asia/Bangkok": "BKK DMK HKT CNX USM",
-  "Asia/Makassar": "DPS", "Asia/Jakarta": "CGK", "Asia/Kuala_Lumpur": "KUL", "Asia/Manila": "MNL CEB", "Asia/Ho_Chi_Minh": "SGN", "Asia/Dubai": "DXB DWC", "Asia/Qatar": "DOH", "Asia/Kolkata": "DEL BOM BLR MAA",
-  "America/Los_Angeles": "LAX SFO SAN SJC OAK SMF BUR SNA ONT LGB PSP SEA PDX LAS RNO", "America/Phoenix": "PHX TUS", "America/Denver": "DEN SLC ABQ BOI", "America/Chicago": "ORD MDW DFW DAL IAH HOU AUS SAT MSP MSY STL MCI BNA MEM OKC",
-  "America/New_York": "JFK LGA EWR BOS IAD DCA BWI PHL ATL MIA FLL MCO TPA RSW PBI CLT DTW CLE PIT RDU CVG IND CMH BUF EYW", "America/Anchorage": "ANC", "America/Toronto": "YYZ YOW YUL", "America/Vancouver": "YVR YYJ", "America/Edmonton": "YYC YEG",
-  "America/Cancun": "CUN TQO CZM", "America/Mexico_City": "MEX NLU GDL MTY OAX PVR SJD BJX QRO VER MID", "America/Tijuana": "TIJ", "America/Mazatlan": "MZT", "America/Hermosillo": "HMO", "America/Bogota": "BOG MDE CTG", "America/Lima": "LIM CUZ",
-  "America/Santiago": "SCL", "America/Argentina/Buenos_Aires": "EZE AEP", "America/Sao_Paulo": "GRU GIG", "America/Panama": "PTY", "America/Costa_Rica": "SJO LIR", "America/Havana": "HAV",
-  "Europe/London": "LHR LGW STN LTN MAN EDI", "Europe/Dublin": "DUB", "Europe/Paris": "CDG ORY NCE", "Europe/Madrid": "MAD BCN AGP", "Europe/Rome": "FCO MXP VCE", "Europe/Berlin": "FRA MUC BER", "Europe/Amsterdam": "AMS", "Europe/Zurich": "ZRH", "Europe/Lisbon": "LIS", "Europe/Athens": "ATH", "Europe/Istanbul": "IST",
-}).reduce((m, [tz, codes]) => { codes.split(" ").forEach((c) => (m[c] = tz)); return m; }, {});
 // " PST" after a landing time when the flight arrives in another time zone
 function landTz(f) {
   const c = codesOf(f.route), a = tzLabel(AIRPORT_TZ[c.at(-1)], f.end || f.start), d = tzLabel(AIRPORT_TZ[c[0]], f.start);
@@ -981,42 +970,28 @@ function stepZones(steps, date, flightOf) {
   return new Set(labels.filter(Boolean)).size > 1 ? labels : null;
 }
 // ---------------------------------------------------------------- Now: what's next today, with directions, check-in and status links
-const CHECKIN = [   // airline online check-in pages
-  [/delta/i, "https://www.delta.com/mytrips/"], [/united/i, "https://www.united.com/en/us/checkin"], [/american/i, "https://www.aa.com/reservation/view/find-your-trip"],
-  [/southwest/i, "https://www.southwest.com/air/check-in/"], [/alaska/i, "https://www.alaskaair.com/checkin"], [/jetblue/i, "https://www.jetblue.com/check-in"],
-  [/aerom[eé]xico/i, "https://aeromexico.com/en-us/check-in"], [/volaris/i, "https://www.volaris.com/en/check-in"], [/viva ?aerobus/i, "https://www.vivaaerobus.com/en-us/check-in"],
-  [/air new zealand/i, "https://www.airnewzealand.com.au/check-in"], [/qantas/i, "https://www.qantas.com/au/en/travel-info/check-in.html"], [/jetstar/i, "https://www.jetstar.com/au/en/check-in"],
-  [/virgin australia/i, "https://www.virginaustralia.com/au/en/manage-booking/check-in/"], [/air canada/i, "https://www.aircanada.com/checkin"], [/latam/i, "https://www.latamairlines.com/us/en/check-in"],
-];
-const checkinUrl = (airline) => (CHECKIN.find(([re]) => re.test(airline || "")) || [, `https://www.google.com/search?q=${encodeURIComponent((airline || "") + " online check-in")}`])[1];
+
 // ---- online check-in: when it opens (per airline, in the departure airport's time zone), a link, and a calendar reminder
-const CHECKIN_HOURS = [[/aerom[eé]xico/i, 48], [/volaris/i, 48], [/viva ?aerobus/i, 48]];   // most airlines: 24 h
-const checkinHours = (airline) => (CHECKIN_HOURS.find(([re]) => re.test(airline || "")) || [, 24])[1];
-// "2026-12-25" + "10:40" in an IANA zone -> a real moment (Date)
-function zonedDate(date, hm, tz) {
-  const [y, mo, d] = date.split("-").map(Number), [h, mi] = (hm || "00:00").split(":").map(Number);
-  const guess = Date.UTC(y, mo - 1, d, h, mi);
-  if (!tz) return new Date(y, mo - 1, d, h, mi);
-  try {
-    const off = (t) => { const p = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(t));
-      const g = (k) => +p.find((x) => x.type === k).value; return Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute")) - t; };
-    let t = guess - off(guess); t = guess - off(t); return new Date(t);
-  } catch (e) { return new Date(y, mo - 1, d, h, mi); }
-}
-function checkinFor(f) {
-  const hm = timeIn(f.dep); if (!f.start || !hm) return null;
-  const from = codesOf(f.route)[0], dep = zonedDate(f.start, hm, AIRPORT_TZ[from]), hours = checkinHours(f.airline);
-  const opens = new Date(dep - hours * 3600e3), now = Date.now();
-  const status = now >= dep - 45 * 60e3 ? "closed" : now >= opens ? "open" : opens - now < 72 * 3600e3 ? "soon" : "later";
-  return { dep, opens, hours, status, url: checkinUrl(f.airline) };
-}
+const checkinFor = (f) => checkinInfo(f, Date.now());
 const localWhen = (d) => d.toLocaleString("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+// phone notification switch for the traveller being viewed (this device)
+const pushOnFor = (p) => !!data.pushState()?.people?.includes(p);
+function notifyBtn() {
+  if (pushOnFor(ui.person)) return `<span class="ci-on"><i class="ic16">${I.bell}</i>You'll get a notification</span>`;
+  return `<button type="button" class="btn small" data-push-on><i class="ic16">${I.bell}</i>Notify Me</button>`;
+}
+function pushCard() {
+  const st = data.pushState(), on = pushOnFor(ui.person);
+  if (!data.pushSupported()) return `<p class="muted small">${/iPhone|iPad/.test(navigator.userAgent) ? "To get check-in notifications on iPhone, add the app to your Home Screen (Share → Add to Home Screen) and open it from there." : "This browser can't show notifications - add the app to your Home Screen or use Chrome."}</p>`;
+  return `<div class="pushrow"><span><i class="ic16">${I.bell}</i><b>Notifications on this phone</b><small>${on ? `On for ${esc(NAME(ui.person))}${st.people.length > 1 ? ` (+${st.people.length - 1} more)` : ""} - when check-in opens` : `Get a notification when check-in opens for ${esc(NAME(ui.person))}'s flights`}</small></span>
+    <button type="button" class="btn small${on ? "" : " primary"}" ${on ? "data-push-off" : "data-push-on"}>${on ? "Turn Off" : "Turn On"}</button></div>`;
+}
 const untilWords = (d) => inWords(Math.round((d - Date.now()) / 60000));
 function checkinHtml(f, compact = false) {
   const c = checkinFor(f); if (!c || c.status === "closed") return "";
   const flight = `${codesOf(f.route).join(" → ")}${f.number ? " · " + f.number : ""}`;
   const btn = `<a class="btn small primary" target="_blank" rel="noopener" href="${c.url}"><i class="ic16">${I.check}</i>Check In Online</a>`;
-  const remind = `<button type="button" class="btn small" data-ci-remind="${esc(f.id)}"><i class="ic16">${I.bell}</i>Remind Me</button>`;
+  const remind = notifyBtn();
   return `<div class="cin ${c.status}"><div class="cin-t"><b>${c.status === "open" ? "Online check-in is open" : `Online check-in opens ${untilWords(c.opens)}`}</b>
       <small>${compact ? esc(flight) + " · " : ""}${c.status === "open" ? `until about 1 hour before departure` : `${esc(localWhen(c.opens))} your time · usually ${c.hours} h before departure`}</small></div>
     <div class="nacts">${c.status === "open" ? btn : remind}</div></div>`;
@@ -1040,11 +1015,19 @@ function downloadIcs(flights, name) {
 }
 const upcomingFlights = (p) => itemsFor(p).filter((i) => i.type === "flight" && checkinFor(i) && checkinFor(i).status !== "closed").sort((a, b) => checkinFor(a).dep - checkinFor(b).dep);
 function wireCheckins() {
+  root.querySelectorAll("[data-push-on]").forEach((b) => (b.onclick = async () => {
+    b.disabled = true;
+    try { const cur = data.pushState()?.people || []; await data.enablePush([...new Set([...cur, ui.person])]); toast(`Notifications on - you'll be told when check-in opens for ${NAME(ui.person)}`); }
+    catch (e) { b.disabled = false; toast(e.message === "blocked" ? "Notifications are blocked for this app - allow them in your phone's settings" : e.message === "dismissed" ? "Notifications not turned on" : e.message === "unsupported" ? "This browser can't show notifications" : "Couldn't turn on notifications: " + (e.code || e.message)); }
+  }));
+  root.querySelectorAll("[data-push-off]").forEach((b) => (b.onclick = async () => {
+    const rest = (data.pushState()?.people || []).filter((x) => x !== ui.person);
+    try { if (rest.length) await data.enablePush(rest); else await data.disablePush(); toast("Notifications off for " + NAME(ui.person)); } catch (e) { toast(e.message); }
+  }));
   root.querySelectorAll("[data-ci-remind]").forEach((b) => (b.onclick = () => { const f = store.items.find((x) => x.id === b.dataset.ciRemind); if (f) downloadIcs([f], `Check-in ${f.number || "flight"}.ics`); }));
   root.querySelector("[data-ci-all]")?.addEventListener("click", () => downloadIcs(upcomingFlights(ui.person), `Check-in reminders ${(store.trip?.title || "trip").replace(/[^\w ]+/g, "")}.ics`));
 }
 const dirUrl = (q) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}`;
-const timeIn = (t) => { const m = String(t || "").match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/); return m ? `${m[1].padStart(2, "0")}:${m[2]}` : ""; };
 const nowHM = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const minsUntil = (date, hm) => Math.round((new Date(`${date}T${hm}:00`) - new Date()) / 60000);
 const inWords = (m) => (m < 1 ? "now" : m < 60 ? `in ${m} min` : m < 24 * 60 ? `in ${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}` : `in ${Math.round(m / 1440)} day${Math.round(m / 1440) > 1 ? "s" : ""}`);
@@ -1131,7 +1114,7 @@ function renderNow() {
     ${stay ? `<section class="ncard k-stay tonight"><h3>Tonight</h3><div class="nmain"><span class="nbig">${ICON.stay}</span><div><div class="ntitle">${esc(stay.name || stay.short)}</div>
         <div class="nsub">${esc(stay.address || areaOf(stay) || "")}</div></div></div>${stepActions({ item: stay, k: "stay", where: stay.address || stay.name }, date)}</section>` : ""}
     ${tmSteps.length ? `<section class="ncard"><h3>Tomorrow · ${esc(WD[D(tomorrow).getDay()])} ${fmtDate(tomorrow)}</h3><ul class="nlist">${tmSteps.map((s) => line(s, tomorrow)).join("")}</ul></section>` : ""}
-    ${(() => { const fl = upcomingFlights(p).filter((f) => f !== next?.item).slice(0, 6); return fl.length ? `<section class="ncard"><h3 class="rhead"><span>Upcoming Check-ins</span><button type="button" class="btn tiny" data-ci-all><i class="ic16">${I.bell}</i>Add All to Calendar</button></h3>
+    ${(() => { const fl = upcomingFlights(p).filter((f) => f !== next?.item).slice(0, 6); return fl.length ? `<section class="ncard"><h3>Upcoming Check-ins</h3>${pushCard()}
         ${fl.map((f) => checkinHtml(f, true)).join("")}</section>` : ""; })()}
     ${phase !== "after" ? `<button class="btn small nday" data-day="${date}">Open ${date === today ? "Today's" : "Day 1"} Full Day →</button>` : ""}
   </div>`;

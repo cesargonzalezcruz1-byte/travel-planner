@@ -234,6 +234,31 @@ export async function extractDocFromFile(file) {
   throw lastErr;
 }
 
+// ------------------------------------------------------------------ phone notifications (check-in open), via Firebase Cloud Messaging
+// This device registers a push token in push/{hash} with the travellers it wants alerts for; the server function sends them.
+export const pushSupported = () => "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
+export const pushState = () => { try { return JSON.parse(localStorage.getItem("tp.push") || "null"); } catch (e) { return null; } };
+async function tokenId(token) { const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)); return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40); }
+export async function enablePush(people) {
+  if (!pushSupported()) throw new Error("unsupported");
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") throw new Error(perm === "denied" ? "blocked" : "dismissed");
+  if (DEMO) { localStorage.setItem("tp.push", JSON.stringify({ people, id: "demo" })); emit(); return; }
+  const msgM = await import(`${FIREBASE_SDK}/firebase-messaging.js`);
+  const messaging = msgM.getMessaging(fb.app);
+  const reg = await navigator.serviceWorker.ready;
+  const token = await msgM.getToken(messaging, { serviceWorkerRegistration: reg });
+  if (!token) throw new Error("no token");
+  const id = await tokenId(token);
+  await fb.fsM.setDoc(fb.fsM.doc(fb.db, "push", id), { token, people, role: store.role, email: store.email || "", ua: navigator.userAgent.slice(0, 200), updatedAt: now() });
+  localStorage.setItem("tp.push", JSON.stringify({ people, id })); emit();
+}
+export async function disablePush() {
+  const st = pushState(); localStorage.removeItem("tp.push");
+  if (st?.id && !DEMO) await fb.fsM.deleteDoc(fb.fsM.doc(fb.db, "push", st.id)).catch(() => {});
+  emit();
+}
+
 // ------------------------------------------------------------------ recommendations (Google Places, cached on the trip so the family sees them too)
 export async function saveRecs(key, rec) {
   if (DEMO) { const t = mem().trip; t.recs = { ...(t.recs || {}), [key]: clean(rec) }; demoLoad(store.tripId); emit(); return; }

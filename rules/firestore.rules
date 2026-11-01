@@ -51,6 +51,13 @@ service cloud.firestore {
       match /vault/{doc} { allow read, write: if isEditor() && recentAuth(); }
     }
 
+    // Phone notification sign-ups: each device writes its own push token (nobody can read them back; the server function uses them)
+    match /push/{id} {
+      allow create, update: if (isEditor() || isFamily()) && request.resource.data.token is string && request.resource.data.token.size() < 600
+        && request.resource.data.people is list && request.resource.data.people.size() <= 12;
+      allow delete: if isEditor() || isFamily();
+    }
+
     // Everything else is locked
     match /{document=**} { allow read, write: if false; }
   }

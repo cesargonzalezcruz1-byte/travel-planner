@@ -1,0 +1,11 @@
+{
+  "name": "travel-planner-functions",
+  "description": "Sends a phone notification when online check-in opens for a flight",
+  "type": "module",
+  "main": "index.js",
+  "engines": { "node": "22" },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.1.0"
+  }
+}

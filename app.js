@@ -28,7 +28,7 @@ const ALL_CODES = () => (store.trip?.travellers || []).concat(store.trip?.extend
 const NAME = (code) => (store.trip?.travellers || []).concat(store.trip?.extended || []).find((t) => t.code === code)?.name || code;
 
 let ui = { person: localStorage.getItem("tp.person") || "", day: null, tripId: null, swap: {}, view: "overview" };
-try { const v = localStorage.getItem("tp.view"); ui.view = ["overview", "timeline", "journey", "budget"].includes(v) ? v : "overview"; } catch (e) { ui.view = "overview"; }
+try { const v = localStorage.getItem("tp.view"); ui.view = ["now", "overview", "timeline", "journey", "budget"].includes(v) ? v : "overview"; } catch (e) { ui.view = "overview"; }
 try { ui.swap = JSON.parse(localStorage.getItem("tp.swap") || "{}"); } catch (e) { /* private mode */ }
 // routes:  #/  (trips)   #/t/<tripId>   #/t/<tripId>/<YYYY-MM-DD>
 function parseRoute() {
@@ -119,8 +119,10 @@ function render() {
   if (!ui.person) return renderEmpty();
   applyTheme();
   if (ui.view === "budget" && !isEditor()) ui.view = "overview";
-  if (ui.day) renderDay(); else if (ui.view === "journey") renderJourney(); else if (ui.view === "timeline") renderTimeline(); else if (ui.view === "budget") renderBudget(); else renderOverview();
-  if (ui.slide) { root.querySelector(".ov,.tl,.journey,.dayview,.bd")?.classList.add(ui.slide); ui.slide = null; }
+  // during the trip, the app opens on Now (once per session)
+  if (!ui.nowChecked && store.trip?.start) { ui.nowChecked = true; const td = iso(new Date()); if (td >= store.trip.start && td <= store.trip.end && !ui.day) ui.view = "now"; }
+  if (ui.day) renderDay(); else if (ui.view === "now") renderNow(); else if (ui.view === "journey") renderJourney(); else if (ui.view === "timeline") renderTimeline(); else if (ui.view === "budget") renderBudget(); else renderOverview();
+  if (ui.slide) { root.querySelector(".ov,.tl,.journey,.dayview,.bd,.now")?.classList.add(ui.slide); ui.slide = null; }
   if (isEditor() && store.trip) setTimeout(ensureRecs, 0);
   if (isEditor()) setTimeout(checkDocAlerts, 300);
 }
@@ -296,6 +298,8 @@ const I = {
   book: SV('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>'),
   logout: SV('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
   plusc: SV('<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>'),
+  check: SV('<path d="M20 6 9 17l-5-5"/>'),
+  phone: SV('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
@@ -316,6 +320,7 @@ const ICON = {
   bag: SV('<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>'),
   grid: SV('<path d="M3 4h18v16H3zM3 10h18M3 15h18M9 4v16"/>'),
   list: SV('<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
+  clock: SV('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   route: SV('<circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/>'),
 };
 const KIND = { flight: "flight", stay: "stay", car: "car", activity: "act", act: "act" };
@@ -351,7 +356,7 @@ function applyTheme() {
 }
 
 // ---------------------------------------------------------------- header: trip title, initials (traveller menu), view icons, + and ⋯
-const VIEWS = [["overview", "Overview", "grid"], ["timeline", "Timeline", "list"], ["journey", "Journey", "route"], ["budget", "Budget", "wallet"]];
+const VIEWS = [["now", "Now", "clock"], ["overview", "Overview", "grid"], ["timeline", "Timeline", "list"], ["journey", "Journey", "route"], ["budget", "Budget", "wallet"]];
 const viewsFor = () => VIEWS.filter((v) => v[0] !== "budget" || isEditor());
 function header(opts = {}) {
   const t = store.trip || {}; const today = iso(new Date());
@@ -872,6 +877,111 @@ function dayInfo(p, date) {
   const comments = ents.filter((e) => e.kind === "comment");
   return { allDay, steps, comments, travel: steps.some((s) => s.k !== "act") };
 }
+
+// ---------------------------------------------------------------- Now: what's next today, with directions, check-in and status links
+const CHECKIN = [   // airline online check-in pages
+  [/delta/i, "https://www.delta.com/mytrips/"], [/united/i, "https://www.united.com/en/us/checkin"], [/american/i, "https://www.aa.com/reservation/view/find-your-trip"],
+  [/southwest/i, "https://www.southwest.com/air/check-in/"], [/alaska/i, "https://www.alaskaair.com/checkin"], [/jetblue/i, "https://www.jetblue.com/check-in"],
+  [/aerom[eé]xico/i, "https://aeromexico.com/en-us/check-in"], [/volaris/i, "https://www.volaris.com/en/check-in"], [/viva ?aerobus/i, "https://www.vivaaerobus.com/en-us/check-in"],
+  [/air new zealand/i, "https://www.airnewzealand.com.au/check-in"], [/qantas/i, "https://www.qantas.com/au/en/travel-info/check-in.html"], [/jetstar/i, "https://www.jetstar.com/au/en/check-in"],
+  [/virgin australia/i, "https://www.virginaustralia.com/au/en/manage-booking/check-in/"], [/air canada/i, "https://www.aircanada.com/checkin"], [/latam/i, "https://www.latamairlines.com/us/en/check-in"],
+];
+const checkinUrl = (airline) => (CHECKIN.find(([re]) => re.test(airline || "")) || [, `https://www.google.com/search?q=${encodeURIComponent((airline || "") + " online check-in")}`])[1];
+const dirUrl = (q) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}`;
+const timeIn = (t) => { const m = String(t || "").match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/); return m ? `${m[1].padStart(2, "0")}:${m[2]}` : ""; };
+const nowHM = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const minsUntil = (date, hm) => Math.round((new Date(`${date}T${hm}:00`) - new Date()) / 60000);
+const inWords = (m) => (m < 1 ? "now" : m < 60 ? `in ${m} min` : m < 24 * 60 ? `in ${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}` : `in ${Math.round(m / 1440)} day${Math.round(m / 1440) > 1 ? "s" : ""}`);
+// Everything happening on a day for one traveller, with where to go and what you might need
+function nowSteps(p, date) {
+  const out = [];
+  const apt = (c) => (/^[A-Z]{3}$/.test(c) ? c + " airport" : c);
+  for (const i of itemsFor(p).filter((x) => x.start <= date && date <= x.end)) {
+    const base = { item: i, k: i.type, tbc: i.status === "tbc" };
+    if (i.type === "flight") {
+      const c = codesOf(i.route), fl = [i.airline, i.number].filter(Boolean).join(" ");
+      if (date === i.start) out.push({ ...base, time: cleanTime(i.dep), title: `Fly ${c[0] || ""} → ${c.at(-1) || ""}`, sub: [fl, i.arr && "lands " + i.arr].filter(Boolean).join(" · "), where: apt(c[0] || ""), flight: true });
+      if (date === i.end && i.end !== i.start) out.push({ ...base, time: cleanTime(i.arr), title: `Land in ${c.at(-1) || ""}`, sub: fl, where: apt(c.at(-1) || "") });
+    } else if (i.type === "stay") {
+      if (date === i.end) out.push({ ...base, time: cleanTime(i.checkout), key: "10:00", title: `Check out of ${i.short || i.name}`, sub: i.checkout ? `by ${cleanTime(i.checkout)}` : "", where: i.address || i.name });
+      if (date === i.start) out.push({ ...base, time: cleanTime(i.checkin), key: "15:00", title: `Check in at ${i.short || i.name}`, sub: [i.checkin ? "from " + cleanTime(i.checkin) : "", areaOf(i)].filter(Boolean).join(" · "), where: i.address || i.name });
+    } else if (i.type === "car") {
+      if (date === i.start) out.push({ ...base, time: cleanTime(i.pickupTime), key: "09:00", title: `Pick up the ${i.company || ""} car`, sub: [i.pickup, i.vehicle && i.vehicle.replace(/\s*\(.*\)$/, "")].filter(Boolean).join(" · "), where: [i.company, apt(placeCode(i.pickup) || i.pickup || "")].filter(Boolean).join(" ") });
+      if (date === i.end) out.push({ ...base, time: cleanTime(i.dropoffTime), key: "17:00", title: `Return the ${i.company || ""} car`, sub: i.dropoff || "", where: [i.company, apt(placeCode(i.dropoff) || i.dropoff || "")].filter(Boolean).join(" ") });
+    }
+  }
+  entriesFor(p, date).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed).forEach((e) =>
+    out.push({ entry: e, k: "act", time: timeIn(e.text), key: "12:00", title: firstText(e.text), sub: e.place && !e.text.includes(e.place) ? e.place : "", where: e.place || "" }));
+  const sk = (s) => s.time || s.key || "12:00";
+  out.sort((a, b) => sk(a).localeCompare(sk(b)));
+  // Clock times are local, so a flight across time zones can "land before it leaves". Keep things in travel order:
+  // check-outs and returning a car at the departure airport come before the flight; check-ins and picking up a car at the arrival airport after it.
+  out.filter((s) => s.flight).forEach((f) => {
+    const c = codesOf(f.item.route), from = c[0], to = c.at(-1);
+    const before = (s) => (s.k === "stay" && s.item.end === date && s.item.start !== date) || (s.k === "car" && s.item.end === date && placeCode(s.item.dropoff) === from);
+    const after = (s) => (s.k === "stay" && s.item.start === date) || (s.k === "car" && s.item.start === date && placeCode(s.item.pickup) === to);
+    for (const s of out.filter(after)) { const i = out.indexOf(s), fi = out.indexOf(f); if (i < fi) { out.splice(i, 1); out.splice(out.indexOf(f) + 1, 0, s); } }
+    for (const s of out.filter(before)) { const i = out.indexOf(s), fi = out.indexOf(f); if (i > fi) { out.splice(i, 1); out.splice(out.indexOf(f), 0, s); } }
+  });
+  return out;
+}
+const tonightStay = (p, date) => itemsFor(p).find((i) => i.type === "stay" && i.start <= date && date < i.end);
+function stepActions(s, date) {
+  const a = [], i = s.item, pv = i ? store.priv[i.id] || {} : s.entry ? store.priv[s.entry.id] || {} : {};
+  if (s.where) a.push(`<a class="btn small" target="_blank" rel="noopener" href="${dirUrl(s.where)}"><i class="ic16">${I.pin}</i>Directions</a>`);
+  if (s.flight) {
+    const num = String(i.number || "").split(/[/,]/)[0].replace(/\s+/g, "");
+    const mins = s.time ? minsUntil(date, s.time) : 9999;
+    if (mins <= 48 * 60) a.push(`<a class="btn small primary" target="_blank" rel="noopener" href="${checkinUrl(i.airline)}"><i class="ic16">${I.check}</i>Check In Online</a>`);
+    if (num) a.push(`<a class="btn small" target="_blank" rel="noopener" href="https://www.flightaware.com/live/flight/${encodeURIComponent(num)}"><i class="ic16">${ICON.flight}</i>Flight Status</a>`);
+  }
+  if (isEditor() && pv.phone) a.push(`<a class="btn small" href="tel:${esc(String(pv.phone).replace(/[^\d+]/g, ""))}"><i class="ic16">${I.phone}</i>Call</a>`);
+  const files = isEditor() ? store.files.filter((f) => (i && f.itemId === i.id) || (s.entry && f.entryId === s.entry.id)) : [];
+  files.forEach((f) => a.push(fileLink(f)));
+  return `${isEditor() && pv.confirmation ? `<div class="nconf">Confirmation <b>${esc(pv.confirmation)}</b></div>` : ""}${a.length ? `<div class="nacts">${a.join("")}</div>` : ""}`;
+}
+function renderNow() {
+  const p = ui.person, t = store.trip, today = iso(new Date()), hm = nowHM();
+  const phase = today < t.start ? "before" : today > t.end ? "after" : "during";
+  const date = phase === "before" ? t.start : today, day = dayDiff(t.start, date) + 1, N = dayDiff(t.start, t.end) + 1;
+  const steps = phase === "after" ? [] : nowSteps(p, date);
+  const sk = (s) => s.time || s.key || "12:00";
+  // done: its time is more than 30 min ago - or, with no time, something after it is already done
+  const doneSet = new Set(); if (phase === "during") { let later = false; for (let k = steps.length - 1; k >= 0; k--) { const s = steps[k];
+    if (s.time ? minsUntil(date, s.time) < -30 : later) { doneSet.add(s); later = true; } } }
+  const done = (s) => doneSet.has(s);
+  let next = steps.find((s) => !done(s)), nextDate = date;
+  const tomorrow = addDays(date, 1), tmSteps = phase === "after" || tomorrow > t.end ? [] : nowSteps(p, tomorrow);
+  if (!next && tmSteps.length) { next = tmSteps[0]; nextDate = tomorrow; }
+  const stay = phase === "after" ? null : tonightStay(p, date);
+  const w = withText(p, date);
+  const line = (s, d) => `<li class="nstep k-${s.k}${done(s) && d === date ? " done" : ""}${s === next ? " is-next" : ""}"><span class="ntime">${esc(s.time || "")}</span><span class="nic">${ICON[KIND[s.k] || s.k] || ""}</span><span class="nt"><b>${esc(s.title)}</b>${s.sub ? `<small>${esc(s.sub)}</small>` : ""}</span></li>`;
+  const countdown = next ? (next.time ? inWords(minsUntil(nextDate, next.time)) : nextDate === today ? "today" : nextDate === tomorrow ? "tomorrow" : inWords(dayDiff(today, nextDate) * 1440)) : "";
+  const status = phase === "before" ? `Trip starts ${inWords(dayDiff(today, t.start) * 1440)} · ${fmtDate(t.start)}` : phase === "after" ? `Trip finished ${fmtDate(t.end)}` : `Day ${day} of ${N}${stay ? " · " + (areaOf(stay) || stay.short || stay.name) : ""}`;
+  root.innerHTML = `${header({ views: true })}
+  <div class="now">
+    <p class="nstatus">${esc(status)}${w ? ` · <span class="muted">${esc(w)}</span>` : ""}</p>
+    ${phase === "after" ? `<section class="ncard"><h3>Welcome home</h3><p class="muted">Relive it in the Journey or the Journal, or make the photo album.</p>
+        <div class="nacts"><button class="btn small" data-act="album"><i class="ic16">${I.book}</i>Export Album (Word)</button>${isEditor() ? `<button class="btn small" data-act="archive"><i class="ic16">${I.archive}</i>Archive Documents</button>` : ""}</div></section>`
+    : next ? `<section class="ncard next k-${next.k}${next.tbc ? " tbc" : ""}">
+        <div class="nhead"><span class="nlabel">${phase === "before" ? "First up" : "Next up"}${nextDate !== today && phase !== "before" ? " · tomorrow" : ""}</span><span class="ncount">${esc(countdown)}</span></div>
+        <div class="nmain"><span class="nbig">${ICON[KIND[next.k] || next.k] || ""}</span><div><div class="ntitle">${esc(next.title)}</div>
+          <div class="nsub">${[next.time && `${phase === "before" ? fmtDate(nextDate) + " · " : ""}${next.time}`, next.sub].filter(Boolean).map(esc).join(" · ")}</div></div></div>
+        ${next.flight ? `<p class="nhint small">Online check-in usually opens 24–48 hours before departure${next.time && minsUntil(nextDate, next.time) <= 48 * 60 ? " - it may be open now" : ""}.</p>` : ""}
+        ${stepActions(next, nextDate)}</section>`
+    : `<section class="ncard"><h3>Nothing else planned today</h3><p class="muted">Free time! Check the Recommended places on the day screen.</p></section>`}
+    ${steps.length > 1 || (steps.length && next && nextDate !== date) ? `<section class="ncard"><h3>${phase === "before" ? "Day 1 · " + fmtDate(date) : "Today"}</h3><ul class="nlist">${steps.map((s) => line(s, date)).join("")}</ul></section>` : ""}
+    ${stay ? `<section class="ncard k-stay tonight"><h3>Tonight</h3><div class="nmain"><span class="nbig">${ICON.stay}</span><div><div class="ntitle">${esc(stay.name || stay.short)}</div>
+        <div class="nsub">${esc(stay.address || areaOf(stay) || "")}</div></div></div>${stepActions({ item: stay, k: "stay", where: stay.address || stay.name }, date)}</section>` : ""}
+    ${tmSteps.length ? `<section class="ncard"><h3>Tomorrow · ${esc(WD[D(tomorrow).getDay()])} ${fmtDate(tomorrow)}</h3><ul class="nlist">${tmSteps.map((s) => line(s, tomorrow)).join("")}</ul></section>` : ""}
+    ${phase !== "after" ? `<button class="btn small nday" data-day="${date}">Open ${date === today ? "Today's" : "Day 1"} Full Day →</button>` : ""}
+  </div>`;
+  wireHeader(); wireDays();
+  root.querySelectorAll(".now [data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.()));
+  root.querySelectorAll(".now [data-file]").forEach((b) => (b.onclick = async () => { const f = store.files.find((x) => x.id === b.dataset.file); const w2 = window.open("", "_blank"); const u = await data.fileUrl(f); if (w2) w2.location = u; else location.href = u; }));
+}
+// keep the countdown fresh while the Now screen is open
+setInterval(() => { if (ui.view === "now" && !ui.day && store.trip && !document.querySelector(".modal") && document.visibilityState === "visible" && !document.activeElement?.matches?.("input,textarea,select")) { const y = scrollY; render(); scrollTo(0, y); } }, 60000);
 
 // ---------------------------------------------------------------- Timeline view (one card per day)
 function renderTimeline() {

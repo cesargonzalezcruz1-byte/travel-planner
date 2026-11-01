@@ -723,3 +723,6 @@ fieldset{min-width:0}
 .cin .ci-on{white-space:nowrap}
 .cin-t small.one{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cin-h{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0} .cin-h b{min-width:0}
+.nstatus{display:flex;flex-wrap:wrap;align-items:center;gap:4px 5px;line-height:18px}
+.nstatus .tpills{vertical-align:baseline}
+.nstatus .tpill{height:18px}

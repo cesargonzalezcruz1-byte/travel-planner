@@ -1022,7 +1022,7 @@ function checkinHtml(f, compact = false) {
   const btn = `<a class="btn small primary" target="_blank" rel="noopener" href="${c.url}"><i class="ic16">${I.check}</i>Check In Online</a>`;
   const remind = notifyBtn();
   return `<div class="cin ${c.status}"><div class="cin-t"><b>${c.status === "open" ? "Online check-in is open" : `Online check-in opens ${untilWords(c.opens)}`}</b>
-      ${compact ? `<small>${esc(flight)}</small><small>${c.status === "open" ? "until 1 h before departure" : esc(localWhen(c.opens))}</small>`
+      ${compact ? `<small class="one">${esc(flight)}</small><small class="one">${c.status === "open" ? "until 1 h before departure" : esc(localWhen(c.opens))}</small>`
         : `<small>${c.status === "open" ? `until about 1 hour before departure` : `${esc(localWhen(c.opens))} your time · usually ${c.hours} h before departure`}</small>`}</div>
     <div class="nacts">${c.status === "open" ? btn : remind}</div></div>`;
 }

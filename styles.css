@@ -721,4 +721,4 @@ fieldset{min-width:0}
 .pushset .btn{justify-self:start}
 .pp{position:relative}
 .cin .ci-on{max-width:118px;text-align:right;line-height:1.25;align-items:flex-start} .cin .ci-on .ic16{margin-top:1px}
-.cin-t small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cin-t small.one{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

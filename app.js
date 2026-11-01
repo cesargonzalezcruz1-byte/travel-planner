@@ -973,7 +973,7 @@ function renderNow() {
   const status = phase === "before" ? `Trip starts ${inWords(dayDiff(today, t.start) * 1440)} · ${fmtDate(t.start)}` : phase === "after" ? `Trip finished ${fmtDate(t.end)}` : `Day ${day} of ${N}${stay ? " · " + (areaOf(stay) || stay.short || stay.name) : ""}`;
   root.innerHTML = `${header({ views: true })}
   <div class="now">
-    <p class="nstatus">${esc(status)}${w ? ` · <span class="muted">with</span> ${withPills(p, date)}` : ""}</p>
+    <p class="nstatus">${esc(status)}${w ? ` ${withPills(p, date)}` : ""}</p>
     ${phase === "after" ? `<section class="ncard"><h3>Welcome home</h3><p class="muted">Relive it in the Journey or the Journal, or make the photo album.</p>
         <div class="nacts"><button class="btn small" data-act="album"><i class="ic16">${I.book}</i>Export Album (Word)</button>${isEditor() ? `<button class="btn small" data-act="archive"><i class="ic16">${I.archive}</i>Archive Documents</button>` : ""}</div></section>`
     : next ? `<section class="ncard next k-${next.k}${next.tbc ? " tbc" : ""}">

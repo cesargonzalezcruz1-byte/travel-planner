@@ -107,7 +107,8 @@ function texts(i) {
 }
 
 // ================================================================= rendering
-const root = $("#app");
+const appRoot = $("#app");
+let root = appRoot;   // where the current screen is drawn (a pane in split view)
 function render() {
   if (!store.ready) { root.innerHTML = `<div class="loading"><img class="logo-lg" src="icons/logo.svg" alt=""><br>Loading…</div>`; return; }
   if (!store.role) return renderLogin();
@@ -121,11 +122,38 @@ function render() {
   if (ui.view === "budget" && !isEditor()) ui.view = "overview";
   // during the trip, the app opens on Now (once per session)
   if (!ui.nowChecked && store.trip?.start) { ui.nowChecked = true; const td = iso(new Date()); if (td >= store.trip.start && td <= store.trip.end && !ui.day) ui.view = "now"; }
-  if (ui.day) renderDay(); else if (ui.view === "now") renderNow(); else if (ui.view === "journey") renderJourney(); else if (ui.view === "timeline") renderTimeline(); else if (ui.view === "budget") renderBudget(); else renderOverview();
+  if (splitOn()) { renderSplit(); return afterRender(); }
+  root = appRoot; appRoot.classList.remove("is-split");
+  renderView(ui.day ? "day" : ui.view);
   if (ui.slide) { root.querySelector(".ov,.tl,.journey,.dayview,.bd,.now")?.classList.add(ui.slide); ui.slide = null; }
+  afterRender();
+}
+function afterRender() {
+  splitWas = splitOn() + "|" + splitWide();
   if (isEditor() && store.trip) setTimeout(ensureRecs, 0);
   if (isEditor()) setTimeout(checkDocAlerts, 300);
 }
+const renderView = (v) => (v === "day" ? renderDay() : v === "now" ? renderNow() : v === "journey" ? renderJourney() : v === "timeline" ? renderTimeline() : v === "budget" && isEditor() ? renderBudget() : renderOverview());
+// ---- split view: on an unfolded foldable, tablet or computer, two views side by side (left / right), each with its own view icons.
+// A day opened from either side shows on the right; its home button brings the right side back to its view.
+const SPLIT_MIN = 680;
+const splitWide = () => window.innerWidth >= SPLIT_MIN || matchMedia("(horizontal-viewport-segments: 2)").matches;
+const splitOn = () => !!ui.tripId && splitWide() && (localStorage.getItem("tp.split") ?? "1") === "1";
+try { ui.split = JSON.parse(localStorage.getItem("tp.splitViews") || "null"); } catch (e) { /* ignore */ }
+if (!Array.isArray(ui.split) || ui.split.length !== 2) ui.split = ["now", "journey"];
+function renderSplit() {
+  appRoot.classList.add("is-split");
+  const ok = (v) => viewsFor().some((x) => x[0] === v) ? v : "overview";
+  ui.split = [ok(ui.split[0]), ok(ui.split[1])];
+  const keep = [...appRoot.querySelectorAll(":scope > .split > .pane")].map((p) => p.scrollTop);
+  appRoot.innerHTML = `<div class="split"><div class="pane" data-pane="0"></div><div class="pane" data-pane="1"></div></div>`;
+  const panes = appRoot.querySelectorAll(".pane"), saved = ui.view;
+  [[0, ui.split[0]], [1, ui.day ? "day" : ui.split[1]]].forEach(([k, v]) => { root = panes[k]; ui.pane = k; if (v !== "day") ui.view = v; renderView(v); if (keep[k]) panes[k].scrollTop = keep[k]; });
+  ui.view = saved; ui.pane = null; root = panes[1];
+}
+const splitToggle = () => (splitWide() && ui.tripId ? `<button class="iconbtn splitbtn" data-split aria-label="${splitOn() ? "One view" : "Two views side by side"}" title="${splitOn() ? "One view" : "Two views side by side"}">${splitOn() ? ICON.single : ICON.split}</button>` : "");
+let splitWas = null;
+window.addEventListener("resize", () => { const w = splitOn() + "|" + splitWide(); if (splitWas !== null && w !== splitWas && store.ready) render(); splitWas = w; });
 
 function renderLogin(err = "") {
   root.innerHTML = `
@@ -302,7 +330,7 @@ const I = {
   phone: SV('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v77";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v78";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -321,6 +349,8 @@ const ICON = {
   bag: SV('<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>'),
   grid: SV('<path d="M3 4h18v16H3zM3 10h18M3 15h18M9 4v16"/>'),
   list: SV('<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
+  split: SV('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>'),
+  single: SV('<rect x="3" y="4" width="18" height="16" rx="2"/>'),
   clock: SV('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   route: SV('<circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/>'),
 };
@@ -379,6 +409,7 @@ function header(opts = {}) {
       ${!opts.views && ui.day ? `<button class="iconbtn" data-itinerary data-back aria-label="Back to ${VIEWS.find((v) => v[0] === ui.view)?.[1] || "Overview"}" title="Back to ${VIEWS.find((v) => v[0] === ui.view)?.[1] || "Overview"}">${ICON.home}</button>` : ""}
       ${opts.views ? `<nav class="vseg${viewsFor().length > 3 ? " icons" : ""}" aria-label="View">${viewsFor().map(([k, l, ic]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}" aria-label="${l}" title="${l}">${ICON[ic]}${ui.view === k && viewsFor().length <= 3 ? `<span>${l}</span>` : ""}</button>`).join("")}</nav>` : `<span class="hero-hint">${esc(NAME(me))}'s day</span>`}
       <span class="grow"></span>
+      ${ui.pane !== 1 ? splitToggle() : ""}
       ${isEditor() ? `<button class="iconbtn" data-act="add" aria-label="Add booking" title="Add booking">${ICON.plus}</button>` : ""}
       <details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
@@ -393,12 +424,17 @@ function header(opts = {}) {
 }
 function wireHeader() {
   root.querySelectorAll("[data-person]").forEach((b) => (b.onclick = () => { ui.person = b.dataset.person; localStorage.setItem("tp.person", ui.person); render(); }));
-  root.querySelectorAll("[data-view]").forEach((b) => (b.onclick = () => { ui.view = b.dataset.view; try { localStorage.setItem("tp.view", ui.view); } catch (e) { /* ignore */ } sessionStorage.removeItem("tp.wscroll"); render(); }));
+  root.querySelectorAll("[data-view]").forEach((b) => (b.onclick = () => {
+    const pane = b.closest(".pane");
+    if (pane) { ui.split[+pane.dataset.pane] = b.dataset.view; if (pane.dataset.pane === "1") ui.day = null; try { localStorage.setItem("tp.splitViews", JSON.stringify(ui.split)); } catch (e) { /* ignore */ }
+      if (pane.dataset.pane === "1" && location.hash.split("/").length > 3) { routeTo(ui.tripId, null); return; } render(); return; }
+    ui.view = b.dataset.view; try { localStorage.setItem("tp.view", ui.view); } catch (e) { /* ignore */ } sessionStorage.removeItem("tp.wscroll"); render(); }));
+  root.querySelectorAll("[data-split]").forEach((b) => (b.onclick = () => { try { localStorage.setItem("tp.split", splitOn() ? "0" : "1"); } catch (e) { /* ignore */ } render(); }));
   root.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.(b)));
   root.querySelectorAll("[data-home]").forEach((b) => (b.onclick = () => routeTo(null)));
   root.querySelectorAll("[data-itinerary]").forEach((b) => (b.onclick = () => routeTo(ui.tripId, null)));
   // close an open menu when tapping elsewhere
-  document.onclick = (e) => root.querySelectorAll("details.more[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+  document.onclick = (e) => document.querySelectorAll("details.more[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
 }
 
 // ---------------------------------------------------------------- budget & spending (editors only - costs live in the private collection)
@@ -777,7 +813,7 @@ function renderOverview() {
       <div class="ov-head"><span class="l">DAY</span><span class="k-flight">FLIGHT</span><span class="k-stay" style="grid-column:3 / span 2">STAY</span><span class="k-car" style="grid-column:5 / span 2">CAR</span></div>
       <div class="ov-grid" style="--n:${N}">${cells.join("")}<svg class="ov-svg" aria-hidden="true"></svg></div>
       ${legend}</div></div>`;
-  ui.ovShapes = shapes; drawOverviewShapes();
+  const svgEl = root.querySelector(".ov-svg"); if (svgEl) svgEl._shapes = shapes; drawOverviewShapes(svgEl);
   wireHeader(); wireDays();
   root.querySelectorAll("[data-swap]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); const k = b.dataset.swap; ui.swap[k] = (ui.swap[k] || 0) + 1;
     try { localStorage.setItem("tp.swap", JSON.stringify(ui.swap)); } catch (e) { /* ignore */ } const y = scrollY; render(); scrollTo(0, y); }));
@@ -785,8 +821,8 @@ function renderOverview() {
   if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
   else if (ds.includes(today) && !ui.ovScrolled) { ui.ovScrolled = true; const el = root.querySelector(".ov-day.today"); if (el) window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + scrollY - 200)); }
 }
-function drawOverviewShapes() {
-  const svg = root.querySelector(".ov-svg"); if (!svg || !ui.ovShapes) return;
+function drawOverviewShapes(svg) {
+  if (!svg || !svg._shapes) return; const shapes = svg._shapes;
   const W = svg.getBoundingClientRect().width, H = ROW_H, GAP = 3, PAIR = (W - GAP) / 2, INSET = 2, R = 12, NECK = 10;
   if (!W) return;
   const rows = days().length; svg.setAttribute("viewBox", `0 0 ${W} ${rows * H}`);
@@ -815,14 +851,14 @@ function drawOverviewShapes() {
       return `${i ? "L" : "M"}${(v[0] - a[0] * t).toFixed(1)} ${(v[1] - a[1] * t).toFixed(1)}Q${v[0].toFixed(1)} ${v[1].toFixed(1)} ${(v[0] + b[0] * t).toFixed(1)} ${(v[1] + b[1] * t).toFixed(1)}`;
     }).join("") + "Z";
   };
-  svg.innerHTML = ui.ovShapes.map((x) => {
+  svg.innerHTML = shapes.map((x) => {
     const fill = x.tbc ? "var(--card)" : x.clash ? `var(--clash${x.clash}-t)` : `var(--${x.type}-t${x.shade ? "2" : ""})`;
     const stroke = x.tbc ? `stroke:var(--${x.clash ? "clash" + x.clash : x.type});stroke-width:1.5;stroke-dasharray:4 3;` : "";
     return `<path data-day="${x.day}" d="${pathOf(outline(x.half * (PAIR + GAP), x.s, x.e, x.cutTop, x.cutBot), x.tbc ? INSET + 0.75 : INSET)}" style="fill:${fill};${stroke}"></path>`;
   }).join("");
   svg.querySelectorAll("[data-day]").forEach((el) => (el.onclick = () => openDay(el.dataset.day)));
 }
-window.addEventListener("resize", () => { if (ui.view === "overview" && !ui.day) drawOverviewShapes(); });
+window.addEventListener("resize", () => document.querySelectorAll(".ov-svg").forEach((svg) => drawOverviewShapes(svg)));
 // swipe left / right on the itinerary to move between Overview, Timeline and Journey (phones)
 (() => {
   let x0 = 0, y0 = 0, t0 = 0, ok = false;

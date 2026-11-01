@@ -702,3 +702,9 @@ fieldset{min-width:0}
 .split .pane+.pane{border-left:1px solid var(--line2)}
 @media (horizontal-viewport-segments: 2){.split{grid-template-columns:env(viewport-segment-width 0 0, 50vw) 1fr}.split .pane+.pane{margin-left:calc(env(viewport-segment-left 1 0, 50vw) - env(viewport-segment-right 0 0, 50vw))}}
 .etext .whos{margin-left:8px;vertical-align:middle}
+/* online check-in reminder */
+.cin{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-radius:14px;background:var(--card);border:1.5px solid var(--line2);margin:6px 0 2px}
+.cin.open{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 10%,var(--card))}
+.cin.soon{border-color:var(--flight)}
+.cin-t{display:grid;gap:1px;min-width:0} .cin-t b{font-size:13.5px} .cin.open .cin-t b{color:var(--ok)} .cin-t small{color:var(--muted);font-size:12px}
+.icard .cin{margin:8px 0 4px}

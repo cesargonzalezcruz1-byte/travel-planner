@@ -334,11 +334,12 @@ const I = {
   book: SV('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>'),
   logout: SV('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
   plusc: SV('<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>'),
+  bell: SV('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
   check: SV('<path d="M20 6 9 17l-5-5"/>'),
   phone: SV('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v81";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v82";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -988,6 +989,60 @@ const CHECKIN = [   // airline online check-in pages
   [/virgin australia/i, "https://www.virginaustralia.com/au/en/manage-booking/check-in/"], [/air canada/i, "https://www.aircanada.com/checkin"], [/latam/i, "https://www.latamairlines.com/us/en/check-in"],
 ];
 const checkinUrl = (airline) => (CHECKIN.find(([re]) => re.test(airline || "")) || [, `https://www.google.com/search?q=${encodeURIComponent((airline || "") + " online check-in")}`])[1];
+// ---- online check-in: when it opens (per airline, in the departure airport's time zone), a link, and a calendar reminder
+const CHECKIN_HOURS = [[/aerom[eé]xico/i, 48], [/volaris/i, 48], [/viva ?aerobus/i, 48]];   // most airlines: 24 h
+const checkinHours = (airline) => (CHECKIN_HOURS.find(([re]) => re.test(airline || "")) || [, 24])[1];
+// "2026-12-25" + "10:40" in an IANA zone -> a real moment (Date)
+function zonedDate(date, hm, tz) {
+  const [y, mo, d] = date.split("-").map(Number), [h, mi] = (hm || "00:00").split(":").map(Number);
+  const guess = Date.UTC(y, mo - 1, d, h, mi);
+  if (!tz) return new Date(y, mo - 1, d, h, mi);
+  try {
+    const off = (t) => { const p = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(t));
+      const g = (k) => +p.find((x) => x.type === k).value; return Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute")) - t; };
+    let t = guess - off(guess); t = guess - off(t); return new Date(t);
+  } catch (e) { return new Date(y, mo - 1, d, h, mi); }
+}
+function checkinFor(f) {
+  const hm = timeIn(f.dep); if (!f.start || !hm) return null;
+  const from = codesOf(f.route)[0], dep = zonedDate(f.start, hm, AIRPORT_TZ[from]), hours = checkinHours(f.airline);
+  const opens = new Date(dep - hours * 3600e3), now = Date.now();
+  const status = now >= dep - 45 * 60e3 ? "closed" : now >= opens ? "open" : opens - now < 72 * 3600e3 ? "soon" : "later";
+  return { dep, opens, hours, status, url: checkinUrl(f.airline) };
+}
+const localWhen = (d) => d.toLocaleString("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+const untilWords = (d) => inWords(Math.round((d - Date.now()) / 60000));
+function checkinHtml(f, compact = false) {
+  const c = checkinFor(f); if (!c || c.status === "closed") return "";
+  const flight = `${codesOf(f.route).join(" → ")}${f.number ? " · " + f.number : ""}`;
+  const btn = `<a class="btn small primary" target="_blank" rel="noopener" href="${c.url}"><i class="ic16">${I.check}</i>Check In Online</a>`;
+  const remind = `<button type="button" class="btn small" data-ci-remind="${esc(f.id)}"><i class="ic16">${I.bell}</i>Remind Me</button>`;
+  return `<div class="cin ${c.status}"><div class="cin-t"><b>${c.status === "open" ? "Online check-in is open" : `Online check-in opens ${untilWords(c.opens)}`}</b>
+      <small>${compact ? esc(flight) + " · " : ""}${c.status === "open" ? `until about 1 hour before departure` : `${esc(localWhen(c.opens))} your time · usually ${c.hours} h before departure`}</small></div>
+    <div class="nacts">${c.status === "open" ? btn : remind}</div></div>`;
+}
+// calendar reminders (.ics) - one per flight, an alert when check-in opens
+function icsFor(flights) {
+  const z = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const esc2 = (t) => String(t).replace(/([,;\\])/g, "\\$1").replace(/\n/g, "\\n");
+  const ev = flights.map((f) => { const c = checkinFor(f); if (!c) return "";
+    const conf = isEditor() ? store.priv[f.id]?.confirmation : "";
+    return ["BEGIN:VEVENT", `UID:checkin-${f.id}@travel-planner`, `DTSTAMP:${z(new Date())}`, `DTSTART:${z(c.opens)}`, `DTEND:${z(new Date(+c.opens + 30 * 60e3))}`,
+      `SUMMARY:${esc2(`Check in: ${f.number || ""} ${codesOf(f.route).join("-")}`.replace(/\s+/g, " ").trim())}`,
+      `DESCRIPTION:${esc2(`Online check-in opens for ${[f.airline, f.number].filter(Boolean).join(" ")} ${codesOf(f.route).join(" → ")} (departs ${f.start} ${timeIn(f.dep)} local).${conf ? "\nConfirmation: " + conf : ""}\n${c.url}`)}`,
+      `URL:${c.url}`, "BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER:PT0M", `DESCRIPTION:${esc2("Check in now: " + (f.number || "flight"))}`, "END:VALARM", "END:VEVENT"].join("\r\n"); }).filter(Boolean);
+  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Travel Planner//Check-in//EN", "CALSCALE:GREGORIAN", ...ev, "END:VCALENDAR"].join("\r\n");
+}
+function downloadIcs(flights, name) {
+  const blob = new Blob([icsFor(flights)], { type: "text/calendar" }), a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  toast("Calendar reminder downloaded - open it to add it to your calendar");
+}
+const upcomingFlights = (p) => itemsFor(p).filter((i) => i.type === "flight" && checkinFor(i) && checkinFor(i).status !== "closed").sort((a, b) => checkinFor(a).dep - checkinFor(b).dep);
+function wireCheckins() {
+  root.querySelectorAll("[data-ci-remind]").forEach((b) => (b.onclick = () => { const f = store.items.find((x) => x.id === b.dataset.ciRemind); if (f) downloadIcs([f], `Check-in ${f.number || "flight"}.ics`); }));
+  root.querySelector("[data-ci-all]")?.addEventListener("click", () => downloadIcs(upcomingFlights(ui.person), `Check-in reminders ${(store.trip?.title || "trip").replace(/[^\w ]+/g, "")}.ics`));
+}
 const dirUrl = (q) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}`;
 const timeIn = (t) => { const m = String(t || "").match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/); return m ? `${m[1].padStart(2, "0")}:${m[2]}` : ""; };
 const nowHM = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
@@ -1032,8 +1087,6 @@ function stepActions(s, date) {
   if (s.where) a.push(`<a class="btn small" target="_blank" rel="noopener" href="${dirUrl(s.where)}"><i class="ic16">${I.pin}</i>Directions</a>`);
   if (s.flight) {
     const num = String(i.number || "").split(/[/,]/)[0].replace(/\s+/g, "");
-    const mins = s.time ? minsUntil(date, s.time) : 9999;
-    if (mins <= 48 * 60) a.push(`<a class="btn small primary" target="_blank" rel="noopener" href="${checkinUrl(i.airline)}"><i class="ic16">${I.check}</i>Check In Online</a>`);
     if (num) a.push(`<a class="btn small" target="_blank" rel="noopener" href="https://www.flightaware.com/live/flight/${encodeURIComponent(num)}"><i class="ic16">${ICON.flight}</i>Flight Status</a>`);
   }
   if (isEditor() && pv.phone) a.push(`<a class="btn small" href="tel:${esc(String(pv.phone).replace(/[^\d+]/g, ""))}"><i class="ic16">${I.phone}</i>Call</a>`);
@@ -1071,16 +1124,18 @@ function renderNow() {
         <div class="nhead"><span class="nlabel">${phase === "before" ? "First up" : "Next up"}${nextDate !== today && phase !== "before" ? " · tomorrow" : ""}</span><span class="ncount">${esc(countdown)}</span></div>
         <div class="nmain"><span class="nbig">${ICON[KIND[next.k] || next.k] || ""}</span><div><div class="ntitle">${esc(next.title)}</div>
           <div class="nsub">${[next.time && `${phase === "before" ? fmtDate(nextDate) + " · " : ""}${next.time}${zoneOf(next, nextDate) ? " " + zoneOf(next, nextDate) : ""}`, next.sub].filter(Boolean).map(esc).join(" · ")}</div></div></div>
-        ${next.flight ? `<p class="nhint small">Online check-in usually opens 24–48 hours before departure${next.time && minsUntil(nextDate, next.time) <= 48 * 60 ? " - it may be open now" : ""}.</p>` : ""}
+        ${next.flight ? checkinHtml(next.item) : ""}
         ${stepActions(next, nextDate)}</section>`
     : `<section class="ncard"><h3>Nothing else planned today</h3><p class="muted">Free time! Check the Recommended places on the day screen.</p></section>`}
     ${steps.length > 1 || (steps.length && next && nextDate !== date) ? `<section class="ncard"><h3>${phase === "before" ? "Day 1 · " + fmtDate(date) : "Today"}</h3><ul class="nlist">${steps.map((s) => line(s, date)).join("")}</ul></section>` : ""}
     ${stay ? `<section class="ncard k-stay tonight"><h3>Tonight</h3><div class="nmain"><span class="nbig">${ICON.stay}</span><div><div class="ntitle">${esc(stay.name || stay.short)}</div>
         <div class="nsub">${esc(stay.address || areaOf(stay) || "")}</div></div></div>${stepActions({ item: stay, k: "stay", where: stay.address || stay.name }, date)}</section>` : ""}
     ${tmSteps.length ? `<section class="ncard"><h3>Tomorrow · ${esc(WD[D(tomorrow).getDay()])} ${fmtDate(tomorrow)}</h3><ul class="nlist">${tmSteps.map((s) => line(s, tomorrow)).join("")}</ul></section>` : ""}
+    ${(() => { const fl = upcomingFlights(p).filter((f) => f !== next?.item).slice(0, 6); return fl.length ? `<section class="ncard"><h3 class="rhead"><span>Upcoming Check-ins</span><button type="button" class="btn tiny" data-ci-all><i class="ic16">${I.bell}</i>Add All to Calendar</button></h3>
+        ${fl.map((f) => checkinHtml(f, true)).join("")}</section>` : ""; })()}
     ${phase !== "after" ? `<button class="btn small nday" data-day="${date}">Open ${date === today ? "Today's" : "Day 1"} Full Day →</button>` : ""}
   </div>`;
-  wireHeader(); wireDays();
+  wireHeader(); wireDays(); wireCheckins();
   root.querySelectorAll(".now [data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.()));
   root.querySelectorAll(".now [data-file]").forEach((b) => (b.onclick = async () => { const f = store.files.find((x) => x.id === b.dataset.file); const w2 = window.open("", "_blank"); const u = await data.fileUrl(f); if (w2) w2.location = u; else location.href = u; }));
 }
@@ -1204,6 +1259,7 @@ function itemCard(i, date) {
     <div class="ibody">${fmt(body)}</div>
     ${i.note ? `<div class="inote">${fmt(i.note)}</div>` : ""}
     ${pvHtml}
+    ${i.type === "flight" && i.start === date ? checkinHtml(i) : ""}
     <div class="ilinks">${mapLinks}${files.map(fileLink).join("")}</div>
     ${isEditor() ? `<div class="iacts"><button class="btn small" data-edit-item="${i.id}">Edit</button>
        <button class="btn small danger" data-del-item="${i.id}"><i class="ic16">${I.trash}</i>Delete</button>
@@ -1316,7 +1372,7 @@ function renderDay() {
   const dpane = ui.pane;
   root.querySelector("[data-back]").onclick = () => (dpane !== null && dpane !== undefined ? (ui.splitDay[dpane] = null, render()) : routeTo(ui.tripId, null));
   if (isEditor()) wireBudget();
-  wireJournal(date); wireRecs(p, date, others);
+  wireJournal(date); wireRecs(p, date, others); wireCheckins();
   root.querySelectorAll("[data-with]").forEach((b) => (b.onclick = async () => {
     const o = b.dataset.with, next = !together(p, o, date), auto = autoTogether(p, o, date);
     try { await data.setTogether(date, p, o, next === auto ? null : next); toast(`${NAME(o)} ${next ? "with" : "not with"} ${NAME(p)} on ${shortDate(date)}`); }

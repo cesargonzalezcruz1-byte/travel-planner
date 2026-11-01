@@ -722,3 +722,4 @@ fieldset{min-width:0}
 .pp{position:relative}
 .cin .ci-on{white-space:nowrap}
 .cin-t small.one{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cin-h{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0} .cin-h b{min-width:0}

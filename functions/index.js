@@ -1,6 +1,7 @@
 // Check-in notifications: every 15 minutes, find flights whose online check-in has just opened
 // and send a phone notification to the devices that turned notifications on for a traveller on that flight.
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -55,4 +56,17 @@ export const checkinAlerts = onSchedule({ schedule: "every 15 minutes", region: 
     }
   }
   if (sent) logger.info(`sent ${sent} check-in notifications`);
+});
+
+// "Send Test Notification" button: sends one notification to the device that asks (signed-in editors and the family login only)
+const ALLOWED = ["cesar.gonzalez.cruz1@gmail.com", "deb777deb@gmail.com", "family@travelplanner.app"];
+export const sendTestPush = onCall({ region: "us-east1" }, async (req) => {
+  const email = req.auth?.token?.email || "";
+  if (!ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Not allowed");
+  const id = String(req.data?.id || "");
+  const doc = id && (await db.collection("push").doc(id).get());
+  if (!doc || !doc.exists) throw new HttpsError("not-found", "This phone isn't signed up for notifications - turn them on again");
+  await getMessaging().send({ token: doc.data().token, webpush: { headers: { Urgency: "high", TTL: "600" } },
+    data: { title: "Test notification ✓", body: "Notifications work on this phone. You'll get one when check-in opens.", app: APP_URL, tag: "test" } });
+  return { ok: true };
 });

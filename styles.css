@@ -712,3 +712,4 @@ fieldset{min-width:0}
 .pushrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:14px;background:var(--soft)}
 .pushrow>span{display:grid;grid-template-columns:auto 1fr;column-gap:8px;align-items:center;min-width:0}
 .pushrow>span small{grid-column:2;color:var(--muted);font-size:12px}
+.pushbtns{display:flex;gap:6px;flex:none}

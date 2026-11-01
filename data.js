@@ -253,6 +253,12 @@ export async function enablePush(people) {
   await fb.fsM.setDoc(fb.fsM.doc(fb.db, "push", id), { token, people, role: store.role, email: store.email || "", ua: navigator.userAgent.slice(0, 200), updatedAt: now() });
   localStorage.setItem("tp.push", JSON.stringify({ people, id })); emit();
 }
+export async function testPush() {
+  const st = pushState(); if (!st?.id) throw new Error("Turn notifications on first");
+  if (DEMO) { const reg = await navigator.serviceWorker?.getRegistration?.(); if (reg) await reg.showNotification("Test notification ✓", { body: "Demo" }); return; }
+  const fM = await import(`${FIREBASE_SDK}/firebase-functions.js`);
+  await fM.httpsCallable(fM.getFunctions(fb.app, "us-east1"), "sendTestPush")({ id: st.id });
+}
 export async function disablePush() {
   const st = pushState(); localStorage.removeItem("tp.push");
   if (st?.id && !DEMO) await fb.fsM.deleteDoc(fb.fsM.doc(fb.db, "push", st.id)).catch(() => {});

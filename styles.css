@@ -713,3 +713,10 @@ fieldset{min-width:0}
 .pushrow>span{display:grid;grid-template-columns:auto 1fr;column-gap:8px;align-items:center;min-width:0}
 .pushrow>span small{grid-column:2;color:var(--muted);font-size:12px}
 .pushbtns{display:flex;gap:6px;flex:none}
+.pushset{display:grid;gap:8px} .pushset p{margin:0}
+.pushpeople{display:flex;flex-wrap:wrap;gap:6px}
+.pp{display:inline-flex;align-items:center;min-width:46px;height:28px;padding:0 12px;border-radius:14px;border:2px solid var(--pc);color:var(--muted);font-size:12px;font-weight:800;letter-spacing:.03em;cursor:pointer;justify-content:center}
+.pp.on{background:var(--pc);color:#fff}
+.pp input{position:absolute;opacity:0;width:1px;height:1px}
+.pushset .btn{justify-self:start}
+.pp{position:relative}

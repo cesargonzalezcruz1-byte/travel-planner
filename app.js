@@ -261,6 +261,7 @@ function tripForm(t) {
       <div id="ext">${(t.extended || []).map((p) => row(p, "e")).join("")}</div>
       <div class="addrow">${savedPick("e")}<button type="button" class="btn tiny" data-addp="e">New Person (Create Profile)</button></div></fieldset>
     <p class="muted small">Everyone on a trip has a profile: initials (how they appear in the itinerary), full name (helps the AI match names on bookings), their colour and documents. Tap Profile to change them.</p>
+    ${isNew ? "" : `<fieldset class="pbox"><legend>Check-in Notifications (This Phone)</legend><div class="pushset">${pushSetupHtml(t)}</div></fieldset>`}
     <fieldset class="pbox"><legend>Colour Theme</legend><div class="themes">
       ${THEMES.map(([k, n, cs]) => `<label class="themecard"><input type="radio" name="theme" value="${k}" ${(t.theme || "ink") === k ? "checked" : ""}><span class="tsw">${cs.map((c) => `<i style="background:${c}"></i>`).join("")}</span><b>${n}</b></label>`).join("")}</div></fieldset>`,
     async (fd, form) => {
@@ -290,6 +291,7 @@ function tripForm(t) {
       await data.deleteTrip(t.id); routeTo(null);
     });
   const form = [...document.querySelectorAll(".sheet")].pop();
+  wirePushSetup(form, t);
   const addRow = (per, kind) => {
     if ([...form.querySelectorAll(".prow")].some((r) => r.dataset.pid === per.id || r.dataset.code === per.code)) return toast(`${per.name} is already on this trip`);
     const color = kind === "t" ? upc(per.color) || nextColor() : "";
@@ -340,7 +342,7 @@ const I = {
   phone: SV('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v84";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v85";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -974,17 +976,44 @@ function stepZones(steps, date, flightOf) {
 // ---- online check-in: when it opens (per airline, in the departure airport's time zone), a link, and a calendar reminder
 const checkinFor = (f) => checkinInfo(f, Date.now());
 const localWhen = (d) => d.toLocaleString("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+// Trip Setup: choose whose check-ins notify this phone (applied straight away), and send a test
+function pushSetupHtml(t) {
+  if (!data.pushSupported()) return `<p class="muted small">${/iPhone|iPad/.test(navigator.userAgent) ? "On iPhone, add the app to your Home Screen (Share → Add to Home Screen) and open it from there to get notifications." : "This browser can't show notifications - use the installed app or Chrome."}</p>`;
+  const on = data.pushState()?.people || [];
+  return `<p class="muted small">Get a phone notification when online check-in opens for these travellers' flights.</p>
+    <div class="pushpeople">${(t.travellers || []).map((x) => `<label class="pp${on.includes(x.code) ? " on" : ""}" style="--pc:${pcolor(x.code)}"><input type="checkbox" data-pp="${esc(x.code)}" ${on.includes(x.code) ? "checked" : ""}>${esc(x.code)}</label>`).join("")}</div>
+    ${on.length ? `<button type="button" class="btn small" data-push-test><i class="ic16">${I.bell}</i>Send Test Notification</button>` : ""}`;
+}
+function wirePushSetup(form, t) {
+  const box = form.querySelector(".pushset"); if (!box) return;
+  const redraw = () => { box.innerHTML = pushSetupHtml(t); wire(); };
+  const wire = () => {
+    box.querySelectorAll("[data-pp]").forEach((cb) => (cb.onchange = async () => {
+      const want = [...box.querySelectorAll("[data-pp]:checked")].map((x) => x.dataset.pp);
+      const keep = (data.pushState()?.people || []).filter((c) => !(t.travellers || []).some((x) => x.code === c));   // travellers of other trips stay
+      box.querySelectorAll("[data-pp]").forEach((x) => (x.disabled = true));
+      try { const all = [...new Set([...keep, ...want])]; if (all.length) await data.enablePush(all); else await data.disablePush(); toast(want.length ? "Notifications on for " + want.map(NAME).join(", ") : "Notifications off on this phone"); }
+      catch (e) { toast(e.message === "blocked" ? "Notifications are blocked for this app - allow them in your phone's settings" : e.message === "dismissed" ? "Notifications not turned on" : "Couldn't change notifications: " + (e.code || e.message)); }
+      redraw();
+    }));
+    box.querySelector("[data-push-test]")?.addEventListener("click", sendTest);
+  };
+  wire();
+}
+async function sendTest(ev) {
+  const b = ev.currentTarget; b.disabled = true; toast("Sending a test notification…");
+  try { await data.testPush(); toast("Sent - it should arrive in a few seconds"); } catch (e) { toast("Couldn't send: " + (e.message || e.code)); } finally { b.disabled = false; }
+}
 // phone notification switch for the traveller being viewed (this device)
 const pushOnFor = (p) => !!data.pushState()?.people?.includes(p);
 function notifyBtn() {
-  if (pushOnFor(ui.person)) return `<span class="ci-on"><i class="ic16">${I.bell}</i>You'll get a notification</span>`;
-  return `<button type="button" class="btn small" data-push-on><i class="ic16">${I.bell}</i>Notify Me</button>`;
+  return pushOnFor(ui.person) ? `<span class="ci-on"><i class="ic16">${I.bell}</i>You'll get a notification</span>` : "";
 }
-function pushCard() {
-  const st = data.pushState(), on = pushOnFor(ui.person);
+function pushCard() {   // shown on Now only while notifications are off for this traveller
+  if (pushOnFor(ui.person)) return "";
   if (!data.pushSupported()) return `<p class="muted small">${/iPhone|iPad/.test(navigator.userAgent) ? "To get check-in notifications on iPhone, add the app to your Home Screen (Share → Add to Home Screen) and open it from there." : "This browser can't show notifications - add the app to your Home Screen or use Chrome."}</p>`;
-  return `<div class="pushrow"><span><i class="ic16">${I.bell}</i><b>Notifications on this phone</b><small>${on ? `On for ${esc(NAME(ui.person))}${st.people.length > 1 ? ` (+${st.people.length - 1} more)` : ""} - when check-in opens` : `Get a notification when check-in opens for ${esc(NAME(ui.person))}'s flights`}</small></span>
-    <span class="pushbtns">${on ? `<button type="button" class="btn small" data-push-test>Send Test</button>` : ""}<button type="button" class="btn small${on ? "" : " primary"}" ${on ? "data-push-off" : "data-push-on"}>${on ? "Turn Off" : "Turn On"}</button></span></div>`;
+  return `<div class="pushrow"><span><i class="ic16">${I.bell}</i><b>Notifications on this phone are off</b><small>Get a notification when check-in opens for ${esc(NAME(ui.person))}'s flights</small></span>
+    <span class="pushbtns"><button type="button" class="btn small primary" data-push-on>Turn On</button></span></div>`;
 }
 const untilWords = (d) => inWords(Math.round((d - Date.now()) / 60000));
 function checkinHtml(f, compact = false) {
@@ -1019,12 +1048,6 @@ function wireCheckins() {
     b.disabled = true;
     try { const cur = data.pushState()?.people || []; await data.enablePush([...new Set([...cur, ui.person])]); toast(`Notifications on - you'll be told when check-in opens for ${NAME(ui.person)}`); }
     catch (e) { b.disabled = false; toast(e.message === "blocked" ? "Notifications are blocked for this app - allow them in your phone's settings" : e.message === "dismissed" ? "Notifications not turned on" : e.message === "unsupported" ? "This browser can't show notifications" : "Couldn't turn on notifications: " + (e.code || e.message)); }
-  }));
-  root.querySelectorAll("[data-push-test]").forEach((b) => (b.onclick = async () => {
-    b.disabled = true; toast("Sending a test notification…");
-    try { await data.testPush(); toast("Sent - it should arrive in a few seconds"); }
-    catch (e) { toast("Couldn't send: " + (e.message || e.code)); }
-    finally { b.disabled = false; }
   }));
   root.querySelectorAll("[data-push-off]").forEach((b) => (b.onclick = async () => {
     const rest = (data.pushState()?.people || []).filter((x) => x !== ui.person);

@@ -1,5 +1,5 @@
 // Offline support: cache the app shell + Firebase SDK. Trip data is cached by Firestore itself.
-const CACHE = "travel-planner-v91";
+const CACHE = "travel-planner-v92";
 const SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./data.js", "./firebase-config.js", "./map.js", "./album.js", "./checkin-core.js", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png", "./icons/apple-touch-icon.png", "./icons/logo.svg", "./icons/favicon-64.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL))); self.skipWaiting(); });
@@ -23,13 +23,23 @@ self.addEventListener("fetch", (e) => {
 self.addEventListener("push", (e) => {
   let d = {};
   try { const j = e.data ? e.data.json() : {}; d = j.data || j; } catch (err) { d = { body: e.data ? e.data.text() : "" }; }
+  const label = /^Check-in/.test(d.title || "") ? "Check In Now" : "Directions";
   e.waitUntil(self.registration.showNotification(d.title || "Travel Planner", {
     body: d.body || "", icon: "icons/icon-192.png", badge: "icons/favicon-64.png", tag: d.tag || undefined,
-    data: { url: d.url || "./", app: d.app || "./" }, actions: d.url ? [{ action: "checkin", title: "Check In" }, { action: "app", title: "Open App" }] : [],
+    data: { url: d.url || "", app: d.app || "./" }, actions: d.url ? [{ action: "link", title: label }] : [],
   }));
 });
+// Tapping a notification opens the app at the right day and section (reusing an open app window);
+// the button (where the phone shows one) goes straight to the airline check-in page / directions.
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
   const { url, app } = e.notification.data || {};
-  e.waitUntil(self.clients.openWindow(e.action === "app" ? app || "./" : url || app || "./"));
+  if (e.action === "link" && url) { e.waitUntil(self.clients.openWindow(url)); return; }
+  const target = new URL(app || "./", self.registration.scope).href;
+  e.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const w = wins.find((c) => c.url.startsWith(self.registration.scope));
+    if (w) { try { await w.navigate(target); return w.focus(); } catch (err) { /* fall through */ } }
+    return self.clients.openWindow(target);
+  })());
 });

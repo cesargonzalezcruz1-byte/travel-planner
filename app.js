@@ -114,7 +114,7 @@ function render() {
   if (!store.ready) { root.innerHTML = `<div class="loading"><img class="logo-lg" src="icons/logo.svg" alt=""><br>Loading…</div>`; return; }
   if (!store.role) return renderLogin();
   if (store.role === "none") return renderNoAccess();
-  if (!ui.tripId) { data.openTrip(null); applyTheme(); if (isEditor()) setTimeout(checkDocAlerts, 300); return renderHome(); }
+  if (!ui.tripId) { data.openTrip(null); applyTheme(); if (isEditor()) setTimeout(checkDocAlerts, 300); renderHome(); return applyFocus(); }
   data.openTrip(ui.tripId);
   if (!store.trip && !store.items.length) return renderEmpty();
   if (!PEOPLE().includes(ui.person)) ui.person = PEOPLE()[0];
@@ -129,7 +129,36 @@ function render() {
   if (ui.slide) { root.querySelector(".ov,.tl,.journey,.dayview,.bd,.now")?.classList.add(ui.slide); ui.slide = null; }
   afterRender();
 }
+// ?focus=… from a notification: scroll to that card / section once the screen is drawn (or open a profile)
+ui.focus = new URLSearchParams(location.search).get("focus");
+function applyFocus() {
+  if (!ui.focus || !store.ready || !store.role) return;
+  const f = ui.focus;
+  if (f.startsWith("profile-")) { if (!store.people.length) return; ui.focus = null; clearFocusParam(); return personForm(f.slice(8)); }
+  const el = document.getElementById(f);
+  if (!el) {
+    if (!ui.tripId || !store.items.length) return;   // still loading
+    // the booking belongs to someone else: show it from their side (preferring a traveller this phone follows)
+    const rec = f.startsWith("it-") ? store.items.find((x) => x.id === f.slice(3)) : f.startsWith("en-") ? store.entries.find((x) => x.id === f.slice(3)) : null;
+    const who = rec?.who || [], mine = data.pushState()?.people || [];
+    const p = who.find((c) => mine.includes(c)) || who[0];
+    if (p && p !== ui.person && PEOPLE().includes(p) && !ui.focusSwitched) { ui.focusSwitched = true; ui.person = p; return render(); }
+    ui.focus = null; clearFocusParam(); return;
+  }
+  ui.focus = null; clearFocusParam();
+  if (f === "journal") jui.focus = "new";   // keep the cursor in the journal box through redraws
+  const go = (flash) => { const t = document.getElementById(f); if (!t) return; t.scrollIntoView({ block: f === "journal" ? "start" : "center" });
+    if (flash) { t.classList.add("flash"); setTimeout(() => document.getElementById(f)?.classList.remove("flash"), 2600); }
+    if (f === "journal") t.querySelector("textarea")?.focus({ preventScroll: true }); };
+  const hold = (ui.focusHold = { go, until: Date.now() + 5000, moved: false }); const stop = () => (hold.moved = true);
+  window.addEventListener("touchstart", stop, { once: true }); window.addEventListener("wheel", stop, { once: true });
+  setTimeout(() => go(true), 400); setTimeout(() => !hold.moved && go(false), 1500);   // again once the map and lists below have loaded
+}
+// redraws in the first few seconds (maps, recommendations, journal loading) keep the focused section in view
+function holdFocus() { const h = ui.focusHold; if (!h) return; if (h.moved || Date.now() > h.until) { ui.focusHold = null; return; } setTimeout(() => !h.moved && h.go(false), 60); }
+function clearFocusParam() { try { const u = new URL(location.href); u.searchParams.delete("focus"); history.replaceState(null, "", u.pathname + u.search + u.hash); } catch (e) { /* ignore */ } }
 function afterRender() {
+  applyFocus(); holdFocus();
   splitWas = splitOn() + "|" + splitWide();
   if (isEditor() && store.trip) setTimeout(ensureRecs, 0);
   if (isEditor()) setTimeout(checkDocAlerts, 300);
@@ -342,7 +371,7 @@ const I = {
   phone: SV('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v91";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v92";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -1275,7 +1304,7 @@ function itemCard(i, date) {
   const pvHtml = pv && Object.keys(pv).length ? `<dl class="priv">${Object.entries(pv).filter(([k, v]) => v && !["updatedBy", "updatedAt", "kind"].includes(k) && !(k === "share" && v === "ours")).map(([k, v]) => `<dt>${esc(label(k))}</dt><dd>${esc(k === "share" ? SHARE[v] || v : v)}</dd>`).join("")}</dl>` : "";
   const files = isEditor() ? store.files.filter((f) => f.itemId === i.id) : [];
   const k = KIND[i.type];
-  return `<article class="icard k-${k}">
+  return `<article class="icard k-${k}" id="it-${esc(i.id)}">
     <div class="ihead"><span class="ic">${ICON[k]}</span><span class="tag">${role}</span>${i.status === "tbc" ? `<span class="tbctag">TBC</span>` : ""}
       <span class="who idots" role="img" aria-label="${esc(i.who.map(NAME).join(", "))}">${ALL_CODES().filter((c) => i.who.includes(c)).concat(i.who.filter((c) => !ALL_CODES().includes(c))).map((w) => `<i class="tdot" style="--pc:${pcolor(w)}" title="${esc(NAME(w))}"></i>`).join("")}</span></div>
     <div class="ibody">${fmt(body)}</div>
@@ -1344,7 +1373,7 @@ function renderDay() {
       ? `<label class="conf" title="Confirmed activities show in the itinerary"><input type="checkbox" data-confirm="${e.id}" ${e.confirmed ? "checked" : ""}></label>`
       : (e.confirmed ? "✓ " : "○ ");
     const efiles = isEditor() ? store.files.filter((f) => f.entryId === e.id) : [];
-    return `<li class="entry st-${e.status} ${isAct ? (e.confirmed ? "is-conf" : "is-plan") : ""}">
+    return `<li id="en-${esc(e.id)}" class="entry st-${e.status} ${isAct ? (e.confirmed ? "is-conf" : "is-plan") : ""}">
       <div class="etext">${mark}${fmt(e.text)}${isAct && !e.confirmed ? ` <span class="planned">planned</span>` : ""}${ratingBadge(e.id)}
         ${(e.endDate && e.endDate !== e.date) ? `<span class="muted small"> (${fmtDate(e.date)} – ${fmtDate(e.endDate)})</span>` : ""}
         ${e.who.length < PEOPLE().length ? `<span class="who idots whos" role="img" aria-label="${esc(e.who.map(NAME).join(", "))}">${ALL_CODES().filter((c) => e.who.includes(c)).map((w) => `<i class="tdot" style="--pc:${pcolor(w)}" title="${esc(NAME(w))}"></i>`).join("")}</span>` : ""}</div>

@@ -60,7 +60,7 @@ export const checkinAlerts = onSchedule({ schedule: "every 15 minutes", region: 
   const important = tokens.filter((t) => wants(t, "important")), extras = tokens.filter((t) => wants(t, "extras"));
 
   for (const tripDoc of trips) {
-    const trip = tripDoc.data(), tid = tripDoc.id, link = (d) => `${APP_URL}#/t/${tid}${d ? "/" + d : ""}`;
+    const trip = tripDoc.data(), tid = tripDoc.id, link = (d, f) => `${APP_URL}${f ? "?focus=" + encodeURIComponent(f) : ""}#/t/${tid}${d ? "/" + d : ""}`;   // f: section to open (it-/en- id, journal)
     const items = (await tripDoc.ref.collection("items").get()).docs.map((d) => ({ id: d.id, ...d.data() }));
     for (const i of items) {
       const who = i.who || [], tgt = important.filter((t) => follows(t, who));
@@ -70,22 +70,46 @@ export const checkinAlerts = onSchedule({ schedule: "every 15 minutes", region: 
         // check-in open
         const c = checkinInfo(i, now);
         if (c && c.status === "open" && now - c.opens < 12 * HOUR)
-          await sendOnce(`ci_${tid}_${i.id}_${i.start}_${i.dep}`, tgt, { title: `Check-in is open: ${fl}`.trim(), body: `${route.join(" → ")} · departs ${when(c.dep, AIRPORT_TZ[route[0]])}. Tap to check in.`, url: c.url, app: link(i.start), tag: `checkin-${i.id}` });
+          await sendOnce(`ci_${tid}_${i.id}_${i.start}_${i.dep}`, tgt, { title: `Check-in is open: ${fl}`.trim(), body: `${route.join(" → ")} · departs ${when(c.dep, AIRPORT_TZ[route[0]])}. Tap to check in.`, url: c.url, app: link(i.start, "it-" + i.id), tag: `checkin-${i.id}` });
         // leave for the airport: 3 h before international, 2 h before domestic
         const dep = c?.dep, lead = isInternational(i) ? 3 : 2;
         if (dep && due(new Date(dep - lead * HOUR), now))
           await sendOnce(`go_${tid}_${i.id}_${i.start}_${i.dep}`, tgt, { title: `Time to head to ${route[0]} airport`, body: `${fl} to ${route.at(-1)} departs at ${hm(dep, AIRPORT_TZ[route[0]])} - aim to be there ${lead} hours before.`,
-            url: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(route[0] + " airport")}`, app: link(i.start), tag: `go-${i.id}` });
+            url: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(route[0] + " airport")}`, app: link(i.start, "it-" + i.id), tag: `go-${i.id}` });
       } else if (i.type === "stay" && i.end) {
         const tz = tzOn(items, who, i.end), out = zonedDate(i.end, timeIn(i.checkout) || "10:00", tz);
         if (due(new Date(out - HOUR), now))
-          await sendOnce(`co_${tid}_${i.id}_${i.end}_${i.checkout || ""}`, tgt, { title: `Check out of ${i.short || i.name} by ${hm(out, tz)}`, body: `Pack up and check nothing is left behind${i.checkout ? "" : " (check-out time not set - usually 10-11 am)"}.`, app: link(i.end), tag: `co-${i.id}` });
+          await sendOnce(`co_${tid}_${i.id}_${i.end}_${i.checkout || ""}`, tgt, { title: `Check out of ${i.short || i.name} by ${hm(out, tz)}`, body: `Pack up and check nothing is left behind${i.checkout ? "" : " (check-out time not set - usually 10-11 am)"}.`, app: link(i.end, "it-" + i.id), tag: `co-${i.id}` });
       } else if (i.type === "car" && i.end) {
         const tz = placeTz(i.dropoff, tzOn(items, who, i.end)), ret = zonedDate(i.end, timeIn(i.dropoffTime) || "10:00", tz);
         if (due(new Date(ret - 2 * HOUR), now))
           await sendOnce(`car_${tid}_${i.id}_${i.end}_${i.dropoffTime || ""}`, tgt, { title: `Return the ${i.company || "rental"} car by ${hm(ret, tz)}`, body: `${i.dropoff ? "Drop-off at " + i.dropoff + ". " : ""}Leave time to refuel and return it.`,
-            url: i.dropoff ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([i.company, i.dropoff].filter(Boolean).join(" "))}` : undefined, app: link(i.end), tag: `car-${i.id}` });
+            url: i.dropoff ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([i.company, i.dropoff].filter(Boolean).join(" "))}` : undefined, app: link(i.end, "it-" + i.id), tag: `car-${i.id}` });
       }
+    }
+
+    // ---- Important: an activity or restaurant with a booked time starts in about an hour
+    const allEnts = (await tripDoc.ref.collection("entries").where("kind", "==", "activity").get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+    const soonFrom = new Date(now - 2 * 86400e3).toISOString().slice(0, 10), soonTo = new Date(now + 2 * 86400e3).toISOString().slice(0, 10);
+    for (const e of allEnts) {
+      if (!e.confirmed || e.status === "recommended" || !e.date || e.date < soonFrom || e.date > soonTo) continue;
+      const t = timeIn(e.text) || timeIn(e.time); if (!t) continue;   // only bookings with a specific time
+      const tz = tzOn(items, e.who, e.date), start = zonedDate(e.date, t, tz), name = String(e.text || "").split("\n")[0];
+      if (due(new Date(start - HOUR), now))
+        await sendOnce(`soon_${tid}_${e.id}_${e.date}_${t}`, important.filter((x) => follows(x, e.who)), { title: `In 1 hour: ${name}`.slice(0, 120), body: `Starts at ${hm(start, tz)}${e.place ? " · " + e.place : ""}`,
+          url: e.place ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.place)}` : undefined, app: link(e.date, "en-" + e.id), tag: `soon-${e.id}` });
+    }
+    // ---- Extras: evening journal prompt at 8 pm wherever the traveller is
+    for (const dev of extras) {
+      const p = (dev.people || []).find((c) => (trip.travellers || []).some((x) => x.code === c)); if (!p) continue;
+      const tz = tzOn(items, [p], new Date(now).toISOString().slice(0, 10));
+      const local = new Date(now).toLocaleDateString("en-CA", { timeZone: tz });   // YYYY-MM-DD where they are
+      if (local < trip.start || local > trip.end) continue;
+      const eight = zonedDate(local, "20:00", tzOn(items, [p], local));
+      if (!due(eight, now, 60 * MIN)) continue;
+      const stay = items.find((i) => i.type === "stay" && (i.who || []).includes(p) && i.start <= local && local < i.end);
+      const wd = new Date(local + "T12:00:00Z").toLocaleDateString("en-AU", { weekday: "long", timeZone: "UTC" });
+      await sendOnce(`eve_${tid}_${local}_${dev.id}`, [dev], { title: `How was ${wd}${stay ? " in " + (stay.area || stay.short || stay.name) : ""}?`, body: "Add a post or rate what you did - it all goes into the album.", app: link(local, "journal"), tag: `eve-${local}` });
     }
 
     // ---- Extras: what changed since the last run
@@ -97,14 +121,14 @@ export const checkinAlerts = onSchedule({ schedule: "every 15 minutes", region: 
         if (sigs[i.id] === nextSigs[i.id] || !sigs.__init) continue;
         const what = i.type === "flight" ? `flight ${codesOf(i.route).join(" → ")}` : i.type === "stay" ? i.short || i.name : `${i.company || ""} car`;
         const tgt = extras.filter((t) => follows(t, i.who) && t.email !== i.updatedBy);
-        await sendOnce(`chg_${tid}_${i.id}_${nextSigs[i.id]}`, tgt, { title: sigs[i.id] ? "Itinerary updated" : "New booking added", body: `${trip.title || "Trip"}: ${what} (${i.start}${i.end && i.end !== i.start ? " – " + i.end : ""})`, app: link(i.start), tag: `chg-${i.id}` });
+        await sendOnce(`chg_${tid}_${i.id}_${nextSigs[i.id]}`, tgt, { title: sigs[i.id] ? "Itinerary updated" : "New booking added", body: `${trip.title || "Trip"}: ${what} (${i.start}${i.end && i.end !== i.start ? " – " + i.end : ""})`, app: link(i.start, "it-" + i.id), tag: `chg-${i.id}` });
       }
       const ents = (await tripDoc.ref.collection("entries").where("updatedAt", ">", new Date(since - 5 * MIN).toISOString()).get()).docs.map((d) => ({ id: d.id, ...d.data() }));
       for (const e of ents) {
         if (e.kind !== "activity" || !e.confirmed || e.status === "recommended" || sigs[`a_${e.id}`] === "1") continue;
         nextSigs[`a_${e.id}`] = "1";
         const tgt = extras.filter((t) => follows(t, e.who) && t.email !== e.updatedBy);
-        await sendOnce(`act_${tid}_${e.id}`, tgt, { title: "Activity booked", body: `${String(e.text || "").split("\n")[0]} · ${e.date}`, app: link(e.date), tag: `act-${e.id}` });
+        await sendOnce(`act_${tid}_${e.id}`, tgt, { title: "Activity booked", body: `${String(e.text || "").split("\n")[0]} · ${e.date}`, app: link(e.date, "en-" + e.id), tag: `act-${e.id}` });
       }
       Object.keys(sigs).filter((k) => k.startsWith("a_")).forEach((k) => (nextSigs[k] = sigs[k]));
       await sigRef.set({ ...nextSigs, __init: true });
@@ -113,7 +137,7 @@ export const checkinAlerts = onSchedule({ schedule: "every 15 minutes", region: 
       const travellers = (trip.travellers || []).map((x) => x.code);
       for (const j of posts) {
         const tgt = extras.filter((t) => follows(t, travellers) && !(j.device && t.device === j.device) && !(j.by === "editor" && t.email && t.email === j.updatedBy));
-        await sendOnce(`jr_${tid}_${j.id}`, tgt, { title: j.replyTo ? `${j.author || "Someone"} replied in the journal` : `${j.author || "Someone"} posted in the journal`, body: (j.rating ? "★".repeat(j.rating) + " " : "") + String(j.text || "").slice(0, 140), app: link(j.date), tag: `jr-${j.id}` });
+        await sendOnce(`jr_${tid}_${j.id}`, tgt, { title: j.replyTo ? `${j.author || "Someone"} replied in the journal` : `${j.author || "Someone"} posted in the journal`, body: (j.rating ? "★".repeat(j.rating) + " " : "") + String(j.text || "").slice(0, 140), app: link(j.date, "journal"), tag: `jr-${j.id}` });
       }
     } else if (since === null) {
       const sigOf = (i) => [i.type, i.start, i.end, i.dep, i.arr, i.route, i.number, i.name, i.checkin, i.checkout, i.pickup, i.dropoff, i.pickupTime, i.dropoffTime, i.status].join("|");
@@ -139,7 +163,7 @@ export const checkinAlerts = onSchedule({ schedule: "every 15 minutes", region: 
           if (doc.type === "passport" && doc.expiry < addMonths(t.end, 6)) { problem = `expires ${doc.expiry}, less than 6 months after ${t.title}`; break; }
         }
         if (!problem && (new Date(doc.expiry) - now) / 86400e3 <= 30) problem = `expires on ${doc.expiry}`;
-        if (problem) await sendOnce(`doc_${per.id}_${doc.id}_${doc.expiry}_${problem.split(" ")[0]}`, eds, { title: `Check ${per.name || per.code}'s ${name}`, body: `The ${name} ${problem}.`, app: APP_URL, tag: `doc-${doc.id}` });
+        if (problem) await sendOnce(`doc_${per.id}_${doc.id}_${doc.expiry}_${problem.split(" ")[0]}`, eds, { title: `Check ${per.name || per.code}'s ${name}`, body: `The ${name} ${problem}.`, app: `${APP_URL}?focus=profile-${per.id}`, tag: `doc-${doc.id}` });
       }
     }
   }

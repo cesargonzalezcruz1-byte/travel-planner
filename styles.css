@@ -734,3 +734,5 @@ fieldset{min-width:0}
 .pswitch input:checked+i{background:var(--ok)} .pswitch input:checked+i::after{left:21px}
 .pswitch input:disabled+i{opacity:.4} .pswitch:has(input:disabled){cursor:default}
 .sheet label.pswitch{display:flex;flex-direction:row}
+@keyframes flashy{0%,100%{box-shadow:0 0 0 0 transparent}30%,70%{box-shadow:0 0 0 4px var(--today)}}
+.flash{animation:flashy 2.4s ease}

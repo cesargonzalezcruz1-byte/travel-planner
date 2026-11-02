@@ -114,7 +114,7 @@ function render() {
   if (!store.ready) { root.innerHTML = `<div class="loading"><img class="logo-lg" src="icons/logo.svg" alt=""><br>Loading…</div>`; return; }
   if (!store.role) return renderLogin();
   if (store.role === "none") return renderNoAccess();
-  if (!ui.tripId) { data.openTrip(null); applyTheme(); if (isEditor()) setTimeout(checkDocAlerts, 300); renderHome(); return applyFocus(); }
+  if (!ui.tripId) { data.openTrip(null); applyTheme(); renderHome(); return applyFocus(); }
   data.openTrip(ui.tripId);
   if (!store.trip && !store.items.length) return renderEmpty();
   if (!PEOPLE().includes(ui.person)) ui.person = PEOPLE()[0];
@@ -161,7 +161,6 @@ function afterRender() {
   applyFocus(); holdFocus();
   splitWas = splitOn() + "|" + splitWide();
   if (isEditor() && store.trip) setTimeout(ensureRecs, 0);
-  if (isEditor()) setTimeout(checkDocAlerts, 300);
 }
 const renderView = (v) => (v === "day" ? renderDay() : v === "now" ? renderNow() : v === "journey" ? renderJourney() : v === "timeline" ? renderTimeline() : v === "budget" && isEditor() ? renderBudget() : renderOverview());
 // ---- split view: on an unfolded foldable, tablet or computer, two views side by side (left / right), each with its own view icons.
@@ -242,7 +241,9 @@ function renderHome() {
     const days = t.start && t.end ? dayDiff(t.start, t.end) + 1 : 0;
     const status = t.start <= today && today <= t.end ? `<span class="tstat now">On now</span>` : t.start > today ? `<span class="tstat">in ${dayDiff(today, t.start)} days</span>` : `<span class="tstat past">Past</span>`;
     return `<article class="tripcard" data-open="${esc(t.id)}" role="button" tabindex="0">
-      <div class="tc-top"><h3>${esc(t.title || "Untitled Trip")}</h3>${status}</div>
+      <div class="tc-top"><h3>${esc(t.title || "Untitled Trip")}</h3>${status}</div>${(() => { const iss = tripDocIssues(t); if (!iss.length) return "";
+        const lvl = iss[0].st.level, who = [...new Set(iss.map((x) => x.per.code))];
+        return `<button type="button" class="tc-warn ${lvl}" data-docwarn="${esc(t.id)}" title="${esc(iss.map((x) => (x.per.name || x.per.code) + ": " + x.st.text).join("\n"))}"><i class="ic16">${I.warn}</i>${lvl === "bad" ? "Document problem" : "Check documents"} · ${who.map(esc).join(", ")}</button>`; })()}
       <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
       <div class="tc-people">${(t.travellers || []).map((p, k) => `<span class="pchip tp" style="--pc:${upc(p.color) || TDEFAULT[k % TDEFAULT.length]}" title="${esc(p.name || p.code)}"><b>${esc(p.code)}</b></span>`).join("")}</div>
       ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
@@ -261,7 +262,8 @@ function renderHome() {
   <p class="appver">Travel Planner ${APP_VERSION}</p></div>`;
   wireHeader();
   root.querySelectorAll("[data-open]").forEach((el) => {
-    el.onclick = (e) => { if (e.target.closest("[data-settings]")) return; localStorage.setItem("tp.trip", el.dataset.open); routeTo(el.dataset.open); };
+    el.onclick = (e) => { const w = e.target.closest("[data-docwarn]"); if (w) return showTripDocIssues(store.trips.find((t) => t.id === w.dataset.docwarn));
+      if (e.target.closest("[data-settings]")) return; localStorage.setItem("tp.trip", el.dataset.open); routeTo(el.dataset.open); };
     el.onkeydown = (e) => { if (e.key === "Enter") el.click(); };
   });
   root.querySelectorAll("[data-settings]").forEach((b) => (b.onclick = () => tripForm(store.trips.find((t) => t.id === b.dataset.settings))));
@@ -377,10 +379,11 @@ const I = {
   wrain: SV('<path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="M16 14v6M8 14v6M12 16v6"/>'),
   wsnow: SV('<path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="M8 15h.01M8 19h.01M12 17h.01M12 21h.01M16 15h.01M16 19h.01"/>'),
   wstorm: SV('<path d="M6 16.3A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 .5 9"/><path d="m13 12-3 5h4l-3 5"/>'),
+  warn: SV('<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>'),
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v93";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v94";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -1514,19 +1517,28 @@ function personStatus(per) {
   const sts = (per.docs || []).map((d) => docStatus(d, per)).filter((x) => x.level !== "ok");
   return sts.find((x) => x.level === "bad") || sts[0] || { level: "ok", text: "" };
 }
-function docAlerts() {
-  return store.people.flatMap((per) => (per.docs || []).map((d) => ({ per, d, st: docStatus(d, per) })).filter((x) => x.st.level !== "ok"));
+// document problems for one trip, only for the people travelling on it: expired, runs out during the trip, or a passport with < 6 months left after it
+function tripDocIssues(t) {
+  if (!isEditor() || !store.people.length || !t.end || t.end < iso(new Date())) return [];
+  const today = iso(new Date()), out = [];
+  (t.travellers || []).concat(t.extended || []).forEach((x) => {
+    const per = store.people.find((q) => q.id === x.pid) || (!x.pid && store.people.find((q) => q.code === x.code && (!x.name || q.name === x.name)));
+    if (!per) return;
+    (per.docs || []).filter((d) => d.expiry).forEach((d) => {
+      const name = docName(d.type);
+      const st = d.expiry < today ? { level: "bad", text: `${name} expired on ${fmtDate(d.expiry)}` }
+        : d.expiry < t.end ? { level: "bad", text: `${name} expires ${fmtDate(d.expiry)}, before the trip ends (${fmtDate(t.end)})` }
+        : d.type === "passport" && d.expiry < addMonths(t.end, 6) ? { level: "warn", text: `Passport expires ${fmtDate(d.expiry)}, less than 6 months after the trip ends - many countries require 6 months' validity` } : null;
+      if (st) out.push({ per, d, st });
+    });
+  });
+  return out.sort((a, b) => (a.st.level === b.st.level ? 0 : a.st.level === "bad" ? -1 : 1));
 }
-// pop-up when a document has a problem - once per session, again whenever the list of problems changes
-function checkDocAlerts() {
-  if (!isEditor() || !store.people.length || !store.tripsLoaded || document.querySelector(".modal")) return;
-  const list = docAlerts(); const sig = list.map((x) => x.per.id + x.d.id + x.st.level).join("|");
-  let seen = ""; try { seen = sessionStorage.getItem("tp.docalert") || ""; } catch (e) { /* ignore */ }
-  if (!list.length || sig === seen) return;
-  try { sessionStorage.setItem("tp.docalert", sig); } catch (e) { /* ignore */ }
-  infoBox(`<h2>Check Travel Documents</h2>
+function showTripDocIssues(t) {
+  const list = tripDocIssues(t); if (!list.length) return;
+  infoBox(`<h2>Travel Documents · ${esc(t.title || "Trip")}</h2>
     <ul class="dalerts">${list.map((x) => `<li class="${x.st.level}"><b>${esc(x.per.name || x.per.code)}</b> - ${esc(x.st.text)}<button type="button" class="lnk" data-openp="${esc(x.per.id)}">Open</button></li>`).join("")}</ul>
-    <p class="muted small">Update the document in Traveller Profiles once it's renewed. This message shows again only if something changes.</p>`);
+    <p class="muted small">Update the document in the traveller's profile once it's renewed and the warning goes away.</p>`);
 }
 function infoBox(html) {
   const m = document.createElement("div"); m.className = "modal";

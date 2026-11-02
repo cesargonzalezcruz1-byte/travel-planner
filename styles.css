@@ -748,3 +748,6 @@ fieldset{min-width:0}
 .wx.muted .wxi{color:var(--muted);width:18px;height:18px}
 .wx.two{flex-wrap:nowrap;gap:4px} .wx.two .wxc{padding:6px 9px 6px 6px;gap:4px;min-width:0} .wx.two .wxl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .wx.two .wxsrc{display:none}
+/* travel-document warning on a trip card (editors) */
+.tc-warn{display:inline-flex;width:fit-content;max-width:100%;justify-self:start;align-self:flex-start;align-items:center;gap:6px;margin-top:8px;border:0;border-radius:12px;padding:4px 10px;font:inherit;font-size:12px;font-weight:800;cursor:pointer;background:var(--clash1-t);color:var(--clash1-x)}
+.tc-warn.bad{background:var(--clash2-t);color:var(--clash2-x)} .tc-warn .ic16{width:15px;height:15px;display:inline-flex}

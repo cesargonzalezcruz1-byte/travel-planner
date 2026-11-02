@@ -369,9 +369,18 @@ const I = {
   bell: SV('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
   check: SV('<path d="M20 6 9 17l-5-5"/>'),
   phone: SV('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
+  wsun: SV('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>'),
+  wpart: SV('<path d="M12 2v2M4.9 4.9l1.4 1.4M20 12h2M19.1 4.9l-1.4 1.4M15.9 12.7a4 4 0 0 0-5.9-4.1"/><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>'),
+  wcloud: SV('<path d="M17.5 19H9a7 7 0 1 1 6.7-9h1.8a4.5 4.5 0 1 1 0 9Z"/>'),
+  wfog: SV('<path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="M16 17H7M17 21H9"/>'),
+  wdrizzle: SV('<path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="M8 19v1M8 14v1M16 19v1M16 14v1M12 21v1M12 16v1"/>'),
+  wrain: SV('<path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="M16 14v6M8 14v6M12 16v6"/>'),
+  wsnow: SV('<path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="M8 15h.01M8 19h.01M12 17h.01M12 21h.01M16 15h.01M16 19h.01"/>'),
+  wstorm: SV('<path d="M6 16.3A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 .5 9"/><path d="m13 12-3 5h4l-3 5"/>'),
+  drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v92";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v93";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -1391,7 +1400,7 @@ function renderDay() {
         return `<button class="dd${on ? " on" : ""}" ${isEditor() ? `data-with="${o}"` : "disabled"} aria-pressed="${on}" aria-label="${esc(NAME(o))}: ${on ? "travelling with " + esc(NAME(p)) : "not with " + esc(NAME(p))}" title="${esc(NAME(o))}${on ? " - together" : " - apart"}${isEditor() ? " (tap to change)" : ""}" style="--pc:${pcolor(o)};--pi:${inkOn(pcolor(o))}">${esc(o)}</button>`; }).join("")}</div>` : ""}</div>
       <button class="nav" data-go="1" ${idx === ds.length - 1 ? "disabled" : ""}>›</button>
     </div>
-    
+    ${wxStrip(p, date)}
 
     <section><h3>Travel & Stays</h3>${its.length ? its.map((i) => itemCard(i, date)).join("") : `<p class="muted">No flights, hotels or cars today.</p>`}</section>
 
@@ -1431,6 +1440,7 @@ function renderDay() {
   }));
   const mapBox = root.querySelector("#daymap");
   if (mapBox) drawDayMap(mapBox, mapPins, root.querySelector(".daymap-msg")).catch((x) => { mapBox.hidden = true; const m = root.querySelector(".daymap-msg"); if (m) m.textContent = "Map unavailable: " + x.message; });
+  root.querySelectorAll("[data-wxunit]").forEach((b) => (b.onclick = () => { wxUnit = wxUnit === "C" ? "F" : "C"; try { localStorage.setItem("tp.wxUnit", wxUnit); } catch (e) { /* ignore */ } const y = scrollY; render(); scrollTo(0, y); }));
   root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => { const d2 = ds[idx + +b.dataset.go];
     if (dpane !== null && dpane !== undefined) { ui.splitDay[dpane] = d2; return render(); }
     ui.slide = +b.dataset.go > 0 ? "from-right" : "from-left"; routeTo(ui.tripId, d2, true); }));
@@ -1998,6 +2008,71 @@ function bulkAttach() {
 // ------------------------------------------------------------------ recommendations
 // Every stay location gets the best-rated things to do and places to eat from Google (Places API).
 // Results are cached on the trip (so the family sees them too); a new or changed location is looked up automatically.
+// ---------------------------------------------------------------- weather (Open-Meteo: free, no key; CC BY 4.0)
+// Forecast for where you're staying, up to 16 days ahead; past trip days (up to ~3 months back) show what the weather was.
+const WX_TTL = 3 * 3600e3;
+const wx = { geo: {}, fc: {}, busy: new Set(), failed: new Set() };
+try { Object.assign(wx, JSON.parse(localStorage.getItem("tp.wx") || "{}"), { busy: new Set(), failed: new Set() }); } catch (e) { /* ignore */ }
+const wxSave = () => { try { localStorage.setItem("tp.wx", JSON.stringify({ geo: wx.geo, fc: wx.fc })); } catch (e) { /* ignore */ } };
+let wxUnit = "C"; try { wxUnit = localStorage.getItem("tp.wxUnit") || (/^en-US/.test(navigator.language) ? "F" : "C"); } catch (e) { /* ignore */ }
+const WMO = (c) => c === 0 ? ["wsun", "Sunny", "sun"] : c <= 2 ? ["wpart", c === 1 ? "Mostly Sunny" : "Partly Cloudy", "sun"] : c === 3 ? ["wcloud", "Cloudy", "cloud"]
+  : c <= 48 ? ["wfog", "Fog", "cloud"] : c <= 57 ? ["wdrizzle", "Drizzle", "rain"] : c <= 67 ? ["wrain", c >= 65 ? "Heavy Rain" : "Rain", "rain"]
+  : c <= 77 ? ["wsnow", "Snow", "snow"] : c <= 82 ? ["wrain", "Showers", "rain"] : c <= 86 ? ["wsnow", "Snow Showers", "snow"] : ["wstorm", "Thunderstorms", "storm"];
+const wxTemp = (c) => Math.round(wxUnit === "F" ? c * 9 / 5 + 32 : c) + "°";
+// where to look up: a day's stay (and the one you left that morning) - the same places as the recommendations
+function wxCountry(area) {   // the country at the end of that stay's address helps pick the right "San José"
+  const s = store.items.find((i) => i.type === "stay" && recKey(stayArea(i)) === recKey(area));
+  return (String(s?.address || "").split(",").map((x) => x.trim()).filter(Boolean).at(-1) || "").replace(/\d+/g, "").trim().toLowerCase();
+}
+async function wxGeo(loc) {
+  if (wx.geo[loc.key]) return wx.geo[loc.key];
+  const recs = (store.trip.recs || {})[loc.key], pts = recs ? [...(recs.do || []), ...(recs.eat || [])].filter((x) => x.lat != null) : [];
+  if (pts.length >= 3) {   // middle of the recommended places - they're all around the stay
+    const mid = (k) => pts.map((x) => x[k]).sort((a, b) => a - b)[pts.length >> 1];
+    return (wx.geo[loc.key] = { lat: mid("lat"), lng: mid("lng") });
+  }
+  const want = wxCountry(loc.area), alias = { usa: "united states", us: "united states", "united states of america": "united states", méxico: "mexico", nz: "new zealand", uk: "united kingdom" };
+  const cn = alias[want] || want;
+  for (const name of [loc.area, loc.area.split(/[,(]/)[0].trim()].filter((v, k, a) => v && a.indexOf(v) === k)) {
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=10&language=en&format=json`).then((x) => x.json());
+    const list = r.results || [];
+    const hit = list.find((x) => cn && (String(x.country || "").toLowerCase() === cn || String(x.country_code || "").toLowerCase() === cn)) || (!cn || cn.length < 3 ? list[0] : null) || list[0];
+    if (hit) return (wx.geo[loc.key] = { lat: hit.latitude, lng: hit.longitude });
+  }
+  return null;
+}
+async function wxFetch(loc) {
+  wx.busy.add(loc.key);
+  try {
+    const g = await wxGeo(loc); if (!g) throw new Error("place not found");
+    const back = Math.max(0, Math.min(92, dayDiff(store.trip.start, iso(new Date()))));
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${g.lat.toFixed(3)}&longitude=${g.lng.toFixed(3)}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&past_days=${back}&forecast_days=16`).then((x) => x.json());
+    if (!r.daily?.time) throw new Error(r.reason || "no forecast");
+    const d = r.daily, days = {};
+    d.time.forEach((t, k) => { if (d.weather_code[k] != null) days[t] = [d.weather_code[k], d.temperature_2m_max[k], d.temperature_2m_min[k], d.precipitation_probability_max?.[k] ?? null]; });
+    wx.fc[loc.key] = { at: Date.now(), days }; wxSave();
+  } catch (e) { console.warn("weather", loc.area, e); wx.failed.add(loc.key); }
+  finally { wx.busy.delete(loc.key); if (ui.day) { const y = scrollY; render(); scrollTo(0, y); } }
+}
+function wxStrip(p, date) {
+  const today = iso(new Date()), ahead = dayDiff(today, date);
+  if (ahead < -92) return "";
+  const locs = dayLocations(p, date).reverse(); if (!locs.length) return "";   // moving day: where you woke up → where you sleep
+  if (ahead > 15) return `<div class="wx muted small"><i class="wxi">${I.wpart}</i>Forecast from ${fmtDate(iso(new Date(D(date).getTime() - 15 * 864e5)))}</div>`;
+  const chips = locs.map((loc) => {
+    const fc = wx.fc[loc.key], fresh = fc && Date.now() - fc.at < WX_TTL && (fc.days[date] || ahead < 0);
+    if (!fresh && !wx.busy.has(loc.key) && !wx.failed.has(loc.key)) setTimeout(() => wxFetch(loc), 0);
+    const d = fc?.days[date];
+    if (!d) return wx.failed.has(loc.key) || (fc && fresh) ? "" : `<span class="wxc muted small">${esc(loc.area)} · loading weather…</span>`;
+    const [icon, label, tone] = WMO(d[0]);
+    const rain = d[3] != null && d[3] >= 20 && ahead >= 0 ? `<i class="wxdrop">${I.drop}</i>${d[3]}%` : "", two = locs.length > 1;
+    return `<button class="wxc" data-wxunit title="${esc(loc.area)}: ${label}${rain ? ", " + d[3] + "% chance of rain" : ""} - tap for °${wxUnit === "C" ? "F" : "C"}"><i class="wxi wx-${tone}">${I[icon]}</i>
+      <span class="wxt"><b>${wxTemp(d[1])}</b><span class="muted">/${wxTemp(d[2])}</span></span>
+      <span class="wxl">${two ? `<span class="muted">${esc(loc.area)}</span>` : `${label}${rain ? " · " + rain : ""}<span class="muted"> · ${esc(loc.area)}</span>`}</span></button>`;
+  }).filter(Boolean);
+  return chips.length ? `<div class="wx${locs.length > 1 ? " two" : ""}">${chips.join(locs.length > 1 ? `<span class="wxarrow muted">→</span>` : "")}<a class="wxsrc muted" href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></div>` : "";
+}
+
 const REC_V = 2;   // v2 adds coordinates for the map
 const recKey = (area) => area.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "x";
 const stayArea = (s) => areaOf(s) || s.short || s.name || "";

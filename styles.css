@@ -736,3 +736,15 @@ fieldset{min-width:0}
 .sheet label.pswitch{display:flex;flex-direction:row}
 @keyframes flashy{0%,100%{box-shadow:0 0 0 0 transparent}30%,70%{box-shadow:0 0 0 4px var(--today)}}
 .flash{animation:flashy 2.4s ease}
+
+/* weather strip under the day header */
+.wx{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:-4px 2px 12px;font-size:14px}
+.wx .wxc{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:0;border-radius:18px;padding:6px 12px 6px 8px;color:var(--ink);font:inherit;cursor:pointer;box-shadow:0 1px 2px #14213D10;text-align:left}
+.wx .wxi{display:inline-flex;width:22px;height:22px;flex:none} .wx .wxi svg{width:100%;height:100%}
+.wx .wx-sun{color:#E59A0B} .wx .wx-cloud{color:#7C8597} .wx .wx-rain{color:#2F7FD8} .wx .wx-snow{color:#5BA8C8} .wx .wx-storm{color:#7A4FD0}
+.wx .wxt b{font-weight:800} .wx .wxl{font-size:13px}
+.wx .wxdrop{display:inline-flex;width:12px;height:12px;color:#2F7FD8;vertical-align:-1px} .wx .wxdrop svg{width:100%;height:100%}
+.wx .wxsrc{font-size:10px;margin-left:auto;text-decoration:none} .wx > .muted.small, .wx.muted{display:flex;align-items:center;gap:6px}
+.wx.muted .wxi{color:var(--muted);width:18px;height:18px}
+.wx.two{flex-wrap:nowrap;gap:4px} .wx.two .wxc{padding:6px 9px 6px 6px;gap:4px;min-width:0} .wx.two .wxl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.wx.two .wxsrc{display:none}

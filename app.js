@@ -261,7 +261,7 @@ function tripForm(t) {
       <div id="ext">${(t.extended || []).map((p) => row(p, "e")).join("")}</div>
       <div class="addrow">${savedPick("e")}<button type="button" class="btn tiny" data-addp="e">New Person (Create Profile)</button></div></fieldset>
     <p class="muted small">Everyone on a trip has a profile: initials (how they appear in the itinerary), full name (helps the AI match names on bookings), their colour and documents. Tap Profile to change them.</p>
-    ${isNew ? "" : `<fieldset class="pbox"><legend>Check-in Notifications (This Phone)</legend><div class="pushset">${pushSetupHtml(t)}</div></fieldset>`}
+    ${isNew ? "" : `<fieldset class="pbox"><legend>Notifications (This Phone)</legend><div class="pushset">${pushSetupHtml(t)}</div></fieldset>`}
     <fieldset class="pbox"><legend>Colour Theme</legend><div class="themes">
       ${THEMES.map(([k, n, cs]) => `<label class="themecard"><input type="radio" name="theme" value="${k}" ${(t.theme || "ink") === k ? "checked" : ""}><span class="tsw">${cs.map((c) => `<i style="background:${c}"></i>`).join("")}</span><b>${n}</b></label>`).join("")}</div></fieldset>`,
     async (fd, form) => {
@@ -342,7 +342,7 @@ const I = {
   phone: SV('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v90";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v91";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -979,9 +979,12 @@ const localWhen = (d) => d.toLocaleString("en-AU", { weekday: "short", day: "num
 // Trip Setup: choose whose check-ins notify this phone (applied straight away), and send a test
 function pushSetupHtml(t) {
   if (!data.pushSupported()) return `<p class="muted small">${/iPhone|iPad/.test(navigator.userAgent) ? "On iPhone, add the app to your Home Screen (Share → Add to Home Screen) and open it from there to get notifications." : "This browser can't show notifications - use the installed app or Chrome."}</p>`;
-  const on = data.pushState()?.people || [];
-  return `<p class="muted small">Get a phone notification when online check-in opens for these travellers' flights.</p>
+  const st = data.pushState(), on = st?.people || [], cats = st?.cats || { important: true, extras: true };
+  const sw = (k, title, sub) => `<label class="pswitch"><span><b>${title}</b><small>${sub}</small></span><input type="checkbox" data-pcat="${k}" ${cats[k] !== false ? "checked" : ""} ${on.length ? "" : "disabled"}><i></i></label>`;
+  return `<p class="muted small">Notifications on this phone for these travellers:</p>
     <div class="pushpeople">${(t.travellers || []).map((x) => `<label class="pp${on.includes(x.code) ? " on" : ""}" style="--pc:${pcolor(x.code)}"><input type="checkbox" data-pp="${esc(x.code)}" ${on.includes(x.code) ? "checked" : ""}>${esc(x.code)}</label>`).join("")}</div>
+    ${sw("important", "Important", "Check-in opens · time to leave for the airport · hotel check-out · car return · passport &amp; visa problems")}
+    ${sw("extras", "Extras", "New journal posts &amp; replies · itinerary changes · activities booked")}
     ${on.length ? `<button type="button" class="btn small" data-push-test><i class="ic16">${I.bell}</i>Send Test Notification</button>` : ""}`;
 }
 function wirePushSetup(form, t) {
@@ -994,6 +997,12 @@ function wirePushSetup(form, t) {
       box.querySelectorAll("[data-pp]").forEach((x) => (x.disabled = true));
       try { const all = [...new Set([...keep, ...want])]; if (all.length) await data.enablePush(all); else await data.disablePush(); toast(want.length ? "Notifications on for " + want.map(NAME).join(", ") : "Notifications off on this phone"); }
       catch (e) { toast(e.message === "blocked" ? "Notifications are blocked for this app - allow them in your phone's settings" : e.message === "dismissed" ? "Notifications not turned on" : "Couldn't change notifications: " + (e.code || e.message)); }
+      redraw();
+    }));
+    box.querySelectorAll("[data-pcat]").forEach((cb) => (cb.onchange = async () => {
+      const cats = Object.fromEntries([...box.querySelectorAll("[data-pcat]")].map((x) => [x.dataset.pcat, x.checked]));
+      try { await data.enablePush(data.pushState()?.people || [], cats); toast(`${cb.closest("label").querySelector("b").textContent} notifications ${cb.checked ? "on" : "off"}`); }
+      catch (e) { toast("Couldn't change notifications: " + (e.code || e.message)); }
       redraw();
     }));
     box.querySelector("[data-push-test]")?.addEventListener("click", sendTest);

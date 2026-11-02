@@ -239,19 +239,21 @@ export async function extractDocFromFile(file) {
 export const pushSupported = () => "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
 export const pushState = () => { try { return JSON.parse(localStorage.getItem("tp.push") || "null"); } catch (e) { return null; } };
 async function tokenId(token) { const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)); return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40); }
-export async function enablePush(people) {
+export async function enablePush(people, cats) {
+  cats = cats || pushState()?.cats || { important: true, extras: true };
   if (!pushSupported()) throw new Error("unsupported");
   const perm = await Notification.requestPermission();
   if (perm !== "granted") throw new Error(perm === "denied" ? "blocked" : "dismissed");
-  if (DEMO) { localStorage.setItem("tp.push", JSON.stringify({ people, id: "demo" })); emit(); return; }
+  if (DEMO) { localStorage.setItem("tp.push", JSON.stringify({ people, cats, id: "demo" })); emit(); return; }
   const msgM = await import(`${FIREBASE_SDK}/firebase-messaging.js`);
   const messaging = msgM.getMessaging(fb.app);
   const reg = await navigator.serviceWorker.ready;
   const token = await msgM.getToken(messaging, { serviceWorkerRegistration: reg });
   if (!token) throw new Error("no token");
   const id = await tokenId(token);
-  await fb.fsM.setDoc(fb.fsM.doc(fb.db, "push", id), { token, people, role: store.role, email: store.email || "", ua: navigator.userAgent.slice(0, 200), updatedAt: now() });
-  localStorage.setItem("tp.push", JSON.stringify({ people, id })); emit();
+  let device = ""; try { device = localStorage.getItem("tp.device") || ""; } catch (e) { /* ignore */ }
+  await fb.fsM.setDoc(fb.fsM.doc(fb.db, "push", id), { token, people, cats, device, role: store.role, email: store.email || "", ua: navigator.userAgent.slice(0, 200), updatedAt: now() });
+  localStorage.setItem("tp.push", JSON.stringify({ people, cats, id })); emit();
 }
 export async function testPush() {
   const st = pushState(); if (!st?.id) throw new Error("Turn notifications on first");

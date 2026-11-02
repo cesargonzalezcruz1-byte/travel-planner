@@ -43,3 +43,16 @@ export function checkinInfo(f, now = Date.now()) {
   const status = now >= dep - 45 * 60e3 ? "closed" : now >= opens ? "open" : opens - now < 72 * 3600e3 ? "soon" : "later";
   return { dep, opens, hours, status, url: checkinUrl(f.airline) };
 }
+
+// country of each time zone above (to tell international flights from domestic ones)
+export const TZ_COUNTRY = {
+  "Australia/Brisbane": "AU", "Australia/Sydney": "AU", "Australia/Melbourne": "AU", "Australia/Hobart": "AU", "Australia/Adelaide": "AU", "Australia/Perth": "AU", "Australia/Darwin": "AU", "Australia/Lord_Howe": "AU",
+  "Pacific/Auckland": "NZ", "Pacific/Fiji": "FJ", "Pacific/Honolulu": "US", "Pacific/Tahiti": "PF", "Pacific/Noumea": "NC", "Pacific/Port_Moresby": "PG",
+  "Asia/Singapore": "SG", "Asia/Tokyo": "JP", "Asia/Seoul": "KR", "Asia/Hong_Kong": "HK", "Asia/Shanghai": "CN", "Asia/Taipei": "TW", "Asia/Bangkok": "TH", "Asia/Makassar": "ID", "Asia/Jakarta": "ID",
+  "Asia/Kuala_Lumpur": "MY", "Asia/Manila": "PH", "Asia/Ho_Chi_Minh": "VN", "Asia/Dubai": "AE", "Asia/Qatar": "QA", "Asia/Kolkata": "IN",
+  "America/Los_Angeles": "US", "America/Phoenix": "US", "America/Denver": "US", "America/Chicago": "US", "America/New_York": "US", "America/Anchorage": "US",
+  "America/Toronto": "CA", "America/Vancouver": "CA", "America/Edmonton": "CA", "America/Cancun": "MX", "America/Mexico_City": "MX", "America/Tijuana": "MX", "America/Mazatlan": "MX", "America/Hermosillo": "MX",
+  "America/Bogota": "CO", "America/Lima": "PE", "America/Santiago": "CL", "America/Argentina/Buenos_Aires": "AR", "America/Sao_Paulo": "BR", "America/Panama": "PA", "America/Costa_Rica": "CR", "America/Havana": "CU",
+  "Europe/London": "GB", "Europe/Dublin": "IE", "Europe/Paris": "FR", "Europe/Madrid": "ES", "Europe/Rome": "IT", "Europe/Berlin": "DE", "Europe/Amsterdam": "NL", "Europe/Zurich": "CH", "Europe/Lisbon": "PT", "Europe/Athens": "GR", "Europe/Istanbul": "TR",
+};
+export const isInternational = (f) => { const c = codesOf(f.route), a = TZ_COUNTRY[AIRPORT_TZ[c[0]]], b = TZ_COUNTRY[AIRPORT_TZ[c.at(-1)]]; return !a || !b || a !== b; };

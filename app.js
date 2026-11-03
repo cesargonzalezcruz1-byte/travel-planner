@@ -33,7 +33,7 @@ try { const v = localStorage.getItem("tp.view"); ui.view = ["now", "overview", "
 try { ui.swap = JSON.parse(localStorage.getItem("tp.swap") || "{}"); } catch (e) { /* private mode */ }
 // routes:  #/  (trips)   #/t/<tripId>   #/t/<tripId>/<YYYY-MM-DD>
 function parseRoute() {
-  const m = location.hash.match(/^#\/t\/([^/]+)(?:\/(\d{4}-\d{2}-\d{2}))?/);
+  const m = location.hash.match(/^#\/t\/([^/]+)(?:\/(\d{4}-\d{2}-\d{2}|before|after))?/);
   ui.tripId = m ? decodeURIComponent(m[1]) : null; ui.day = m && m[2] ? m[2] : null;
 }
 const routeTo = (tripId, day, replace = false) => {
@@ -383,7 +383,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v95";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v96";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -866,10 +866,10 @@ function renderOverview() {
   clashNow = 0;
   const legend = others.length ? `<div class="ov-legend"><span class="muted">Traveling together with:</span>${others.map((o) => `<span><i style="background:${pcolor(o)}"></i>${esc(NAME(o))}</span>`).join("")}</div>` : "";
   root.innerHTML = `${header({ views: true })}
-    <div class="ov"><div class="ov-card">
+    <div class="ov">${outsideBlock(p, "before")}<div class="ov-card">
       <div class="ov-head"><span class="l">DAY</span><span class="k-flight">FLIGHT</span><span class="k-stay" style="grid-column:3 / span 2">STAY</span><span class="k-car" style="grid-column:5 / span 2">CAR</span></div>
       <div class="ov-grid" style="--n:${N}">${cells.join("")}<svg class="ov-svg" aria-hidden="true"></svg></div>
-      ${legend}</div></div>`;
+      ${legend}</div>${outsideBlock(p, "after")}</div>`;
   const svgEl = root.querySelector(".ov-svg"); if (svgEl) { svgEl._shapes = shapes; svgEl._pane = ui.pane; } drawOverviewShapes(svgEl);
   wireHeader(); wireDays();
   root.querySelectorAll("[data-swap]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); const k = b.dataset.swap; ui.swap[k] = (ui.swap[k] || 0) + 1;
@@ -1179,7 +1179,7 @@ function renderNow() {
   const countdown = next ? (next.time ? inWords(minsUntil(nextDate, next.time)) : nextDate === today ? "today" : nextDate === tomorrow ? "tomorrow" : inWords(dayDiff(today, nextDate) * 1440)) : "";
   const status = phase === "before" ? `Trip starts ${inWords(dayDiff(today, t.start) * 1440)} · ${fmtDate(t.start)}` : phase === "after" ? `Trip finished ${fmtDate(t.end)}` : `Day ${day} of ${N}${stay ? " · " + (areaOf(stay) || stay.short || stay.name) : ""}`;
   root.innerHTML = `${header({ views: true })}
-  <div class="now">
+  <div class="now">${phase === "before" ? outsideBlock(p, "before") : ""}
     <p class="nstatus">${esc(status)}${w ? ` · ${withPills(p, date)}` : ""}</p>
     ${phase === "after" ? `<section class="ncard"><h3>Welcome home</h3><p class="muted">Relive it in the Journey or the Journal, or make the photo album.</p>
         <div class="nacts"><button class="btn small" data-act="album"><i class="ic16">${I.book}</i>Export Album (Word)</button>${isEditor() ? `<button class="btn small" data-act="archive"><i class="ic16">${I.archive}</i>Archive Documents</button>` : ""}</div></section>`
@@ -1197,6 +1197,7 @@ function renderNow() {
     ${(() => { const fl = upcomingFlights(p).filter((f) => f !== next?.item).slice(0, 6); return fl.length ? `<section class="ncard"><h3>Upcoming Check-ins</h3>${pushCard()}
         ${fl.map((f) => checkinHtml(f, true)).join("")}</section>` : ""; })()}
     ${phase !== "after" ? `<button class="btn small nday" data-day="${date}">Open ${date === today ? "Today's" : "Day 1"} Full Day →</button>` : ""}
+    ${phase !== "before" ? outsideBlock(p, "before") : ""}${outsideBlock(p, "after")}
   </div>`;
   wireHeader(); wireDays(); wireCheckins();
   root.querySelectorAll(".now [data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.()));
@@ -1204,6 +1205,50 @@ function renderNow() {
 }
 // keep the countdown fresh while the Now screen is open
 setInterval(() => { if (ui.view === "now" && !ui.day && store.trip && !document.querySelector(".modal") && document.visibilityState === "visible" && !document.activeElement?.matches?.("input,textarea,select")) { const y = scrollY; render(); scrollTo(0, y); } }, 60000);
+
+// ---------------------------------------------------------------- Before Trip / After Trip (bookings outside the trip dates)
+// Shown as grey, information-only blocks at the top and bottom of every view, and as their own screen - only to the people on them.
+function outside(p, side) {
+  const t = store.trip; if (!t?.start) return { items: [], ents: [] };
+  const out = side === "before" ? (a, b) => b < t.start : (a) => a > t.end;
+  const items = itemsFor(p).filter((i) => out(i.start, i.end || i.start)).sort((a, b) => a.start.localeCompare(b.start) || (a.dep || "").localeCompare(b.dep || ""));
+  const ents = store.entries.filter((e) => (e.who || []).includes(p) && e.kind === "activity" && e.status !== "recommended" && e.date && out(e.date, e.endDate || e.date)).sort((a, b) => a.date.localeCompare(b.date));
+  return { items, ents };
+}
+const outTitle = (i) => i.type === "flight" ? `${codesOf(i.route).join(" → ")}${i.number ? " · " + i.number : ""}` : i.type === "stay" ? (i.name || i.short || "Stay") : `${i.company || "Car"}${i.pickup ? " · " + i.pickup : ""}`;
+function outsideBlock(p, side) {
+  const { items, ents } = outside(p, side); if (!items.length && !ents.length) return "";
+  const rows = items.map((i) => ({ d: i.start, k: KIND[i.type], t: outTitle(i) })).concat(ents.map((e) => ({ d: e.date, k: "act", t: firstText(e.text) })))
+    .sort((a, b) => a.d.localeCompare(b.d));
+  const span = rows[0].d === rows.at(-1).d ? fmtDate(rows[0].d) : `${fmtDate(rows[0].d)} – ${fmtDate(rows.at(-1).d)}`;
+  return `<button class="oblock ${side}" data-day="${side}" aria-label="${side === "before" ? "Before" : "After"} Trip: ${rows.length} booking${rows.length > 1 ? "s" : ""}">
+    <span class="ob-head"><b>${side === "before" ? "Before Trip" : "After Trip"}</b><span class="muted small">${span} · not part of this trip's days</span><span class="ob-go">›</span></span>
+    <span class="ob-list">${rows.slice(0, 4).map((r) => `<span class="ob-row"><span class="ob-d">${esc(WD[D(r.d).getDay()].slice(0, 3))} ${esc(fmtDate(r.d))}</span><span class="ob-ic">${ICON[r.k] || ""}</span><span class="ob-t">${esc(r.t)}</span></span>`).join("")}
+    ${rows.length > 4 ? `<span class="ob-more muted small">+ ${rows.length - 4} more</span>` : ""}</span></button>`;
+}
+function renderOutside(side) {
+  const p = ui.person, t = store.trip, { items, ents } = outside(p, side), pane = ui.pane;
+  const dates = [...new Set(items.map((i) => i.start).concat(ents.map((e) => e.date)))].sort();
+  root.innerHTML = `${header()}
+  <div class="dayview outside">
+    <div class="dayhead out">
+      <button class="nav" data-ogo="before" ${side === "before" ? "disabled" : ""} aria-label="Last day of the trip">‹</button>
+      <div><div class="wd">${esc(NAME(p))}</div><div class="dt">${side === "before" ? "Before Trip" : "After Trip"}</div>
+        <div class="muted small">${side === "before" ? "Before the trip starts on " + fmtDate(t.start) : "After the trip ends on " + fmtDate(t.end)}</div></div>
+      <button class="nav" data-ogo="after" ${side === "after" ? "disabled" : ""} aria-label="First day of the trip">›</button>
+    </div>
+    ${dates.length ? dates.map((d) => { const its = items.filter((i) => i.start === d), es = ents.filter((e) => e.date === d);
+      return `<section><h3>${esc(WD[D(d).getDay()])} ${esc(fmtDate(d))}</h3>${its.map((i) => itemCard(i, d)).join("")}
+        ${es.length ? `<ul class="entries">${es.map(entryLi).join("")}</ul>` : ""}</section>`; }).join("")
+      : `<section><p class="muted">Nothing ${side === "before" ? "before" : "after"} the trip for ${esc(NAME(p))}.</p></section>`}
+    <p class="muted small">These bookings are outside the trip dates, so they aren't in the day-by-day plan. To make them part of it, change the trip's dates in Trip Setup.</p>
+  </div>`;
+  wireHeader(); wireCards(); wireCheckins();
+  root.querySelector("[data-back]").onclick = () => (pane !== null && pane !== undefined ? (ui.splitDay[pane] = null, render()) : routeTo(ui.tripId, null));
+  root.querySelectorAll("[data-ogo]").forEach((b) => (b.onclick = () => { const d2 = side === "before" ? t.start : t.end;
+    if (pane !== null && pane !== undefined) { ui.splitDay[pane] = d2; return render(); }
+    ui.slide = side === "before" ? "from-right" : "from-left"; routeTo(ui.tripId, d2, true); }));
+}
 
 // ---------------------------------------------------------------- Timeline view (one card per day)
 function renderTimeline() {
@@ -1225,7 +1270,7 @@ function renderTimeline() {
       ${comments.map((c) => `<p class="dcom">${ICON.chat}<span>${fmt(c.text)}</span></p>`).join("")}
     </section>`;
   }).join("");
-  root.innerHTML = `${header({ views: true })}<div class="tl">${cards}</div>`;
+  root.innerHTML = `${header({ views: true })}<div class="tl">${outsideBlock(p, "before")}${cards}${outsideBlock(p, "after")}</div>`;
   wireHeader(); wireDays();
   const back = sessionStorage.getItem("tp.wscroll");
   if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
@@ -1236,7 +1281,7 @@ function renderTimeline() {
 function renderJourney() {
   const today = iso(new Date());
   const p = ui.person, ord = { flight: 0, car: 1, stay: 2 };
-  const its = itemsFor(p).slice().sort((a, b) => a.start.localeCompare(b.start) || ord[a.type] - ord[b.type]);
+  const its = itemsFor(p).filter((i) => !(i.end < store.trip.start || i.start > store.trip.end)).sort((a, b) => a.start.localeCompare(b.start) || ord[a.type] - ord[b.type]);
   // every confirmed activity of a day (multi-day ones included)
   const actsOn = (date) => entriesFor(p, date).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed).map((e) => e.text);
   const dayChip = (d) => { const a = actsOn(d);
@@ -1272,9 +1317,9 @@ function renderJourney() {
         <small>${esc(sub)}</small></button>${extra[i.id] ? `<div class="jdays">${chips(extra[i.id])}</div>` : ""}</div></li>`;
   }).join("");
   const t = store.trip;
-  root.innerHTML = `${header({ views: true })}
+  root.innerHTML = `${header({ views: true })}${outsideBlock(p, "before")}
     <ol class="journey">${stops || `<li class="jempty">No bookings yet${isEditor() ? " - add one with +" : ""}.</li>`}
-      ${t ? `<li class="jrow station end"><span class="jnode k-home">${ICON.home}</span><div class="jn-body"><div class="jcard plain"><b>End of Trip</b><small>${WD[D(t.end).getDay()]} ${longDate(t.end)}</small></div></div></li>` : ""}</ol>`;
+      ${t ? `<li class="jrow station end"><span class="jnode k-home">${ICON.home}</span><div class="jn-body"><div class="jcard plain"><b>End of Trip</b><small>${WD[D(t.end).getDay()]} ${longDate(t.end)}</small></div></div></li>` : ""}</ol>${outsideBlock(p, "after")}`;
   wireHeader(); wireDays();
   const back = sessionStorage.getItem("tp.wscroll"); if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
   else if (!ui.jScrolled) { const el = root.querySelector(".jday.today, .jleg.today, .jcard.today"); if (el) { ui.jScrolled = true; window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + scrollY - 200)); } }
@@ -1303,6 +1348,39 @@ function roleOn(i, date) {
   if (i.type === "flight") return "Flight";
   if (i.type === "stay") return date === i.start ? "Check-in" : date === i.end ? "Check-out" : "Staying";
   return date === i.start ? "Pick-up" : date === i.end ? "Drop-off" : "Car";
+}
+function entryLi(e) {
+    const isAct = e.kind === "activity" && e.status !== "recommended";
+    const mark = e.status === "recommended" ? "☆ " : !isAct ? "" : isEditor()
+      ? `<label class="conf" title="Confirmed activities show in the itinerary"><input type="checkbox" data-confirm="${e.id}" ${e.confirmed ? "checked" : ""}></label>`
+      : (e.confirmed ? "✓ " : "○ ");
+    const efiles = isEditor() ? store.files.filter((f) => f.entryId === e.id) : [];
+    return `<li id="en-${esc(e.id)}" class="entry st-${e.status} ${isAct ? (e.confirmed ? "is-conf" : "is-plan") : ""}">
+      <div class="etext">${mark}${fmt(e.text)}${isAct && !e.confirmed ? ` <span class="planned">planned</span>` : ""}${ratingBadge(e.id)}
+        ${(e.endDate && e.endDate !== e.date) ? `<span class="muted small"> (${fmtDate(e.date)} – ${fmtDate(e.endDate)})</span>` : ""}
+        ${e.who.length < PEOPLE().length ? `<span class="who idots whos" role="img" aria-label="${esc(e.who.map(NAME).join(", "))}">${ALL_CODES().filter((c) => e.who.includes(c)).map((w) => `<i class="tdot" style="--pc:${pcolor(w)}" title="${esc(NAME(w))}"></i>`).join("")}</span>` : ""}</div>
+      <div class="eacts">${e.place ? `<a class="ibtn pin" target="_blank" rel="noopener" href="${maps(e.place)}" title="Open in Google Maps" aria-label="Open in Google Maps">${I.pin}</a>` : ""}
+        ${isEditor() ? `${e.status === "recommended" ? `<button class="btn tiny" data-plan="${e.id}">Add to Plan</button>` : ""}
+        ${isAct ? `<label class="ibtn" title="Attach a booking / ticket - marks it confirmed" aria-label="Attach a booking or ticket">${I.clip}<input type="file" hidden data-attach-entry="${e.id}"></label>` : ""}
+        <button class="btn tiny" data-edit-entry="${e.id}">Edit</button>
+        <button class="ibtn danger" data-del-entry="${e.id}" title="Delete" aria-label="Delete">${I.trash}</button>` : ""}</div>
+      ${efiles.length ? `<div class="efiles">${efiles.map(fileLink).join("")}</div>` : ""}</li>`; }
+// buttons on booking cards and activity rows (day view and the Before / After Trip screens)
+function wireCards() {
+  root.querySelectorAll("[data-edit-item]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.editItem))));
+  root.querySelectorAll("[data-edit-entry]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.editEntry))));
+  root.querySelectorAll("[data-confirm]").forEach((cb) => (cb.onchange = () => { const e = store.entries.find((x) => x.id === cb.dataset.confirm); data.saveEntry({ ...e, confirmed: cb.checked }); }));
+  root.querySelectorAll("[data-del-entry]").forEach((b) => (b.onclick = () => { const e = store.entries.find((x) => x.id === b.dataset.delEntry);
+    if (confirm(`Delete "${e.text}"${e.endDate && e.endDate !== e.date ? " (all its days)" : ""} for everyone?`)) data.deleteEntry(e.id); }));
+  root.querySelectorAll("[data-del-item]").forEach((b) => (b.onclick = () => { const i = store.items.find((x) => x.id === b.dataset.delItem);
+    const nm = i.type === "flight" ? `${i.route} ${i.number}` : i.type === "stay" ? i.name : `${i.company} car`;
+    if (confirm(`Delete ${nm} (${fmtDate(i.start)} – ${fmtDate(i.end)}) and its attached documents for everyone?`)) data.deleteItem(i.id); }));
+  root.querySelectorAll("[data-attach-entry]").forEach((inp) => (inp.onchange = async () => {
+    const e = store.entries.find((x) => x.id === inp.dataset.attachEntry);
+    await upload(inp.files, { entryId: e.id, date: e.date }); await data.saveEntry({ ...e, confirmed: true }); }));
+  root.querySelectorAll("[data-file]").forEach((b) => (b.onclick = async () => { const f = store.files.find((x) => x.id === b.dataset.file); const w = window.open("", "_blank"); const u = await data.fileUrl(f); if (w) w.location = u; else location.href = u; }));
+  root.querySelectorAll("[data-del-file]").forEach((b) => (b.onclick = () => { const f = store.files.find((x) => x.id === b.dataset.delFile); if (confirm(`Remove ${f.name}?`)) data.deleteFile(f); }));
+  root.querySelectorAll("[data-attach-item]").forEach((inp) => (inp.onchange = () => upload(inp.files, { itemId: inp.dataset.attachItem })));
 }
 function itemCard(i, date) {
   const t = texts(i); const role = roleOn(i, date);
@@ -1336,10 +1414,12 @@ const label = (k) => LABELS[k] || k;
 const fileLink = (f) => `<button class="filelink" data-file="${f.id}"><i class="ic16">${I.file}</i>${esc(f.name)}</button>`;
 
 function renderDay() {
+  if (ui.day === "before" || ui.day === "after") return renderOutside(ui.day);
   const p = ui.person, date = ui.day, ds = days();
   const idx = ds.indexOf(date);
   if (idx < 0) { ui.day = null; return render(); }
   const others = PEOPLE().filter((x) => x !== p);
+  const ob = outside(p, "before"), oa = outside(p, "after"), hasBefore = ob.items.length + ob.ents.length > 0, hasAfter = oa.items.length + oa.ents.length > 0;
   const its = itemsFor(p).filter((i) => i.start <= date && date <= i.end).sort((a, b) => ({ flight: 0, car: 2, stay: 1 }[a.type] - { flight: 0, car: 2, stay: 1 }[b.type]));
   const ents = entriesFor(p, date);
   const acts = ents.filter((e) => e.kind === "activity" && e.status !== "recommended");
@@ -1379,29 +1459,13 @@ function renderDay() {
   const mapPins = pins.concat(recPins);
   const dayFiles = isEditor() ? store.files.filter((f) => f.date === date || (f.itemId && its.some((i) => i.id === f.itemId)) || (f.entryId && ents.some((e) => e.id === f.entryId))) : [];
   const route = places.length >= 2 ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(places[0][1])}&destination=${encodeURIComponent(places.at(-1)[1])}${places.length > 2 ? "&waypoints=" + encodeURIComponent(places.slice(1, -1).map((x) => x[1]).join("|")) : ""}` : "";
-  const entryLi = (e) => {
-    const isAct = e.kind === "activity" && e.status !== "recommended";
-    const mark = e.status === "recommended" ? "☆ " : !isAct ? "" : isEditor()
-      ? `<label class="conf" title="Confirmed activities show in the itinerary"><input type="checkbox" data-confirm="${e.id}" ${e.confirmed ? "checked" : ""}></label>`
-      : (e.confirmed ? "✓ " : "○ ");
-    const efiles = isEditor() ? store.files.filter((f) => f.entryId === e.id) : [];
-    return `<li id="en-${esc(e.id)}" class="entry st-${e.status} ${isAct ? (e.confirmed ? "is-conf" : "is-plan") : ""}">
-      <div class="etext">${mark}${fmt(e.text)}${isAct && !e.confirmed ? ` <span class="planned">planned</span>` : ""}${ratingBadge(e.id)}
-        ${(e.endDate && e.endDate !== e.date) ? `<span class="muted small"> (${fmtDate(e.date)} – ${fmtDate(e.endDate)})</span>` : ""}
-        ${e.who.length < PEOPLE().length ? `<span class="who idots whos" role="img" aria-label="${esc(e.who.map(NAME).join(", "))}">${ALL_CODES().filter((c) => e.who.includes(c)).map((w) => `<i class="tdot" style="--pc:${pcolor(w)}" title="${esc(NAME(w))}"></i>`).join("")}</span>` : ""}</div>
-      <div class="eacts">${e.place ? `<a class="ibtn pin" target="_blank" rel="noopener" href="${maps(e.place)}" title="Open in Google Maps" aria-label="Open in Google Maps">${I.pin}</a>` : ""}
-        ${isEditor() ? `${e.status === "recommended" ? `<button class="btn tiny" data-plan="${e.id}">Add to Plan</button>` : ""}
-        ${isAct ? `<label class="ibtn" title="Attach a booking / ticket - marks it confirmed" aria-label="Attach a booking or ticket">${I.clip}<input type="file" hidden data-attach-entry="${e.id}"></label>` : ""}
-        <button class="btn tiny" data-edit-entry="${e.id}">Edit</button>
-        <button class="ibtn danger" data-del-entry="${e.id}" title="Delete" aria-label="Delete">${I.trash}</button>` : ""}</div>
-      ${efiles.length ? `<div class="efiles">${efiles.map(fileLink).join("")}</div>` : ""}</li>`; };
   root.innerHTML = `${header()}
   <div class="dayview">
     <div class="dayhead${date === iso(new Date()) ? " today" : ""}">
-      <button class="nav" data-go="-1" ${idx === 0 ? "disabled" : ""}>‹</button>
+      <button class="nav" data-go="-1" ${idx === 0 && !hasBefore ? "disabled" : ""}>‹</button>
       <div><div class="wd">${date === iso(new Date()) ? "Today · " : ""}${WD[D(date).getDay()]}</div><div class="dt">${longDate(date)}</div>${others.length ? `<div class="ddots" role="group" aria-label="Travelling with">${others.map((o) => { const on = together(p, o, date);
         return `<button class="dd${on ? " on" : ""}" ${isEditor() ? `data-with="${o}"` : "disabled"} aria-pressed="${on}" aria-label="${esc(NAME(o))}: ${on ? "travelling with " + esc(NAME(p)) : "not with " + esc(NAME(p))}" title="${esc(NAME(o))}${on ? " - together" : " - apart"}${isEditor() ? " (tap to change)" : ""}" style="--pc:${pcolor(o)};--pi:${inkOn(pcolor(o))}">${esc(o)}</button>`; }).join("")}</div>` : ""}</div>
-      <button class="nav" data-go="1" ${idx === ds.length - 1 ? "disabled" : ""}>›</button>
+      <button class="nav" data-go="1" ${idx === ds.length - 1 && !hasAfter ? "disabled" : ""}>›</button>
     </div>
     ${wxStrip(p, date)}
 
@@ -1444,25 +1508,12 @@ function renderDay() {
   const mapBox = root.querySelector("#daymap");
   if (mapBox) drawDayMap(mapBox, mapPins, root.querySelector(".daymap-msg")).catch((x) => { mapBox.hidden = true; const m = root.querySelector(".daymap-msg"); if (m) m.textContent = "Map unavailable: " + x.message; });
   root.querySelectorAll("[data-wxunit]").forEach((b) => (b.onclick = () => { wxUnit = wxUnit === "C" ? "F" : "C"; try { localStorage.setItem("tp.wxUnit", wxUnit); } catch (e) { /* ignore */ } const y = scrollY; render(); scrollTo(0, y); }));
-  root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => { const d2 = ds[idx + +b.dataset.go];
+  root.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => { const d2 = ds[idx + +b.dataset.go] || (+b.dataset.go < 0 ? "before" : "after");
     if (dpane !== null && dpane !== undefined) { ui.splitDay[dpane] = d2; return render(); }
     ui.slide = +b.dataset.go > 0 ? "from-right" : "from-left"; routeTo(ui.tripId, d2, true); }));
-  root.querySelectorAll("[data-edit-item]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.editItem))));
-  root.querySelectorAll("[data-edit-entry]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.editEntry))));
   root.querySelectorAll("[data-new-entry]").forEach((b) => (b.onclick = () => entryForm({ kind: b.dataset.newEntry, date, endDate: date, who: [p, ...others.filter((o) => together(p, o, date))], status: "planned", confirmed: false, text: "", place: "" })));
   root.querySelectorAll("[data-plan]").forEach((b) => (b.onclick = () => { const e = store.entries.find((x) => x.id === b.dataset.plan); data.saveEntry({ ...e, status: "planned", confirmed: false, date, endDate: date }); }));
-  root.querySelectorAll("[data-confirm]").forEach((cb) => (cb.onchange = () => { const e = store.entries.find((x) => x.id === cb.dataset.confirm); data.saveEntry({ ...e, confirmed: cb.checked }); }));
-  root.querySelectorAll("[data-del-entry]").forEach((b) => (b.onclick = () => { const e = store.entries.find((x) => x.id === b.dataset.delEntry);
-    if (confirm(`Delete "${e.text}"${e.endDate && e.endDate !== e.date ? " (all its days)" : ""} for everyone?`)) data.deleteEntry(e.id); }));
-  root.querySelectorAll("[data-del-item]").forEach((b) => (b.onclick = () => { const i = store.items.find((x) => x.id === b.dataset.delItem);
-    const nm = i.type === "flight" ? `${i.route} ${i.number}` : i.type === "stay" ? i.name : `${i.company} car`;
-    if (confirm(`Delete ${nm} (${fmtDate(i.start)} – ${fmtDate(i.end)}) and its attached documents for everyone?`)) data.deleteItem(i.id); }));
-  root.querySelectorAll("[data-attach-entry]").forEach((inp) => (inp.onchange = async () => {
-    const e = store.entries.find((x) => x.id === inp.dataset.attachEntry);
-    await upload(inp.files, { entryId: e.id, date: e.date }); await data.saveEntry({ ...e, confirmed: true }); }));
-  root.querySelectorAll("[data-file]").forEach((b) => (b.onclick = async () => { const f = store.files.find((x) => x.id === b.dataset.file); const w = window.open("", "_blank"); const u = await data.fileUrl(f); if (w) w.location = u; else location.href = u; }));
-  root.querySelectorAll("[data-del-file]").forEach((b) => (b.onclick = () => { const f = store.files.find((x) => x.id === b.dataset.delFile); if (confirm(`Remove ${f.name}?`)) data.deleteFile(f); }));
-  root.querySelectorAll("[data-attach-item]").forEach((inp) => (inp.onchange = () => upload(inp.files, { itemId: inp.dataset.attachItem })));
+  wireCards();
   root.querySelectorAll("[data-attach-day]").forEach((inp) => (inp.onchange = () => upload(inp.files, { date: inp.dataset.attachDay })));
 }
 // ------------------------------------------------------------------ date fields shown as dd-mmm-yy everywhere
@@ -1981,7 +2032,7 @@ function bulkAttach() {
     <div class="row bpick"><label class="btn small"><i class="ic16">${I.file}</i>Choose Files<input type="file" hidden multiple data-bfiles></label>
       <label class="btn small"><i class="ic16">${I.clip}</i>Choose Folder<input type="file" hidden webkitdirectory multiple data-bfolder></label></div>
     <p class="bstatus muted small"></p><div class="blist"></div>`, async () => {
-    const go = rows.filter((r) => r.target && r.state !== "dup");
+    const go = rows.filter((r) => r.target && r.state !== "dup" && !(r.out && r.target === "new" && !r.outOk));
     if (!go.length) { toast("Nothing to attach"); throw Object.assign(new Error(""), { back: true }); }
     let n = 0; const made = [];   // bookings created in this upload (a second file for the same booking joins it)
     const docs = go.filter((r) => r.target.startsWith("doc:")), vaults = {}; let nd = 0;
@@ -2017,15 +2068,17 @@ function bulkAttach() {
   const setStatus = (t) => (m.querySelector(".bstatus").textContent = t);
   btn.textContent = "Upload"; btn.disabled = true;
   const draw = () => {
-    list.innerHTML = rows.map((r, i) => `<div class="brow ${r.target?.startsWith("doc:") ? "pdoc" : r.target === "new" ? "new" : r.target ? "ok" : "none"}${r.state === "dup" ? " dup" : ""}">
+    list.innerHTML = rows.map((r, i) => `<div class="brow ${r.out && r.target === "new" && !r.outOk ? "outw " : ""}${r.target?.startsWith("doc:") ? "pdoc" : r.target === "new" ? "new" : r.target ? "ok" : "none"}${r.state === "dup" ? " dup" : ""}">
       <div class="bname"><i class="ic16">${I.file}</i><span>${esc(r.file.name)}</span></div>
       <select data-bi="${i}" aria-label="Booking for ${esc(r.file.name)}" ${r.state === "reading" ? "disabled" : ""}>${opts(r.target, r)}</select>
       ${r.vdate && r.target === "new" ? `<label class="bvd small">Voucher - use it on <input type="date" data-bvd="${i}" value="${r.vdate}" min="${store.trip.start}" max="${store.trip.end}"></label>` : ""}
+      ${r.out && r.target === "new" ? `<label class="bout small"><input type="checkbox" data-bout="${i}" ${r.outOk ? "checked" : ""}><span><b>${I.warn}Out of trip dates.</b> Tick to add it anyway - it will show in the grey <b>${r.out === "before" ? "Before Trip" : "After Trip"}</b> block for the people on it, not in the day-by-day plan.</span></label>` : ""}
       ${r.more?.length && r.target ? `<div class="bmore small">Also: ${r.more.map((m) => `${esc(aiLabel(m.ai))} (${m.target === "new" ? "new booking" : "matched"})`).join(" · ")}</div>` : ""}
       <div class="bwhy small">${r.state === "reading" ? "Reading the document…" : r.state === "dup" ? (r.target?.startsWith("doc:") ? "Already in this traveller's profile - will be skipped" : "Already attached to this booking - will be skipped") : r.target === "new" || r.target?.startsWith("doc:") ? esc(r.why) : r.target ? "Matched: " + esc(r.why) : esc(r.why || "No match found - choose the booking, or leave it out")}</div></div>`).join("");
+    list.querySelectorAll("[data-bout]").forEach((c) => (c.onchange = () => { rows[+c.dataset.bout].outOk = c.checked; draw(); }));
     list.querySelectorAll("[data-bvd]").forEach((d) => (d.onchange = () => { const r = rows[+d.dataset.bvd]; if (d.value) { r.vdate = d.value; r.ai.start = r.ai.end = d.value; } }));
     list.querySelectorAll("[data-bi]").forEach((s) => (s.onchange = () => { const r = rows[+s.dataset.bi]; r.target = s.value; r.why = s.value.startsWith("doc:") ? `Travel document - saved in the profile (private details), not the itinerary` : "chosen by you"; r.state = isDup(r) ? "dup" : "done"; draw(); }));
-    const ready = rows.filter((r) => r.target && r.state !== "dup").length;
+    const ready = rows.filter((r) => r.target && r.state !== "dup" && !(r.out && r.target === "new" && !r.outOk)).length;
     btn.disabled = !ready || rows.some((r) => r.state === "reading"); btn.textContent = ready ? `Upload ${ready}` : "Upload";
   };
   const isDup = (r) => { if (r.target?.startsWith("doc:")) return docDup(r); if (!r.target || r.target === "new") return false; const [kind, id] = r.target.split(":"); return store.files.some((f) => f.name === r.file.name && (kind === "item" ? f.itemId === id : f.entryId === id)); };
@@ -2066,14 +2119,14 @@ function bulkAttach() {
           return { ai: j, target: b && b[1] >= 50 ? b[0].kind + ":" + b[0].id : "new" }; });
         if (best && best[1] >= 50) { r.target = best[0].kind + ":" + best[0].id; r.why = best[2]; }
         else if (!r.target && x.type && x.start) {   // no booking for it yet: offer to create one from what the AI read
-          r.target = "new"; const out = x.start < store.trip.start || x.start > store.trip.end;
-          r.why = `Not in the itinerary yet - a new booking will be created from the file${out ? " (its dates are outside this trip - check)" : ""}`; }
+          r.target = "new"; r.out = (x.end || x.start) < store.trip.start ? "before" : x.start > store.trip.end ? "after" : "";
+          r.why = r.out ? `Outside this trip's dates (${fmtDate(store.trip.start)} – ${fmtDate(store.trip.end)})` : "Not in the itinerary yet - a new booking will be created from the file"; }
         else if (!r.target) r.why = "Couldn't tell which booking - choose it, or leave it out";
       } catch (e) { r.why = r.target ? r.why : "Couldn't read it (" + (e.code || e.message || "error").toString().slice(0, 60) + ") - choose the booking"; }
       r.state = isDup(r) ? "dup" : "done"; draw();
     }
     const fresh2 = rows.filter((r) => r.target === "new").length, pdocs = rows.filter((r) => r.target?.startsWith("doc:")).length, matched = rows.filter((r) => r.target && r.target !== "new").length - pdocs, none = rows.length - matched - fresh2 - pdocs;
-    setStatus(`${rows.length} file${rows.length > 1 ? "s" : ""} · ${matched} matched${pdocs ? ` · ${pdocs} travel document${pdocs > 1 ? "s" : ""} for the profiles` : ""}${fresh2 ? ` · ${fresh2} not in the itinerary yet (bookings will be created)` : ""}${none ? ` · ${none} to choose` : ""}`);
+    setStatus(`${rows.length} file${rows.length > 1 ? "s" : ""} · ${matched} matched${pdocs ? ` · ${pdocs} travel document${pdocs > 1 ? "s" : ""} for the profiles` : ""}${fresh2 ? ` · ${fresh2} not in the itinerary yet (bookings will be created)` : ""}${rows.some((r) => r.out && r.target === "new") ? ` · ${rows.filter((r) => r.out && r.target === "new").length} outside the trip dates - tick to add` : ""}${none ? ` · ${none} to choose` : ""}`);
   };
   m.querySelector("[data-bfiles]").onchange = (ev) => pick(ev.target.files);
   m.querySelector("[data-bfolder]").onchange = (ev) => pick(ev.target.files);

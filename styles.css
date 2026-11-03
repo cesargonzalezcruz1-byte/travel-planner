@@ -752,3 +752,20 @@ fieldset{min-width:0}
 .tc-warn{display:inline-flex;width:fit-content;max-width:100%;justify-self:start;align-self:flex-start;align-items:center;gap:6px;margin-top:8px;border:0;border-radius:12px;padding:4px 10px;font:inherit;font-size:12px;font-weight:800;cursor:pointer;background:var(--clash1-t);color:var(--clash1-x)}
 .tc-warn.bad{background:var(--clash2-t);color:var(--clash2-x)} .tc-warn .ic16{width:15px;height:15px;display:inline-flex}
 .brow.pdoc{border-left-color:var(--stay)} .brow.pdoc .bwhy{color:var(--stay-x, var(--ink2))}
+/* Before Trip / After Trip: grey, information-only */
+.oblock{display:grid;gap:6px;width:100%;text-align:left;font:inherit;cursor:pointer;background:var(--soft);color:var(--muted);border:1.5px dashed var(--line2);border-radius:18px;padding:12px 14px;margin:0 0 12px}
+.oblock.after{margin:12px 0 0}
+.oblock .ob-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap} .oblock .ob-head b{color:var(--ink2);font-size:15px}
+.oblock .ob-go{margin-left:auto;font-size:20px;line-height:1;color:var(--muted)}
+.oblock .ob-list{display:grid;gap:4px}
+.oblock .ob-row{display:grid;grid-template-columns:auto 18px 1fr;gap:8px;align-items:center;font-size:13px}
+.oblock .ob-d{font-weight:700;white-space:nowrap} .oblock .ob-ic{display:inline-flex;width:16px;height:16px;color:var(--muted)} .oblock .ob-ic svg{width:100%;height:100%}
+.oblock .ob-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink2)}
+.tl > .oblock, .now > .oblock{margin-left:0;margin-right:0}
+.dayhead.out{background:var(--soft);border:1.5px dashed var(--line2);box-shadow:none} .dayhead.out .dt{color:var(--ink2)}
+.dayview.outside .icard{filter:grayscale(.85);opacity:.92}
+/* out-of-trip file in Attach Documents */
+.bout{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:10px;background:var(--clash1-t);color:var(--clash1-x);line-height:1.35}
+.bout input{margin-top:2px;flex:none} .bout b svg{width:14px;height:14px;vertical-align:-2px;margin-right:4px}
+.brow.outw{border-left-color:var(--clash1)}
+.sheet label.bout{display:flex;flex-direction:row}

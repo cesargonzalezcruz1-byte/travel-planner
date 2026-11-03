@@ -383,7 +383,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v96";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v97";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -559,14 +559,17 @@ function renderBudget() {
   const expHtml = Object.keys(byDay).sort().reverse().map((d) => `<h4 class="bd-date">${d ? `${WD[D(d).getDay()]} ${longDate(d)}` : "No date"}<span>${money(byDay[d].reduce((a, r) => a + (r.home || 0), 0), cur, 2)}</span></h4>
       ${byDay[d].map((r) => `<button class="bl-row c-${r.cat}" data-exp="${r.id}"><span class="dot"></span><span class="bl-name">${esc(r.name)}${r.paidWith ? `<small>${esc(r.paidWith)}</small>` : ""}</span><span class="bl-amt">${money(r.m.amt, r.m.cur, 2)}${r.m.cur !== cur && r.home !== null ? `<small>${money(r.home, cur, 2)}</small>` : ""}</span></button>`).join("")}`).join("");
   const bk = B.rows.filter((r) => r.src !== "expense").sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-  const bkHtml = bk.map((r) => `<button class="bl-row c-${r.cat}${!r.m ? " missing" : ""}" data-${r.src === "item" ? "bk" : "bact"}="${r.id}"><span class="dot"></span>
-      <span class="bl-name">${esc(r.name)}<small>${r.date ? shortDate(r.date) + (r.end && r.end !== r.date ? " – " + shortDate(r.end) : "") : ""}${r.share !== "ours" ? " · " + SHARE[r.share] : ""}${r.planned ? " · not confirmed" : ""}${r.tbc ? " · to book" : ""}</small></span>
+  const sideOf = (r) => { const t = store.trip; if (!r.date || !t?.start) return ""; const last = r.end && r.end > r.date && r.src === "item" ? addDays(r.end, -1) : (r.end || r.date);
+    return last < t.start ? "before" : r.date > t.end ? "after" : ""; };
+  const bkHtml = bk.map((r) => `<button class="bl-row c-${r.cat}${!r.m ? " missing" : ""}${sideOf(r) ? " out " + sideOf(r) : ""}" data-${r.src === "item" ? "bk" : "bact"}="${r.id}"><span class="dot"></span>
+      <span class="bl-name">${esc(r.name)}<small>${r.date ? shortDate(r.date) + (r.end && r.end !== r.date ? " – " + shortDate(r.end) : "") : ""}${r.share !== "ours" ? " · " + SHARE[r.share] : ""}${r.planned ? " · not confirmed" : ""}${r.tbc ? " · to book" : ""}${sideOf(r) ? ` · <span class="otag">${sideOf(r) === "before" ? "Before Trip" : "After Trip"}</span>` : ""}</small></span>
       <span class="bl-amt">${r.m ? money(r.m.amt, r.m.cur, 2) : (r.tbc ? "To book" : "Add cost")}${r.m && r.m.cur !== cur && r.home !== null ? `<small>${money(r.home, cur, 2)}</small>` : ""}${r.due ? `<small>+ ${money(r.due, cur, 2)} due</small>` : ""}</span></button>`).join("");
   root.innerHTML = `${header({ views: true })}
     <div class="bd">
       <section class="bd-sum">
         <div class="bd-total"><small>Trip cost so far</small><b>${money(total, cur)}</b>
-          <span>${money(B.booked, cur)} booked · ${money(B.spent, cur)} spent</span></div>
+          <span>${money(B.booked, cur)} booked · ${money(B.spent, cur)} spent</span>
+          ${(() => { const dc = dailyCosts(B, false); return dc.preT || dc.postT ? `<span class="bd-out">Includes ${[dc.preT && `${money(dc.preT, cur)} before`, dc.postT && `${money(dc.postT, cur)} after`].filter(Boolean).join(" and ")} the trip dates</span>` : ""; })()}</div>
         ${S.total ? `<div class="bar big${total > S.total ? " over" : ""}"><i style="width:${pct}%"></i></div><p class="bd-target">${pct}% of ${money(S.total, cur)} budget · ${total > S.total ? `${money(total - S.total, cur)} over` : `${money(S.total - total, cur)} left`}</p>` : `<p class="bd-target">No total budget set yet - add one in Budget Settings.</p>`}
         <div class="bd-chips">
           ${B.due ? `<span>Still to pay at properties <b>${money(B.due, cur)}</b></span>` : ""}
@@ -620,12 +623,16 @@ async function refreshRates() {
 // ---------------------------------------------------------------- budget charts (SVG, hover/tap tooltips)
 // Fixed category order for charts (chosen so neighbouring colours stay distinct, incl. colour-blind checks)
 const CHART_ORDER = ["flight", "food", "stay", "transport", "act", "shopping", "car", "other"];
-const catLabel = (k) => (BCATS.find((c) => c[0] === k) || [k, k])[1];
-const catVar = (k) => `var(--${k === "act" ? "act" : k})`;
+const catLabel = (k) => (k === "before" ? "Before Trip" : k === "after" ? "After Trip" : (BCATS.find((c) => c[0] === k) || [k, k])[1]);
+const catVar = (k) => (k === "before" ? "url(#oh-pre)" : k === "after" ? "url(#oh-post)" : `var(--${k})`);
+const swatch = (k) => (k === "before" || k === "after" ? `repeating-linear-gradient(45deg,var(--out-${k === "before" ? "pre" : "post"}) 0 2px,var(--out-bg) 2px 4px)` : catVar(k));
+const HATCH = `<defs>${[["pre", "out-pre"], ["post", "out-post"]].map(([id, v]) => `<pattern id="oh-${id}" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)"><rect width="5" height="5" style="fill:var(--out-bg)"></rect><rect width="2.2" height="5" style="fill:var(--${v})"></rect></pattern>`).join("")}</defs>`;
+const outTip = (o, cur) => CHART_ORDER.filter((k) => o[k] > 0).map((k) => `${catLabel(k)} ${money(o[k], cur)}`).join(" · ");
 // spread each cost over the trip days it covers: stays per night, cars per rental day, everything else on its date
 function dailyCosts(B, spentOnly) {
-  const ds = days(), idx = Object.fromEntries(ds.map((d, i) => [d, i])), out = ds.map(() => Object.fromEntries(CHART_ORDER.map((k) => [k, 0])));
-  const put = (d, k, v) => { if (d in idx) out[idx[d]][k] += v; else if (ds.length) out[d < ds[0] ? 0 : ds.length - 1][k] += v; };
+  const ds = days(), idx = Object.fromEntries(ds.map((d, i) => [d, i])), blank = () => Object.fromEntries(CHART_ORDER.map((k) => [k, 0]));
+  const out = ds.map(blank), pre = blank(), post = blank();   // costs on days before / after the trip get their own grey bucket
+  const put = (d, k, v) => { if (d in idx) out[idx[d]][k] += v; else if (ds.length) (d < ds[0] ? pre : post)[k] += v; };
   for (const r of B.rows) {
     if (!r.home || r.share !== "ours" || (spentOnly && r.src !== "expense")) continue;
     const k = CHART_ORDER.includes(r.cat) ? r.cat : "other";
@@ -633,13 +640,15 @@ function dailyCosts(B, spentOnly) {
       const n = dayDiff(r.date, r.end); for (let j = 0; j < n; j++) put(addDays(r.date, j), k, r.home / n);
     } else put(r.date, k, r.home);
   }
-  return { ds, out };
+  const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
+  return { ds, out, pre, post, preT: sum(pre), postT: sum(post) };
 }
 const niceMax = (v) => { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p; };
 const kfmt = (v, cur) => (v >= 1000 ? `${money(v / 1000, cur, Number.isInteger(Math.round(v / 100) / 10) ? 0 : 1)}k` : money(v, cur));
 const pctTxt = (v, t) => { const p = v / t * 100; return p > 0 && p < 1 ? "<1%" : Math.round(p) + "%"; };
 function donutChart(B) {
-  const cur = B.S.home, parts = CHART_ORDER.map((k) => ({ k, v: B.cats[k].booked + B.cats[k].spent })).filter((p) => p.v > 0);
+  const cur = B.S.home, dc = dailyCosts(B, false);
+  const parts = CHART_ORDER.map((k) => ({ k, v: dc.out.reduce((a, o) => a + o[k], 0) })).concat([{ k: "before", v: dc.preT }, { k: "after", v: dc.postT }]).filter((p) => p.v > 0);
   const total = parts.reduce((a, p) => a + p.v, 0); if (!total) return "";
   const R = 64, r = 42, cx = 80, cy = 80; let a0 = -Math.PI / 2;
   const arc = (a1, a2) => { const big = a2 - a1 > Math.PI ? 1 : 0, p = (a, rad) => `${(cx + rad * Math.cos(a)).toFixed(2)} ${(cy + rad * Math.sin(a)).toFixed(2)}`;
@@ -649,53 +658,64 @@ function donutChart(B) {
     return parts.length === 1 ? `<circle cx="${cx}" cy="${cy}" r="${(R + r) / 2}" fill="none" stroke="${catVar(p.k)}" stroke-width="${R - r}" data-tip="${esc(tip)}"></circle>`
       : `<path d="${arc(a1, a2)}" style="fill:${catVar(p.k)};stroke:var(--card);stroke-width:2" data-tip="${esc(tip)}"></path>`; }).join("");
   return `<figure class="chart"><figcaption>Where the money goes</figcaption>
-    <div class="donut-wrap"><svg viewBox="0 0 160 160" class="donut" role="img" aria-label="Costs by type">${segs}
+    <div class="donut-wrap"><svg viewBox="0 0 160 160" class="donut" role="img" aria-label="Costs by type">${HATCH}${segs}
       <text x="80" y="76" text-anchor="middle" class="d-lab">Total</text><text x="80" y="94" text-anchor="middle" class="d-val">${esc(kfmt(total, cur))}</text></svg>
-    <ul class="legend">${parts.map((p) => `<li><i style="background:${catVar(p.k)}"></i><span>${catLabel(p.k)}</span><b>${money(p.v, cur)}</b><small>${pctTxt(p.v, total)}</small></li>`).join("")}</ul></div></figure>`;
+    <ul class="legend">${parts.map((p) => `<li><i style="background:${swatch(p.k)}"></i><span>${catLabel(p.k)}</span><b>${money(p.v, cur)}</b><small>${pctTxt(p.v, total)}</small></li>`).join("")}</ul></div></figure>`;
 }
 function dailyChart(B) {
-  const cur = B.S.home, spentOnly = ui.chartMode === "spent", { ds, out } = dailyCosts(B, spentOnly);
-  const tot = out.map((o) => Object.values(o).reduce((a, b) => a + b, 0)), max = niceMax(Math.max(0, ...tot));
-  const W = 340, H = 170, L = 38, T = 8, Bm = 22, cw = (W - L - 4) / Math.max(1, ds.length), bw = Math.max(3, Math.min(18, cw - 2)), ph = H - T - Bm;
+  const cur = B.S.home, spentOnly = ui.chartMode === "spent", { ds, out, pre, post, preT, postT } = dailyCosts(B, spentOnly);
+  const tot = out.map((o) => Object.values(o).reduce((a, b) => a + b, 0)), max = niceMax(Math.max(0, preT, postT, ...tot));
+  const nPre = preT ? 1 : 0, nPost = postT ? 1 : 0, slots = ds.length + nPre + nPost;
+  const W = 340, H = 170, L = 38, T = 8, Bm = 22, cw = (W - L - 4) / Math.max(1, slots), bw = Math.max(3, Math.min(18, cw - 2)), ph = H - T - Bm;
+  const outBar = (side, i, v, o) => { const x = L + 2 + i * cw + (cw - bw) / 2, r = Math.min(3, bw / 2);
+    return `<g class="obar"><path d="M${x} ${y(0)}V${y(v) + r}Q${x} ${y(v)} ${x + r} ${y(v)}H${x + bw - r}Q${x + bw} ${y(v)} ${x + bw} ${y(v) + r}V${y(0)}Z" style="fill:${catVar(side)}"></path>
+      <rect x="${L + 2 + i * cw}" y="${T}" width="${cw}" height="${ph}" fill="transparent" data-tip="${esc(`${catLabel(side)}: ${money(v, cur)} · ${outTip(o, cur)}`)}" data-day="${side}"></rect>
+      <text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" class="ax">${side === "before" ? "Pre" : "Post"}</text></g>`; };
   const y = (v) => T + ph - v / max * ph;
   const grid = [0, 0.5, 1].map((f) => `<line x1="${L}" x2="${W}" y1="${y(max * f)}" y2="${y(max * f)}" class="g"></line><text x="${L - 5}" y="${y(max * f) + 3.5}" text-anchor="end" class="ax">${esc(kfmt(max * f, cur))}</text>`).join("");
   const bars = ds.map((d, i) => {
-    const x = L + 2 + i * cw + (cw - bw) / 2; let acc = 0, segs = "";
-    const ks = CHART_ORDER.filter((k) => out[i][k] > 0);
-    ks.forEach((k, j) => { const v = out[i][k], y0 = y(acc), y1 = y(acc + v), h = Math.max(0, y0 - y1 - (j < ks.length - 1 ? 1.5 : 0)); acc += v;
+    i += nPre; const x = L + 2 + i * cw + (cw - bw) / 2; let acc = 0, segs = ""; const di = i - nPre;
+    const ks = CHART_ORDER.filter((k) => out[di][k] > 0);
+    ks.forEach((k, j) => { const v = out[di][k], y0 = y(acc), y1 = y(acc + v), h = Math.max(0, y0 - y1 - (j < ks.length - 1 ? 1.5 : 0)); acc += v;
       segs += j === ks.length - 1 ? `<path d="M${x} ${y0}V${y1 + Math.min(3, h / 2)}Q${x} ${y1} ${x + Math.min(3, bw / 2)} ${y1}H${x + bw - Math.min(3, bw / 2)}Q${x + bw} ${y1} ${x + bw} ${y1 + Math.min(3, h / 2)}V${y0}Z" style="fill:${catVar(k)}"></path>`
         : `<rect x="${x}" y="${y0 - h}" width="${bw}" height="${h}" style="fill:${catVar(k)}"></rect>`; });
-    const tip = `${WD[D(d).getDay()].slice(0, 3)} ${shortDate(d)}: ${money(tot[i], cur)}${ks.length ? " · " + ks.map((k) => `${catLabel(k)} ${money(out[i][k], cur)}`).join(" · ") : ""}`;
-    const lab = i === 0 || D(d).getDate() === 1 || D(d).getDay() === 1 ? `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" class="ax">${D(d).getDate()}${i === 0 || D(d).getDate() === 1 ? " " + MON[D(d).getMonth()] : ""}</text>` : "";
+    const tip = `${WD[D(d).getDay()].slice(0, 3)} ${shortDate(d)}: ${money(tot[di], cur)}${ks.length ? " · " + ks.map((k) => `${catLabel(k)} ${money(out[di][k], cur)}`).join(" · ") : ""}`;
+    const lab = (di === 0 && !nPre) || D(d).getDate() === 1 || D(d).getDay() === 1 ? `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" class="ax">${D(d).getDate()}${di === 0 || D(d).getDate() === 1 ? " " + MON[D(d).getMonth()] : ""}</text>` : "";
     return `<g>${d === iso(new Date()) ? `<rect x="${L + 2 + i * cw}" y="${T}" width="${cw}" height="${ph}" rx="3" class="today-col"></rect>` : ""}${segs}<rect x="${L + 2 + i * cw}" y="${T}" width="${cw}" height="${ph}" fill="transparent" data-tip="${esc((d === iso(new Date()) ? "Today · " : "") + tip)}" data-day="${d}"></rect>${lab}</g>`;
-  }).join("");
-  const used = CHART_ORDER.filter((k) => out.some((o) => o[k] > 0));
+  }).join("") + (nPre ? outBar("before", 0, preT, pre) : "") + (nPost ? outBar("after", slots - 1, postT, post) : "");
+  const used = CHART_ORDER.filter((k) => out.some((o) => o[k] > 0)).concat(nPre ? ["before"] : [], nPost ? ["after"] : []);
   return `<figure class="chart"><figcaption>${spentOnly ? "Spending by day" : "Cost by day"}
       <span class="seg-mini"><button class="${spentOnly ? "" : "on"}" data-chart-mode="all">All costs</button><button class="${spentOnly ? "on" : ""}" data-chart-mode="spent">Spending only</button></span></figcaption>
-    ${tot.some((v) => v) ? `<svg viewBox="0 0 ${W} ${H}" class="bars" role="img" aria-label="${spentOnly ? "Spending" : "Costs"} per trip day">${grid}${bars}</svg>
-    <ul class="legend inline">${used.map((k) => `<li><i style="background:${catVar(k)}"></i><span>${catLabel(k)}</span></li>`).join("")}</ul>
+    ${tot.some((v) => v) || preT || postT ? `<svg viewBox="0 0 ${W} ${H}" class="bars" role="img" aria-label="${spentOnly ? "Spending" : "Costs"} per trip day">${HATCH}${grid}${bars}</svg>
+    <ul class="legend inline">${used.map((k) => `<li><i style="background:${swatch(k)}"></i><span>${catLabel(k)}</span></li>`).join("")}</ul>
     <p class="muted small">${spentOnly ? "Expenses you logged, by the day you spent them." : "Hotels and cars are spread across the nights / days they cover; flights and activities sit on their date."} Tap a bar to open that day.</p>`
     : `<p class="muted">${spentOnly ? "No expenses logged yet." : "No costs yet."}</p>`}</figure>`;
 }
 function cumulativeChart(B) {
-  const cur = B.S.home, { ds, out } = dailyCosts(B, false); if (!ds.length) return "";
-  let run = 0; const cum = out.map((o) => (run += Object.values(o).reduce((a, b) => a + b, 0)));
+  const cur = B.S.home, { ds, out, preT, postT } = dailyCosts(B, false); if (!ds.length) return "";
+  let run = preT; const cum = out.map((o) => (run += Object.values(o).reduce((a, b) => a + b, 0)));
+  const inTrip = run; run += postT;
   if (!run) return "";
   const target = B.S.total, max = niceMax(Math.max(run, target || 0));
-  const W = 340, H = 150, L = 38, T = 10, Bm = 20, ph = H - T - Bm, step = (W - L - 8) / Math.max(1, ds.length - 1);
-  const x = (i) => L + 4 + i * step, y = (v) => T + ph - v / max * ph;
+  const nPre = preT ? 1 : 0, nPost = postT ? 1 : 0;
+  const W = 340, H = 150, L = 38, T = 10, Bm = 20, ph = H - T - Bm, step = (W - L - 8) / Math.max(1, ds.length - 1 + nPre + nPost);
+  const x = (i) => L + 4 + (i + nPre) * step, y = (v) => T + ph - v / max * ph;
   const grid = [0, 0.5, 1].map((f) => `<line x1="${L}" x2="${W}" y1="${y(max * f)}" y2="${y(max * f)}" class="g"></line><text x="${L - 5}" y="${y(max * f) + 3.5}" text-anchor="end" class="ax">${esc(kfmt(max * f, cur))}</text>`).join("");
   const pts = cum.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const today = iso(new Date()), ti = ds.indexOf(today);
   const hits = ds.map((d, i) => `<rect x="${x(i) - step / 2}" y="${T}" width="${step}" height="${ph}" fill="transparent" data-tip="${esc(`${WD[D(d).getDay()].slice(0, 3)} ${shortDate(d)}: ${money(cum[i], cur)} so far${target ? ` · ${Math.round(cum[i] / target * 100)}% of budget` : ""}`)}" data-x="${x(i)}" data-y="${y(cum[i])}"></rect>`).join("");
-  return `<figure class="chart"><figcaption>Running total${target ? " vs budget" : ""}</figcaption>
+  return `<figure class="chart"><figcaption>Running total${target ? " vs budget" : ""}</figcaption>${nPre || nPost ? `<ul class="legend inline"><li><i style="background:var(--run, var(--accent))"></i><span>During the trip</span></li>${nPre ? `<li><i style="background:${swatch("before")}"></i><span>Before Trip</span></li>` : ""}${nPost ? `<li><i style="background:${swatch("after")}"></i><span>After Trip</span></li>` : ""}</ul>` : ""}
     <svg viewBox="0 0 ${W} ${H}" class="line" role="img" aria-label="Cumulative trip cost${target ? " against the budget" : ""}">${grid}
       ${target ? `<line x1="${L}" x2="${W}" y1="${y(target)}" y2="${y(target)}" class="budget"></line><text x="${W - 2}" y="${y(target) - 4}" text-anchor="end" class="ax strong">Budget ${esc(kfmt(target, cur))}</text>` : ""}
       ${ti >= 0 ? `<line x1="${x(ti)}" x2="${x(ti)}" y1="${T}" y2="${T + ph}" class="today"></line>` : ""}
+      ${nPre ? `<polyline points="${x(-1)},${y(0)} ${x(-1)},${y(preT)} ${x(0)},${y(cum[0])}" class="run-out pre"></polyline><circle cx="${x(-1)}" cy="${y(preT)}" r="3.5" class="out-dot pre"></circle>
+        <rect x="${x(-1) - step / 2}" y="${T}" width="${step}" height="${ph}" fill="transparent" data-tip="${esc(`Before Trip: ${money(preT, cur)}`)}" data-x="${x(-1)}" data-y="${y(preT)}"></rect>` : ""}
       <polyline points="${pts}" class="run"></polyline>
-      <circle cx="${x(ds.length - 1)}" cy="${y(run)}" r="4" class="run-end"></circle>
-      <text x="${x(ds.length - 1) - 6}" y="${y(run) + (y(run) < T + 14 ? 14 : -8)}" text-anchor="end" class="ax strong">${esc(kfmt(run, cur))}</text>
-      <text x="${L + 4}" y="${H - 5}" class="ax">${shortDate(ds[0])}</text><text x="${W}" y="${H - 5}" text-anchor="end" class="ax">${shortDate(ds.at(-1))}</text>
+      ${nPost ? `<polyline points="${x(ds.length - 1)},${y(inTrip)} ${x(ds.length)},${y(run)}" class="run-out post"></polyline>
+        <rect x="${x(ds.length) - step / 2}" y="${T}" width="${step}" height="${ph}" fill="transparent" data-tip="${esc(`After Trip: + ${money(postT, cur)} · ${money(run, cur)} in all`)}" data-x="${x(ds.length)}" data-y="${y(run)}"></rect>` : ""}
+      <circle cx="${x(ds.length - 1 + nPost)}" cy="${y(run)}" r="4" class="run-end${nPost ? " post" : ""}"></circle>
+      <text x="${x(ds.length - 1 + nPost) - 6}" y="${y(run) + (y(run) < T + 14 ? 14 : -8)}" text-anchor="end" class="ax strong">${esc(kfmt(run, cur))}</text>
+      <text x="${L + 4}" y="${H - 5}" class="ax">${nPre ? "Pre · " : ""}${shortDate(ds[0])}</text><text x="${W}" y="${H - 5}" text-anchor="end" class="ax">${shortDate(ds.at(-1))}${nPost ? " · Post" : ""}</text>
       <circle r="4.5" class="cross-dot" cx="-20" cy="-20"></circle>${hits}</svg></figure>`;
 }
 function wireCharts() {

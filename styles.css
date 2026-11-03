@@ -769,3 +769,14 @@ fieldset{min-width:0}
 .bout input{margin-top:2px;flex:none} .bout b svg{width:14px;height:14px;vertical-align:-2px;margin-right:4px}
 .brow.outw{border-left-color:var(--clash1)}
 .sheet label.bout{display:flex;flex-direction:row}
+/* budget: costs before / after the trip dates in grey */
+:root{--out-pre:#A7ACB8;--out-post:#6F7584}
+:root[data-theme="midnight"]{--out-pre:#5C6270;--out-post:#8A91A0}
+.chart .run-out{fill:none;stroke:var(--out-pre);stroke-width:2;stroke-dasharray:4 3;stroke-linecap:round}
+.chart .run-out.post{stroke:var(--out-post)}
+.chart .out-dot{fill:var(--out-pre);stroke:var(--card);stroke-width:1.5} .chart .run-end.post{fill:var(--out-post)}
+.bl-row.out{background:var(--soft)} .bl-row.out .dot{background:var(--out-pre)!important} .bl-row.out.after .dot{background:var(--out-post)!important}
+.bl-row .otag{display:inline-block;padding:0 7px;border-radius:8px;background:var(--line);color:var(--muted);font-weight:700;font-size:11px}
+.bd-total .bd-out{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+:root{--out-pre:#9097A4;--out-post:#5E6472;--out-bg:#E3E5EA}
+:root[data-theme="midnight"]{--out-pre:#7B8291;--out-post:#AEB4C0;--out-bg:#2A2D35}

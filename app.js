@@ -384,7 +384,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v102";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v103";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -423,6 +423,7 @@ const withText = (p, date) => { const w = PEOPLE().filter((o) => o !== p && toge
 // Traveller colours: a rainbow, every one dark enough for white initials (contrast 5:1 or more) and clearly different from its neighbours
 const TCOLORS = [["Red", "#C62828"], ["Orange", "#B35300"], ["Gold", "#856A00"], ["Green", "#2E7D32"], ["Teal", "#00796B"], ["Blue", "#1565C0"], ["Violet", "#6A35C9"], ["Magenta", "#B0186E"]];
 // new travellers get colours far apart from each other first
+const EXTRA_C = ["#5D6573", "#7B5B3A", "#3F6A7A", "#6E4F72", "#5F6B3A"];   // muted tones for "others joining sometimes"
 const TDEFAULT = ["#1565C0", "#B35300", "#2E7D32", "#B0186E", "#00796B", "#C62828", "#6A35C9", "#856A00"];
 // earlier palettes -> nearest rainbow colour (so trips set up before keep a similar choice)
 const OLDC = { "#14B8A6": "#00796B", "#0F7C72": "#00796B", "#FF7A59": "#C62828", "#D2442C": "#C62828", "#F2A93B": "#856A00", "#A15F08": "#856A00",
@@ -434,6 +435,9 @@ const THEMES = [["ink", "Ink & Violet", ["#16141F", "#2F6FED", "#7A4BD6", "#5D65
 function pcolor(code) {
   const tr = store.trip?.travellers || []; const k = tr.findIndex((t) => t.code === code);
   const per = k >= 0 && tr[k].pid && store.people.find((x) => x.id === tr[k].pid);   // the traveller's profile colour wins (editors)
+  if (k < 0) { const ex = store.trip?.extended || [], j = ex.findIndex((t) => t.code === code);   // others joining: their profile colour, or a muted tone
+    const pe = j >= 0 && (store.people.find((x) => x.id === ex[j].pid) || null);
+    if (j >= 0) return (pe && upc(pe.color)) || EXTRA_C[j % EXTRA_C.length]; }
   return (per && upc(per.color)) || (k >= 0 && upc(tr[k].color)) || TDEFAULT[Math.max(0, k) % TDEFAULT.length];
 }
 const inkOn = (hex) => { const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255; return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#16141F" : "#FFFFFF"; };
@@ -480,7 +484,7 @@ function wireHeader() {
   root.querySelectorAll("[data-person]").forEach((b) => (b.onclick = () => {
     const pane = b.closest(".pane");
     if (pane) { ui.splitPeople[+pane.dataset.pane] = b.dataset.person; try { localStorage.setItem("tp.splitPeople", JSON.stringify(ui.splitPeople)); } catch (e) { /* ignore */ } render(); return; }
-    ui.person = b.dataset.person; localStorage.setItem("tp.person", ui.person); render(); }));
+    ui.person = b.dataset.person; ui.voter = null; localStorage.setItem("tp.person", ui.person); render(); }));
   root.querySelectorAll("[data-view]").forEach((b) => (b.onclick = () => {
     const pane = b.closest(".pane");
     if (pane) { const k = +pane.dataset.pane; ui.split[k] = b.dataset.view; ui.splitDay[k] = null; try { localStorage.setItem("tp.splitViews", JSON.stringify(ui.split)); } catch (e) { /* ignore */ }
@@ -2309,14 +2313,16 @@ function ensureRecs() {
 }
 // ---- family votes: 👍 on recommended places and ideas, as the traveller whose itinerary is showing
 const votesFor = (key) => store.votes?.[key]?.up || [];
+const voter = () => (ui.voter && ALL_CODES().includes(ui.voter) ? ui.voter : ui.person);   // anyone on the trip, incl. others joining
 function voteBtn(key, name, kind) {
-  const up = votesFor(key), me = ui.person, mine = up.includes(me);
+  const up = votesFor(key), me = voter(), mine = up.includes(me);
   return `<span class="vote"><button type="button" class="vbtn${mine ? " on" : ""}" data-vote="${esc(key)}" data-vname="${esc(name)}" data-vkind="${kind}" aria-pressed="${mine}"
       title="${mine ? `Remove ${esc(NAME(me))}'s vote` : `I'd like to do this (vote as ${esc(NAME(me))})`}" aria-label="${up.length} vote${up.length === 1 ? "" : "s"}${mine ? ", including yours" : ""} - ${mine ? "remove your vote" : "vote"}">${I.thumb}${up.length ? `<b>${up.length}</b>` : ""}</button>
     ${up.length ? `<span class="idots" role="img" aria-label="${esc(up.map(NAME).join(", "))}">${up.map((c) => `<i class="tdot" style="--pc:${pcolor(c)}" title="${esc(NAME(c))}"></i>`).join("")}</span>` : ""}</span>`;
 }
 function wireVotes() {
-  const me = ui.person;
+  const me = voter();
+  root.querySelectorAll("[data-voter]").forEach((b) => (b.onclick = () => { ui.voter = b.dataset.voter; const y = scrollY; render(); scrollTo(0, y); }));
   root.querySelectorAll("[data-vote]").forEach((b) => (b.onclick = async (ev) => {
     ev.stopPropagation(); const key = b.dataset.vote, on = !votesFor(key).includes(me);
     b.disabled = true;
@@ -2345,7 +2351,8 @@ function recsHtml(p, date, notesHtml) {
       ${isEditor() && locs.length ? `<button class="iconbtn rrefresh${anyBusy ? " spin" : ""}" data-rec-refresh ${anyBusy ? "disabled" : ""} aria-label="Search Google again for things to do and places to eat" title="Search again for things to do and places to eat">↻</button>` : ""}</h3>
     ${locs.length > 1 ? `<div class="seg-mini rlocs">${locs.map((l) => `<button class="${l.key === ui.recLoc ? "on" : ""}" data-rec-loc="${l.key}">${esc(l.area)}</button>`).join("")}</div>` : ""}
     ${notesHtml ? `<p class="rlabel">From Our Notes</p><ul class="entries">${notesHtml}</ul>` : ""}
-    ${loc || notesHtml ? `<p class="vhint muted small">${I.thumb}<span>Tap the thumb on places you'd like to go - voting as <b style="color:${pcolor(p)}">${esc(NAME(p))}</b>${PEOPLE().length > 1 ? " (change traveller at the top)" : ""}. The family's favourites move to the top.</span></p>${store.votesError && isEditor() ? `<p class="jwarn small">${esc(store.votesError)}</p>` : ""}` : ""}
+    ${loc || notesHtml ? `<div class="vhint small"><span class="muted">${I.thumb}Vote for the places you'd like to go - the family's favourites move to the top. Voting as:</span>
+      <span class="ddots">${ALL_CODES().map((c) => `<button type="button" class="dd${c === voter() ? " on" : ""}" data-voter="${esc(c)}" style="--pc:${pcolor(c)}" aria-pressed="${c === voter()}" title="${esc(NAME(c))}">${esc(c)}</button>`).join("")}</span></div>${store.votesError && isEditor() ? `<p class="jwarn small">${esc(store.votesError)}</p>` : ""}` : ""}
     ${loc ? `<div class="seg-mini rtabs"><button class="${tab === "do" ? "on" : ""}" data-rec-tab="do">Things to Do</button><button class="${tab === "eat" ? "on" : ""}" data-rec-tab="eat">Places to Eat</button></div>
       ${list.length ? `<ol class="reclist">${shown.map(row).join("")}</ol>
         ${list.length > 5 ? `<button class="lnk" data-rec-more>${ui.recMore ? "Show top 5" : `Show all ${list.length}`}</button>` : ""}`

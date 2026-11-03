@@ -800,3 +800,5 @@ fieldset{min-width:0}
 .vote .idots{display:inline-flex;gap:2px}
 .vhint{display:flex;gap:6px;align-items:flex-start;margin:4px 0 8px} .vhint svg{width:14px;height:14px;flex:none;margin-top:2px}
 .rec{align-items:center}
+.vhint{display:grid;gap:6px;margin:4px 0 8px} .vhint > .muted{display:block} .vhint > .muted svg{width:14px;height:14px;vertical-align:-2px;margin-right:5px}
+.vhint .ddots{display:flex;flex-wrap:wrap;gap:6px}

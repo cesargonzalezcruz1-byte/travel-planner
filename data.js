@@ -15,13 +15,13 @@ export const onChange = (fn) => { listeners.add(fn); return () => listeners.dele
 const uid = (p) => p + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const clean = (o) => JSON.parse(JSON.stringify(o));
 const now = () => new Date().toISOString();
-const clearTrip = () => Object.assign(store, { trip: null, items: [], entries: [], priv: {}, files: [], journal: [], journalError: "" });
+const clearTrip = () => Object.assign(store, { trip: null, items: [], entries: [], priv: {}, files: [], journal: [], journalError: "", votes: {}, votesError: "" });
 
 // ---------------- demo store (local testing only)
 const demo = { trips: {}, people: {}, vault: {} };   // id -> {trip, items, entries, priv, files}
 function demoLoad(id) {
   const t = demo.trips[id]; if (!t) { clearTrip(); return; }
-  Object.assign(store, { trip: t.trip, items: t.items, entries: t.entries, priv: store.role === "editor" ? t.priv : {}, files: store.role === "editor" ? t.files : [], journal: (t.journal = t.journal || []) });
+  Object.assign(store, { trip: t.trip, items: t.items, entries: t.entries, priv: store.role === "editor" ? t.priv : {}, files: store.role === "editor" ? t.files : [], journal: (t.journal = t.journal || []), votes: (t.votes = t.votes || {}) });
 }
 const demoList = () => { store.trips = Object.entries(demo.trips).map(([id, t]) => ({ id, ...t.trip })); store.tripsLoaded = true; };
 
@@ -119,6 +119,9 @@ function subscribeTrip(id) {
   // journal: the one place the family can write too (needs the journal rule in firestore.rules)
   tripUnsubs.push(fsM.onSnapshot(col("journal"), (s) => { store.journal = s.docs.map((d) => ({ id: d.id, ...d.data() })); store.journalError = ""; emit(); },
     (e) => { console.warn("journal", e); store.journalError = e.code === "permission-denied" ? "The journal isn't switched on yet (Firestore rules need the journal section)." : e.message; emit(); }));
+  // votes on recommended places / ideas: the family can vote too (needs the votes rule in firestore.rules)
+  tripUnsubs.push(fsM.onSnapshot(col("votes"), (s) => { store.votes = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); store.votesError = ""; emit(); },
+    (e) => { console.warn("votes", e); store.votesError = e.code === "permission-denied" ? "Voting isn't switched on yet (Firestore rules need the votes section)." : e.message; emit(); }));
   if (store.role === "editor") {
     tripUnsubs.push(fsM.onSnapshot(col("private"), (s) => { store.priv = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); emit(); }, onErr));
     tripUnsubs.push(fsM.onSnapshot(col("files"), (s) => { store.files = s.docs.map((d) => ({ id: d.id, ...d.data() })); emit(); }, onErr));
@@ -147,7 +150,7 @@ export async function saveTrip(meta, id = null) {
 export async function deleteTrip(id) {
   if (DEMO) { delete demo.trips[id]; demoList(); if (store.tripId === id) openTrip(null); emit(); return; }
   const { fsM } = fb;
-  for (const name of ["items", "entries", "private", "files", "journal"]) {
+  for (const name of ["items", "entries", "private", "files", "journal", "votes"]) {
     const snap = await fsM.getDocs(fsM.collection(fb.db, "trips", id, name));
     for (const d of snap.docs) {
       if (name === "files" && d.data().path) { try { await fb.stM.deleteObject(fb.stM.ref(fb.storage, d.data().path)); } catch (e) { /* gone */ } }
@@ -279,6 +282,13 @@ export async function saveJournal(post) {
   if (DEMO) { const j = mem().journal = mem().journal || []; const i = j.findIndex((x) => x.id === id); if (i >= 0) j[i] = { id, ...data }; else j.push({ id, ...data }); demoLoad(store.tripId); emit(); return id; }
   await fb.fsM.setDoc(fb.fsM.doc(col("journal"), id), data);
   return id;
+}
+// 👍 on a recommended place or idea: votes/{key} = { name, kind, up: [traveller codes] }
+export async function setVote(key, info, code, on) {
+  if (DEMO) { const v = mem().votes = mem().votes || {}; const cur = v[key] || { ...info, up: [] };
+    cur.up = on ? [...new Set(cur.up.concat(code))] : cur.up.filter((c) => c !== code); v[key] = cur; demoLoad(store.tripId); emit(); return; }
+  const { fsM } = fb;
+  await fsM.setDoc(fsM.doc(col("votes"), key), { name: String(info.name || "").slice(0, 200), kind: info.kind || "", up: on ? fsM.arrayUnion(code) : fsM.arrayRemove(code), updatedAt: now() }, { merge: true });
 }
 export async function deleteJournal(id) {
   if (DEMO) { const t = mem(); t.journal = (t.journal || []).filter((x) => x.id !== id && x.replyTo !== id); demoLoad(store.tripId); emit(); return; }

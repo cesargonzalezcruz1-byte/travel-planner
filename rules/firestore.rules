@@ -35,6 +35,14 @@ service cloud.firestore {
         allow delete: if isEditor() || (isFamily() && resource.data.by == 'family');
       }
 
+      // Votes on recommended places and ideas: everyone can vote (a list of traveller initials per place)
+      match /votes/{id} {
+        allow read: if isEditor() || isFamily();
+        allow create, update: if (isEditor() || isFamily()) && request.resource.data.up is list && request.resource.data.up.size() <= 20
+          && request.resource.data.name is string && request.resource.data.name.size() <= 200;
+        allow delete: if isEditor();
+      }
+
       // Editors only: confirmation numbers, costs, tickets, and the list of uploaded documents
       match /private/{id} { allow read, write: if isEditor(); }
       match /files/{id}   { allow read, write: if isEditor(); }

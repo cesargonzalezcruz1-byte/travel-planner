@@ -791,3 +791,12 @@ fieldset{min-width:0}
 /* home: trip cards centred (one or many) */
 .home .trips{display:flex;flex-wrap:wrap;justify-content:center} .home .tripcard{flex:1 1 300px;max-width:420px}
 .home .hsec{text-align:center}
+/* family votes */
+.vote{display:inline-flex;align-items:center;gap:5px;flex:none}
+.vbtn{display:inline-flex;align-items:center;gap:4px;height:30px;min-width:34px;padding:0 9px;border-radius:15px;border:1.5px solid var(--line2);background:var(--card);color:var(--muted);font:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.vbtn svg{width:16px;height:16px} .vbtn:hover{border-color:var(--accent);color:var(--ink)}
+.vbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+:root[data-theme="midnight"] .vbtn.on{background:var(--stay);border-color:var(--stay)}
+.vote .idots{display:inline-flex;gap:2px}
+.vhint{display:flex;gap:6px;align-items:flex-start;margin:4px 0 8px} .vhint svg{width:14px;height:14px;flex:none;margin-top:2px}
+.rec{align-items:center}

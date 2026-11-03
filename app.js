@@ -379,11 +379,12 @@ const I = {
   wrain: SV('<path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="M16 14v6M8 14v6M12 16v6"/>'),
   wsnow: SV('<path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="M8 15h.01M8 19h.01M12 17h.01M12 21h.01M16 15h.01M16 19h.01"/>'),
   wstorm: SV('<path d="M6 16.3A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 .5 9"/><path d="m13 12-3 5h4l-3 5"/>'),
+  thumb: SV('<path d="M7 10v12"/><path d="M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 8a2 2 0 0 1-1.9 1.4H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.8a2 2 0 0 0 1.8-1.1L12 2a3.1 3.1 0 0 1 3 3.9Z"/>'),
   warn: SV('<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>'),
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v101";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v102";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -1379,7 +1380,7 @@ function entryLi(e) {
       <div class="etext">${mark}${fmt(e.text)}${isAct && !e.confirmed ? ` <span class="planned">planned</span>` : ""}${ratingBadge(e.id)}
         ${(e.endDate && e.endDate !== e.date) ? `<span class="muted small"> (${fmtDate(e.date)} – ${fmtDate(e.endDate)})</span>` : ""}
         ${e.who.length < PEOPLE().length ? `<span class="who idots whos" role="img" aria-label="${esc(e.who.map(NAME).join(", "))}">${ALL_CODES().filter((c) => e.who.includes(c)).map((w) => `<i class="tdot" style="--pc:${pcolor(w)}" title="${esc(NAME(w))}"></i>`).join("")}</span>` : ""}</div>
-      <div class="eacts">${e.place ? `<a class="ibtn pin" target="_blank" rel="noopener" href="${maps(e.place)}" title="Open in Google Maps" aria-label="Open in Google Maps">${I.pin}</a>` : ""}
+      <div class="eacts">${e.status === "recommended" ? voteBtn("e_" + e.id, firstText(e.text), "idea") : ""}${e.place ? `<a class="ibtn pin" target="_blank" rel="noopener" href="${maps(e.place)}" title="Open in Google Maps" aria-label="Open in Google Maps">${I.pin}</a>` : ""}
         ${isEditor() ? `${e.status === "recommended" ? `<button class="btn tiny" data-plan="${e.id}">Add to Plan</button>` : ""}
         ${isAct ? `<label class="ibtn" title="Attach a booking / ticket - marks it confirmed" aria-label="Attach a booking or ticket">${I.clip}<input type="file" hidden data-attach-entry="${e.id}"></label>` : ""}
         <button class="btn tiny" data-edit-entry="${e.id}">Edit</button>
@@ -1494,7 +1495,7 @@ function renderDay() {
     <section><h3>Activities</h3>${isEditor() ? `<p class="muted small">Tick ☑ to confirm - only confirmed activities show in the itinerary. Attaching a booking confirms it.</p>` : ""}<ul class="entries">${acts.map(entryLi).join("") || `<li class="muted">Nothing planned yet.</li>`}</ul>
       ${isEditor() ? `<button class="btn small" data-new-entry="activity">+ Add Activity</button>` : ""}</section>
 
-    ${recsHtml(p, date, recs.map(entryLi).join(""))}
+    ${recsHtml(p, date, recs.slice().sort((a, b) => votesFor("e_" + b.id).length - votesFor("e_" + a.id).length).map(entryLi).join(""))}
 
     <section><h3>Comments</h3><ul class="entries">${coms.map(entryLi).join("") || `<li class="muted">No comments.</li>`}</ul>
       ${isEditor() ? `<button class="btn small" data-new-entry="comment">+ Add Comment</button>` : ""}</section>
@@ -1519,7 +1520,7 @@ function renderDay() {
   const dpane = ui.pane;
   root.querySelector("[data-back]").onclick = () => (dpane !== null && dpane !== undefined ? (ui.splitDay[dpane] = null, render()) : routeTo(ui.tripId, null));
   if (isEditor()) wireBudget();
-  wireJournal(date); wireRecs(p, date, others); wireCheckins();
+  wireJournal(date); wireRecs(p, date, others); wireCheckins(); wireVotes();
   root.querySelectorAll("[data-with]").forEach((b) => (b.onclick = async () => {
     const o = b.dataset.with, next = !together(p, o, date), auto = autoTogether(p, o, date);
     try { await data.setTogether(date, p, o, next === auto ? null : next); toast(`${NAME(o)} ${next ? "with" : "not with"} ${NAME(p)} on ${shortDate(date)}`); }
@@ -2306,6 +2307,23 @@ function ensureRecs() {
   recLocations().filter((l) => (!have[l.key] || have[l.key].v !== REC_V) && !recState.tried.has(l.key) && !recState.busy.has(l.key))
     .forEach((l) => { recState.tried.add(l.key); recQueue = recQueue.then(() => fetchRecs(l)); });
 }
+// ---- family votes: 👍 on recommended places and ideas, as the traveller whose itinerary is showing
+const votesFor = (key) => store.votes?.[key]?.up || [];
+function voteBtn(key, name, kind) {
+  const up = votesFor(key), me = ui.person, mine = up.includes(me);
+  return `<span class="vote"><button type="button" class="vbtn${mine ? " on" : ""}" data-vote="${esc(key)}" data-vname="${esc(name)}" data-vkind="${kind}" aria-pressed="${mine}"
+      title="${mine ? `Remove ${esc(NAME(me))}'s vote` : `I'd like to do this (vote as ${esc(NAME(me))})`}" aria-label="${up.length} vote${up.length === 1 ? "" : "s"}${mine ? ", including yours" : ""} - ${mine ? "remove your vote" : "vote"}">${I.thumb}${up.length ? `<b>${up.length}</b>` : ""}</button>
+    ${up.length ? `<span class="idots" role="img" aria-label="${esc(up.map(NAME).join(", "))}">${up.map((c) => `<i class="tdot" style="--pc:${pcolor(c)}" title="${esc(NAME(c))}"></i>`).join("")}</span>` : ""}</span>`;
+}
+function wireVotes() {
+  const me = ui.person;
+  root.querySelectorAll("[data-vote]").forEach((b) => (b.onclick = async (ev) => {
+    ev.stopPropagation(); const key = b.dataset.vote, on = !votesFor(key).includes(me);
+    b.disabled = true;
+    try { await data.setVote(key, { name: b.dataset.vname, kind: b.dataset.vkind }, me, on); }
+    catch (e) { b.disabled = false; toast(e.code === "permission-denied" ? "Voting needs the new Firestore rules (votes section)." : "Couldn't save the vote: " + (e.code || e.message)); }
+  }));
+}
 function recsHtml(p, date, notesHtml) {
   const locs = dayLocations(p, date);
   if (!locs.length && !notesHtml) return "";
@@ -2313,11 +2331,13 @@ function recsHtml(p, date, notesHtml) {
   const loc = locs.find((l) => l.key === ui.recLoc), rec = loc && (store.trip.recs || {})[loc.key];
   const tab = ui.recTab || "do", list = rec ? rec[tab] || [] : [];
   const added = (x) => store.entries.some((e) => e.kind === "activity" && e.date <= date && date <= (e.endDate || e.date) && (e.text === x.name || String(e.place || "").startsWith(x.name)));
-  const shown = ui.recMore ? list : list.slice(0, 5);
+  const ranked = list.map((x, i) => [x, i]).sort((a, b) => votesFor("g_" + b[0].id).length - votesFor("g_" + a[0].id).length || a[1] - b[1]).map((a) => a[0]);   // family favourites first
+  const shown = ui.recMore ? ranked : ranked.slice(0, 5);
   const row = (x, i) => `<li class="rec">
       <span class="rnum">${i + 1}</span>
       <div class="rmain"><a class="rname" href="${esc(x.url || maps(x.name + " " + x.address))}" target="_blank" rel="noopener">${esc(x.name)}</a>
         <div class="rsub"><span class="rstar">★ ${x.rating.toFixed(1)}</span><span class="muted">(${x.count.toLocaleString("en-AU")})</span>${x.type ? `<span class="muted">· ${esc(x.type)}</span>` : ""}</div></div>
+      ${voteBtn("g_" + x.id, x.name, tab)}
       ${isEditor() ? (added(x) ? `<span class="radded">✓ In plan</span>` : `<button class="btn tiny" data-rec-add="${esc(x.id)}">+ Plan</button>`) : ""}</li>`;
   const busy = loc && recState.busy.has(loc.key);
   const anyBusy = locs.some((l) => recState.busy.has(l.key));
@@ -2325,6 +2345,7 @@ function recsHtml(p, date, notesHtml) {
       ${isEditor() && locs.length ? `<button class="iconbtn rrefresh${anyBusy ? " spin" : ""}" data-rec-refresh ${anyBusy ? "disabled" : ""} aria-label="Search Google again for things to do and places to eat" title="Search again for things to do and places to eat">↻</button>` : ""}</h3>
     ${locs.length > 1 ? `<div class="seg-mini rlocs">${locs.map((l) => `<button class="${l.key === ui.recLoc ? "on" : ""}" data-rec-loc="${l.key}">${esc(l.area)}</button>`).join("")}</div>` : ""}
     ${notesHtml ? `<p class="rlabel">From Our Notes</p><ul class="entries">${notesHtml}</ul>` : ""}
+    ${loc || notesHtml ? `<p class="vhint muted small">${I.thumb}<span>Tap the thumb on places you'd like to go - voting as <b style="color:${pcolor(p)}">${esc(NAME(p))}</b>${PEOPLE().length > 1 ? " (change traveller at the top)" : ""}. The family's favourites move to the top.</span></p>${store.votesError && isEditor() ? `<p class="jwarn small">${esc(store.votesError)}</p>` : ""}` : ""}
     ${loc ? `<div class="seg-mini rtabs"><button class="${tab === "do" ? "on" : ""}" data-rec-tab="do">Things to Do</button><button class="${tab === "eat" ? "on" : ""}" data-rec-tab="eat">Places to Eat</button></div>
       ${list.length ? `<ol class="reclist">${shown.map(row).join("")}</ol>
         ${list.length > 5 ? `<button class="lnk" data-rec-more>${ui.recMore ? "Show top 5" : `Show all ${list.length}`}</button>` : ""}`

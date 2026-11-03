@@ -780,3 +780,7 @@ fieldset{min-width:0}
 .bd-total .bd-out{display:block;font-size:12px;color:var(--muted);margin-top:2px}
 :root{--out-pre:#9097A4;--out-post:#5E6472;--out-bg:#E3E5EA}
 :root[data-theme="midnight"]{--out-pre:#7B8291;--out-post:#AEB4C0;--out-bg:#2A2D35}
+/* a file whose details differ from its booking (schedule change) */
+.bchg{display:grid;gap:4px;padding:8px 10px;border-radius:10px;background:var(--clash1-t);color:var(--clash1-x);line-height:1.35}
+.bchg b svg{width:14px;height:14px;vertical-align:-2px;margin-right:4px} .bchg ul{margin:2px 0 4px;padding-left:18px} .bchg s{opacity:.75}
+.sheet .bchg label{display:flex;flex-direction:row;gap:8px;align-items:flex-start;font-weight:600;margin:0} .bchg label input{margin-top:2px;flex:none}

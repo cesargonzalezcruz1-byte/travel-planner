@@ -383,7 +383,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v98";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v99";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -2068,7 +2068,7 @@ function bulkAttach() {
     <div class="row bpick"><label class="btn small"><i class="ic16">${I.file}</i>Choose Files<input type="file" hidden multiple data-bfiles></label>
       <label class="btn small"><i class="ic16">${I.clip}</i>Choose Folder<input type="file" hidden webkitdirectory multiple data-bfolder></label></div>
     <p class="bstatus muted small"></p><div class="blist"></div>`, async () => {
-    const go = rows.filter((r) => r.target && r.state !== "dup" && !(r.out && r.target === "new" && !r.outOk) && !(r.changes?.length && r.target === r.chgTarget && !r.chg));
+    const go = rows.filter((r) => r.target && r.state !== "dup" && !(r.out && r.target === "new" && !r.outOk) && !(r.changes?.length && r.target === r.chgTarget && !r.chg) && !(r.target === "new" && !r.who?.length));
     if (!go.length) { toast("Nothing to attach"); throw Object.assign(new Error(""), { back: true }); }
     let n = 0, updated = 0; const made = [];   // bookings created in this upload (a second file for the same booking joins it)
     const docs = go.filter((r) => r.target.startsWith("doc:")), vaults = {}; let nd = 0;
@@ -2085,11 +2085,11 @@ function bulkAttach() {
       if (r.target === "new") {
         const same = made.find((m) => scoreAI(m.t, r.ai)[0] >= 80);
         if (same) r.target = same.t.kind + ":" + same.t.id;
-        else { setStatus(`Creating ${aiLabel(r.ai)}…`); const t = await createFromAI(r.ai); made.push({ t }); r.target = t.kind + ":" + t.id; }
+        else { setStatus(`Creating ${aiLabel(r.ai)}…`); const t = await createFromAI({ ...r.ai, who: r.who }); made.push({ t }); r.target = t.kind + ":" + t.id; }
       }
       for (const mj of r.target ? r.more || [] : []) {   // the other journeys of a return ticket get the file too
         if (mj.target === "new") { const same = made.find((m) => scoreAI(m.t, mj.ai)[0] >= 80);
-          if (same) mj.target = same.t.kind + ":" + same.t.id; else { const t = await createFromAI(mj.ai); made.push({ t }); mj.target = t.kind + ":" + t.id; } }
+          if (same) mj.target = same.t.kind + ":" + same.t.id; else { const t = await createFromAI({ ...mj.ai, who: r.who || mj.ai.who }); made.push({ t }); mj.target = t.kind + ":" + t.id; } }
         const mid = mj.target.split(":")[1]; if (!store.files.some((f) => f.itemId === mid && f.name === r.file.name)) await data.uploadFile(r.file, { itemId: mid });
       }
       const [kind, id] = r.target.split(":");
@@ -2112,10 +2112,13 @@ function bulkAttach() {
   const setStatus = (t) => (m.querySelector(".bstatus").textContent = t);
   btn.textContent = "Upload"; btn.disabled = true;
   const draw = () => {
-    list.innerHTML = rows.map((r, i) => `<div class="brow ${(r.out && r.target === "new" && !r.outOk) || (r.changes?.length && r.target === r.chgTarget && !r.chg) ? "outw " : ""}${r.target?.startsWith("doc:") ? "pdoc" : r.target === "new" ? "new" : r.target ? "ok" : "none"}${r.state === "dup" ? " dup" : ""}">
+    const held = (r) => (r.out && r.target === "new" && !r.outOk) || (r.changes?.length && r.target === r.chgTarget && !r.chg) || (r.target === "new" && !r.who?.length);
+    list.innerHTML = rows.map((r, i) => `<div class="brow ${held(r) ? "outw " : ""}${r.target?.startsWith("doc:") ? "pdoc" : r.target === "new" ? "new" : r.target ? "ok" : "none"}${r.state === "dup" ? " dup" : ""}">
       <div class="bname"><i class="ic16">${I.file}</i><span>${esc(r.file.name)}</span></div>
       <select data-bi="${i}" aria-label="Booking for ${esc(r.file.name)}" ${r.state === "reading" ? "disabled" : ""}>${opts(r.target, r)}</select>
       ${r.vdate && r.target === "new" ? `<label class="bvd small">Voucher - use it on <input type="date" data-bvd="${i}" value="${r.vdate}" min="${store.trip.start}" max="${store.trip.end}"></label>` : ""}
+      ${r.target === "new" && r.ai ? `<div class="bwho small${r.who?.length ? "" : " need"}"><span>${r.who?.length ? "In the itinerary of" : `${I.warn}No traveller's name found on it - whose itinerary is it for?`}</span>
+        <span class="ddots">${PEOPLE().map((c) => `<button type="button" class="dd${r.who?.includes(c) ? " on" : ""}" data-bwho="${i}" data-c="${esc(c)}" style="--pc:${pcolor(c)}" aria-pressed="${!!r.who?.includes(c)}" title="${esc(NAME(c))}">${esc(c)}</button>`).join("")}</span></div>` : ""}
       ${r.out && r.target === "new" ? `<label class="bout small"><input type="checkbox" data-bout="${i}" ${r.outOk ? "checked" : ""}><span><b>${I.warn}Out of trip dates.</b> Tick to add it anyway - it will show in the grey <b>${r.out === "before" ? "Before Trip" : "After Trip"}</b> block for the people on it, not in the day-by-day plan.</span></label>` : ""}
       ${r.changes?.length && r.target === r.chgTarget ? `<div class="bchg small"><span><b>${I.warn}Different from the booking</b> - this looks like an update:</span>
         <ul>${r.changes.map((c) => `<li>${esc(c.label)}: <s>${esc(c.old)}</s> → <b>${esc(c.nu)}</b></li>`).join("")}</ul>
@@ -2123,11 +2126,12 @@ function bulkAttach() {
         <label><input type="radio" name="chg${i}" data-chg="${i}" value="keep" ${r.chg === "keep" ? "checked" : ""}><span>Keep the booking as it is - just attach the file</span></label></div>` : ""}
       ${r.more?.length && r.target ? `<div class="bmore small">Also: ${r.more.map((m) => `${esc(aiLabel(m.ai))} (${m.target === "new" ? "new booking" : "matched"})`).join(" · ")}</div>` : ""}
       <div class="bwhy small">${r.state === "reading" ? "Reading the document…" : r.state === "dup" ? (r.target?.startsWith("doc:") ? "Already in this traveller's profile - will be skipped" : "Already attached to this booking - will be skipped") : r.target === "new" || r.target?.startsWith("doc:") ? esc(r.why) : r.target ? "Matched: " + esc(r.why) : esc(r.why || "No match found - choose the booking, or leave it out")}</div></div>`).join("");
+    list.querySelectorAll("[data-bwho]").forEach((b) => (b.onclick = () => { const r = rows[+b.dataset.bwho], c = b.dataset.c; r.who = r.who || [];
+      r.who = r.who.includes(c) ? r.who.filter((x) => x !== c) : r.who.concat(c); draw(); }));
     list.querySelectorAll("[data-chg]").forEach((c) => (c.onchange = () => { rows[+c.dataset.chg].chg = c.value; draw(); }));
     list.querySelectorAll("[data-bout]").forEach((c) => (c.onchange = () => { rows[+c.dataset.bout].outOk = c.checked; draw(); }));
     list.querySelectorAll("[data-bvd]").forEach((d) => (d.onchange = () => { const r = rows[+d.dataset.bvd]; if (d.value) { r.vdate = d.value; r.ai.start = r.ai.end = d.value; } }));
     list.querySelectorAll("[data-bi]").forEach((s) => (s.onchange = () => { const r = rows[+s.dataset.bi]; r.target = s.value; r.why = s.value.startsWith("doc:") ? `Travel document - saved in the profile (private details), not the itinerary` : "chosen by you"; r.state = isDup(r) ? "dup" : "done"; draw(); }));
-    const held = (r) => (r.out && r.target === "new" && !r.outOk) || (r.changes?.length && r.target === r.chgTarget && !r.chg);
     const ready = rows.filter((r) => r.target && r.state !== "dup" && !held(r)).length;
     btn.disabled = !ready || rows.some((r) => r.state === "reading"); btn.textContent = ready ? `Upload ${ready}` : "Upload";
   };
@@ -2167,7 +2171,7 @@ function bulkAttach() {
         const x = r.pre || await data.extractFromFile(r.file, "stay", { travellers: store.trip?.travellers || [], extended: store.trip?.extended || [], start: store.trip?.start, end: store.trip?.end });
         if (r.verify) { r.ai = x; r.changes = bookingChanges(store.items.find((i) => "item:" + i.id === r.target), x); r.chgTarget = r.target; r.state = isDup(r) ? "dup" : "done"; draw(); continue; }
         const best = targets.map((t) => { const a = scoreAI(t, x), n = scoreName(t, r.file.name, r.folder); return [t, a[0] + n[0] / 2, a[1] || n[1]]; }).sort((a, b) => b[1] - a[1])[0];
-        r.ai = x;
+        r.ai = x; r.who = (x.who || []).filter((c) => PEOPLE().includes(c));   // only registered travellers; none found -> ask
         if (needsDate(x)) { r.vdate = voucherDefault(x, r.file.name); x.start = x.end = r.vdate; }   // open-dated voucher: one day, editable in the row
         r.more = journeysOf(x).map((j) => { const b = targets.map((t) => [t, scoreAI(t, j)[0]]).sort((a, c) => c[1] - a[1])[0];
           return { ai: j, target: b && b[1] >= 50 ? b[0].kind + ":" + b[0].id : "new" }; });
@@ -2185,7 +2189,7 @@ function bulkAttach() {
       r.state = isDup(r) ? "dup" : "done"; draw();
     }
     const fresh2 = rows.filter((r) => r.target === "new").length, pdocs = rows.filter((r) => r.target?.startsWith("doc:")).length, matched = rows.filter((r) => r.target && r.target !== "new").length - pdocs, none = rows.length - matched - fresh2 - pdocs;
-    setStatus(`${rows.length} file${rows.length > 1 ? "s" : ""} · ${matched} matched${pdocs ? ` · ${pdocs} travel document${pdocs > 1 ? "s" : ""} for the profiles` : ""}${fresh2 ? ` · ${fresh2} not in the itinerary yet (bookings will be created)` : ""}${rows.some((r) => r.out && r.target === "new") ? ` · ${rows.filter((r) => r.out && r.target === "new").length} outside the trip dates - tick to add` : ""}${none ? ` · ${none} to choose` : ""}${rows.some((r) => r.changes?.length) ? ` · ${rows.filter((r) => r.changes?.length).length} with changed details - choose which to use` : ""}`);
+    setStatus(`${rows.length} file${rows.length > 1 ? "s" : ""} · ${matched} matched${pdocs ? ` · ${pdocs} travel document${pdocs > 1 ? "s" : ""} for the profiles` : ""}${fresh2 ? ` · ${fresh2} not in the itinerary yet (bookings will be created)` : ""}${rows.some((r) => r.out && r.target === "new") ? ` · ${rows.filter((r) => r.out && r.target === "new").length} outside the trip dates - tick to add` : ""}${none ? ` · ${none} to choose` : ""}${rows.some((r) => r.target === "new" && r.ai && !r.who?.length) ? ` · ${rows.filter((r) => r.target === "new" && r.ai && !r.who?.length).length} need travellers chosen` : ""}${rows.some((r) => r.changes?.length) ? ` · ${rows.filter((r) => r.changes?.length).length} with changed details - choose which to use` : ""}`);
   };
   m.querySelector("[data-bfiles]").onchange = (ev) => pick(ev.target.files);
   m.querySelector("[data-bfolder]").onchange = (ev) => pick(ev.target.files);

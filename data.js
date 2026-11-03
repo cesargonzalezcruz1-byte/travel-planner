@@ -456,7 +456,8 @@ export async function extractFromFile(file, hint, ctx) {
   const people = ctx.travellers.map((t) => `${t.code} = ${t.fullName || t.name}`).concat((ctx.extended || []).map((t) => `${t.code} = ${t.name}`)).join("; ");
   const prompt = `Read this travel booking confirmation for a family trip (${ctx.start} to ${ctx.end}) and extract it into the JSON schema.
 Traveller codes: ${people}. Put in "who" only the codes of these main travellers who are on the booking: ${ctx.travellers.map((t) => t.code).join(", ")}
-(match by name; if the booking only gives a head count such as "2 adults, 1 child", include the travellers that fits).
+(match by name; only if the booking names nobody and just gives a head count such as "2 adults, 1 child", include the travellers that fits).
+If the booking names passengers / guests and none of them is one of these travellers, leave "who" empty - do not guess.
 The user expects a "${hint}" booking but set "type" to what the document really is.
 Read the WHOLE document, every page, and fill EVERY field that applies to this type of booking - address, times, confirmation number,
 price, payment, cancellation policy and phone are almost always somewhere in a confirmation, often in small print.

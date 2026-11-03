@@ -784,3 +784,5 @@ fieldset{min-width:0}
 .bchg{display:grid;gap:4px;padding:8px 10px;border-radius:10px;background:var(--clash1-t);color:var(--clash1-x);line-height:1.35}
 .bchg b svg{width:14px;height:14px;vertical-align:-2px;margin-right:4px} .bchg ul{margin:2px 0 4px;padding-left:18px} .bchg s{opacity:.75}
 .sheet .bchg label{display:flex;flex-direction:row;gap:8px;align-items:flex-start;font-weight:600;margin:0} .bchg label input{margin-top:2px;flex:none}
+.bwho{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;color:var(--muted)} .bwho .ddots{display:flex;gap:6px;flex-wrap:wrap}
+.bwho.need{padding:8px 10px;border-radius:10px;background:var(--clash1-t);color:var(--clash1-x);font-weight:700} .bwho svg{width:14px;height:14px;vertical-align:-2px;margin-right:4px}

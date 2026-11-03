@@ -383,7 +383,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v94";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v95";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -1934,10 +1934,47 @@ async function createFromAI(x) {
   const id = await data.saveItem(item, Object.keys(priv).length ? priv : null);
   return { kind: "item", id, type: x.type, start: item.start, end: item.end, rec: item, conf: bnorm(priv.confirmation), names: x.type === "flight" ? [x.number, x.airline] : x.type === "stay" ? [x.name, x.short] : [x.company, x.vehicle] };
 }
+// ---- travel documents (ESTA, visas, passports…) found among the bookings go to the traveller's profile, not the itinerary
+const DOC_RX = [["esta", /\besta\b|\beta\b|nz-?eta|travel authori[sz]ation|electronic system for travel/i], ["visa", /\bvisas?\b|\bvisado\b/i],
+  ["passport", /passport|pasaporte/i], ["insurance", /travel insurance|insurance policy|seguro de viaje|\bpoliza\b|póliza/i],
+  ["vaccination", /vaccin|vacuna/i], ["licence", /driv(er|ing)'?s? licen[cs]e|licencia de conducir/i], ["idp", /international driving permit|\bidp\b/i]];
+const docKind = (t) => (DOC_RX.find(([, rx]) => rx.test(String(t || ""))) || [])[0] || "";
+const tripPeople = () => (store.trip?.travellers || []).concat(store.trip?.extended || []);
+function docOwner(x, fileName) {   // whose document: the holder's name on it, else initials / a name in the file name
+  const ppl = tripPeople(), words = (v) => bwords(v).concat(String(v || "").toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3));
+  if (x?.fullName) { const xw = new Set(words(x.fullName));
+    const best = ppl.map((p) => { const per = personFor(p); const ws = words([per?.fullName, p.fullName, per?.name, p.name].join(" ")); return [p, ws.filter((w) => xw.has(w)).length]; }).sort((a, b) => b[1] - a[1])[0];
+    if (best && best[1] >= 2 || (best && best[1] === 1 && ppl.filter((p) => words([personFor(p)?.fullName, p.fullName, p.name].join(" ")).some((w) => xw.has(w))).length === 1)) return best[0]; }
+  const toks = String(fileName).split(/[^A-Za-z]+/).filter(Boolean);
+  return ppl.find((p) => toks.includes(p.code)) || ppl.find((p) => toks.some((t) => t.length >= 3 && [p.name, personFor(p)?.name].some((n) => n && n.toLowerCase().split(/\s+/)[0] === t.toLowerCase()))) || null;
+}
+function docDup(r) {
+  const p = r.target?.startsWith("doc:") && tripPeople().find((q) => q.code === r.target.slice(4)), per = p && personFor(p), x = r.docx || {};
+  return !!(per && x.type && (per.docs || []).some((d) => d.type === x.type && d.hasFile && (!x.expiry || d.expiry === x.expiry) && (!x.country || !d.country || sameCountry(d.country, x.country))));
+}
+// Save one document into its owner's profile (the caller has already confirmed it's you): scan + number in the vault, the rest in the profile
+async function addDocToProfile(p, file, x, vaults) {
+  const pid = personFor(p)?.id || await rememberPerson({ code: p.code, name: p.name, fullName: p.fullName, color: p.color });
+  const per = store.people.find((q) => q.id === pid) || { id: pid, code: p.code, name: p.name, docs: [] };
+  const vault = (vaults[pid] ||= await data.getVault(pid));
+  const id = "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const nf = await data.uploadPersonFile(pid, file);
+  vault.files ||= {}; vault.files[id] = nf; vault.docNumbers ||= {}; if (x.number) vault.docNumbers[id] = x.number;
+  if (!vault.dob && x.dob) vault.dob = x.dob; if (!vault.nationality && x.nationality) vault.nationality = titleCase(x.nationality);   // only fill gaps here
+  await data.saveVault(pid, vault);
+  const doc = { id, type: x.type || "other", country: x.country || "", expiry: x.expiry || "", notes: x.notes || "", hasFile: true };
+  Object.keys(doc).forEach((k) => doc[k] === "" && delete doc[k]);
+  const docs = (per.docs || []).concat(doc);
+  await data.savePerson({ id: pid, docs, ...(!per.fullName && x.fullName ? { fullName: titleCase(x.fullName) } : {}) }); per.docs = docs;
+  return { per, doc };
+}
 function bulkAttach() {
   const targets = bulkTargets();
   const opts = (sel, r) => `<option value="">Don't attach</option>` + (r && r.ai && r.ai.type && r.ai.start ? `<option value="new" ${sel === "new" ? "selected" : ""}>+ New booking: ${esc(aiLabel(r.ai))}</option>` : "")
-    + targets.map((t) => `<option value="${t.kind}:${t.id}" ${sel === t.kind + ":" + t.id ? "selected" : ""}>${esc(t.label)}</option>`).join("");
+    + (r?.doc ? docOpts(sel, r) : "")
+    + targets.map((t) => `<option value="${t.kind}:${t.id}" ${sel === t.kind + ":" + t.id ? "selected" : ""}>${esc(t.label)}</option>`).join("")
+    + (r?.doc ? "" : `<optgroup label="Travel Document → Traveller Profile">${docOpts(sel, r)}</optgroup>`);
+  const docOpts = (sel, r) => tripPeople().map((p) => `<option value="doc:${esc(p.code)}" ${sel === "doc:" + p.code ? "selected" : ""}>${esc(docName(r?.docx?.type || r?.doc || "other"))} → ${esc(p.name || p.code)}'s Profile</option>`).join("");
   let rows = [];   // { file, target, why, state }
   modal(`<h2>Attach Documents</h2>
     <p class="muted small">Choose the confirmations, tickets and vouchers (or a whole folder). Each is matched to its booking - check the matches, change any that are wrong, then upload.</p>
@@ -1947,7 +1984,17 @@ function bulkAttach() {
     const go = rows.filter((r) => r.target && r.state !== "dup");
     if (!go.length) { toast("Nothing to attach"); throw Object.assign(new Error(""), { back: true }); }
     let n = 0; const made = [];   // bookings created in this upload (a second file for the same booking joins it)
-    for (const r of go) {
+    const docs = go.filter((r) => r.target.startsWith("doc:")), vaults = {}; let nd = 0;
+    if (docs.length) {
+      if (!unlocked()) { setStatus("Confirm it's you to add travel documents to the profiles…"); await unlock(); }
+      for (const r of docs) {
+        const p = tripPeople().find((q) => q.code === r.target.slice(4)); if (!p) continue;
+        setStatus(`Adding ${r.file.name} to ${p.name || p.code}'s profile…`);
+        if (!r.docx) { try { r.docx = await data.extractDocFromFile(r.file); } catch (e) { r.docx = { type: r.doc || "other" }; } }
+        await addDocToProfile(p, r.file, r.docx, vaults); nd++;
+      }
+    }
+    for (const r of go.filter((x) => !x.target.startsWith("doc:"))) {
       if (r.target === "new") {
         const same = made.find((m) => scoreAI(m.t, r.ai)[0] >= 80);
         if (same) r.target = same.t.kind + ":" + same.t.id;
@@ -1963,30 +2010,33 @@ function bulkAttach() {
       if (kind === "item") await data.uploadFile(r.file, { itemId: id });
       else { const e = store.entries.find((x) => x.id === id); await data.uploadFile(r.file, { entryId: id, date: e?.date || "" }); if (e && !e.confirmed) await data.saveEntry({ ...e, confirmed: true }); }
     }
-    toast(`${go.length} document${go.length > 1 ? "s" : ""} attached${made.length ? `, ${made.length} new booking${made.length > 1 ? "s" : ""} created - check them` : ""}`);
+    const nb = go.length - nd;
+    toast([nb ? `${nb} document${nb > 1 ? "s" : ""} attached` : "", nd ? `${nd} travel document${nd > 1 ? "s" : ""} added to profiles` : "", made.length ? `${made.length} new booking${made.length > 1 ? "s" : ""} created - check them` : ""].filter(Boolean).join(", "));
   });
   const m = [...document.querySelectorAll(".modal")].pop(), list = m.querySelector(".blist"), btn = m.querySelector("button.primary");
   const setStatus = (t) => (m.querySelector(".bstatus").textContent = t);
   btn.textContent = "Upload"; btn.disabled = true;
   const draw = () => {
-    list.innerHTML = rows.map((r, i) => `<div class="brow ${r.target === "new" ? "new" : r.target ? "ok" : "none"}${r.state === "dup" ? " dup" : ""}">
+    list.innerHTML = rows.map((r, i) => `<div class="brow ${r.target?.startsWith("doc:") ? "pdoc" : r.target === "new" ? "new" : r.target ? "ok" : "none"}${r.state === "dup" ? " dup" : ""}">
       <div class="bname"><i class="ic16">${I.file}</i><span>${esc(r.file.name)}</span></div>
       <select data-bi="${i}" aria-label="Booking for ${esc(r.file.name)}" ${r.state === "reading" ? "disabled" : ""}>${opts(r.target, r)}</select>
       ${r.vdate && r.target === "new" ? `<label class="bvd small">Voucher - use it on <input type="date" data-bvd="${i}" value="${r.vdate}" min="${store.trip.start}" max="${store.trip.end}"></label>` : ""}
       ${r.more?.length && r.target ? `<div class="bmore small">Also: ${r.more.map((m) => `${esc(aiLabel(m.ai))} (${m.target === "new" ? "new booking" : "matched"})`).join(" · ")}</div>` : ""}
-      <div class="bwhy small">${r.state === "reading" ? "Reading the document…" : r.state === "dup" ? "Already attached to this booking - will be skipped" : r.target === "new" ? esc(r.why) : r.target ? "Matched: " + esc(r.why) : esc(r.why || "No match found - choose the booking, or leave it out")}</div></div>`).join("");
+      <div class="bwhy small">${r.state === "reading" ? "Reading the document…" : r.state === "dup" ? (r.target?.startsWith("doc:") ? "Already in this traveller's profile - will be skipped" : "Already attached to this booking - will be skipped") : r.target === "new" || r.target?.startsWith("doc:") ? esc(r.why) : r.target ? "Matched: " + esc(r.why) : esc(r.why || "No match found - choose the booking, or leave it out")}</div></div>`).join("");
     list.querySelectorAll("[data-bvd]").forEach((d) => (d.onchange = () => { const r = rows[+d.dataset.bvd]; if (d.value) { r.vdate = d.value; r.ai.start = r.ai.end = d.value; } }));
-    list.querySelectorAll("[data-bi]").forEach((s) => (s.onchange = () => { const r = rows[+s.dataset.bi]; r.target = s.value; r.why = "chosen by you"; r.state = isDup(r) ? "dup" : "done"; draw(); }));
+    list.querySelectorAll("[data-bi]").forEach((s) => (s.onchange = () => { const r = rows[+s.dataset.bi]; r.target = s.value; r.why = s.value.startsWith("doc:") ? `Travel document - saved in the profile (private details), not the itinerary` : "chosen by you"; r.state = isDup(r) ? "dup" : "done"; draw(); }));
     const ready = rows.filter((r) => r.target && r.state !== "dup").length;
     btn.disabled = !ready || rows.some((r) => r.state === "reading"); btn.textContent = ready ? `Upload ${ready}` : "Upload";
   };
-  const isDup = (r) => { if (!r.target || r.target === "new") return false; const [kind, id] = r.target.split(":"); return store.files.some((f) => f.name === r.file.name && (kind === "item" ? f.itemId === id : f.entryId === id)); };
+  const isDup = (r) => { if (r.target?.startsWith("doc:")) return docDup(r); if (!r.target || r.target === "new") return false; const [kind, id] = r.target.split(":"); return store.files.some((f) => f.name === r.file.name && (kind === "item" ? f.itemId === id : f.entryId === id)); };
   const pick = async (files) => {
     files = [...files].filter((f) => !/^\./.test(f.name) && !/\.(ds_store|ini|tmp)$/i.test(f.name));
     const big = files.filter((f) => f.size > 25 * 1024 * 1024); if (big.length) toast(`Skipped ${big.length} file(s) over 25 MB`);
     files = files.filter((f) => f.size <= 25 * 1024 * 1024 && !rows.some((r) => r.file.name === f.name && r.file.size === f.size));
     const fresh = files.map((file) => {
       const folder = String(file.webkitRelativePath || "").split("/").slice(1, -1).join(" ");
+      const dk = docKind(file.name.replace(/[_.-]+/g, " "));
+      if (dk) return { file, folder, doc: dk, target: "", why: "", sure: false, state: "done" };
       const best = targets.map((t) => [t, ...scoreName(t, file.name, folder)]).sort((a, b) => b[1] - a[1])[0];
       return { file, folder, target: best && best[1] >= 50 ? best[0].kind + ":" + best[0].id : "", why: best && best[1] >= 50 ? best[2] : "", sure: best && best[1] >= 70, state: "done" };
     });
@@ -1996,7 +2046,19 @@ function bulkAttach() {
     for (const r of toRead) {
       r.state = "reading"; draw(); setStatus(`Reading ${++k} of ${toRead.length} with AI…`);
       try {
-        const x = await data.extractFromFile(r.file, "stay", { travellers: store.trip?.travellers || [], extended: store.trip?.extended || [], start: store.trip?.start, end: store.trip?.end });
+        if (!r.doc) {   // a booking? (a travel document that wasn't obvious from its name is caught here)
+          const x0 = await data.extractFromFile(r.file, "stay", { travellers: store.trip?.travellers || [], extended: store.trip?.extended || [], start: store.trip?.start, end: store.trip?.end });
+          const dk = x0.type === "activity" && docKind([x0.text, x0.name, x0.note].join(" "));
+          if (dk) r.doc = dk; else r.pre = x0;
+        }
+        if (r.doc) {
+          const x = (r.docx = await data.extractDocFromFile(r.file)); if (!x.type || x.type === "other") x.type = r.doc;
+          const owner = docOwner(x, r.file.name);
+          r.target = owner ? "doc:" + owner.code : "";
+          r.why = owner ? `${docName(x.type)}${x.expiry ? ", valid to " + fmtDate(x.expiry) : ""} - saved in ${owner.name || owner.code}'s profile (private details), not the itinerary` : `${docName(x.type)}${x.fullName ? " for " + titleCase(x.fullName) : ""} - choose whose profile it goes in`;
+          r.state = isDup(r) ? "dup" : "done"; draw(); continue;
+        }
+        const x = r.pre || await data.extractFromFile(r.file, "stay", { travellers: store.trip?.travellers || [], extended: store.trip?.extended || [], start: store.trip?.start, end: store.trip?.end });
         const best = targets.map((t) => { const a = scoreAI(t, x), n = scoreName(t, r.file.name, r.folder); return [t, a[0] + n[0] / 2, a[1] || n[1]]; }).sort((a, b) => b[1] - a[1])[0];
         r.ai = x;
         if (needsDate(x)) { r.vdate = voucherDefault(x, r.file.name); x.start = x.end = r.vdate; }   // open-dated voucher: one day, editable in the row
@@ -2010,8 +2072,8 @@ function bulkAttach() {
       } catch (e) { r.why = r.target ? r.why : "Couldn't read it (" + (e.code || e.message || "error").toString().slice(0, 60) + ") - choose the booking"; }
       r.state = isDup(r) ? "dup" : "done"; draw();
     }
-    const fresh2 = rows.filter((r) => r.target === "new").length, matched = rows.filter((r) => r.target && r.target !== "new").length, none = rows.length - matched - fresh2;
-    setStatus(`${rows.length} file${rows.length > 1 ? "s" : ""} · ${matched} matched${fresh2 ? ` · ${fresh2} not in the itinerary yet (bookings will be created)` : ""}${none ? ` · ${none} to choose` : ""}`);
+    const fresh2 = rows.filter((r) => r.target === "new").length, pdocs = rows.filter((r) => r.target?.startsWith("doc:")).length, matched = rows.filter((r) => r.target && r.target !== "new").length - pdocs, none = rows.length - matched - fresh2 - pdocs;
+    setStatus(`${rows.length} file${rows.length > 1 ? "s" : ""} · ${matched} matched${pdocs ? ` · ${pdocs} travel document${pdocs > 1 ? "s" : ""} for the profiles` : ""}${fresh2 ? ` · ${fresh2} not in the itinerary yet (bookings will be created)` : ""}${none ? ` · ${none} to choose` : ""}`);
   };
   m.querySelector("[data-bfiles]").onchange = (ev) => pick(ev.target.files);
   m.querySelector("[data-bfolder]").onchange = (ev) => pick(ev.target.files);

@@ -751,3 +751,4 @@ fieldset{min-width:0}
 /* travel-document warning on a trip card (editors) */
 .tc-warn{display:inline-flex;width:fit-content;max-width:100%;justify-self:start;align-self:flex-start;align-items:center;gap:6px;margin-top:8px;border:0;border-radius:12px;padding:4px 10px;font:inherit;font-size:12px;font-weight:800;cursor:pointer;background:var(--clash1-t);color:var(--clash1-x)}
 .tc-warn.bad{background:var(--clash2-t);color:var(--clash2-x)} .tc-warn .ic16{width:15px;height:15px;display:inline-flex}
+.brow.pdoc{border-left-color:var(--stay)} .brow.pdoc .bwhy{color:var(--stay-x, var(--ink2))}

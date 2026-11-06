@@ -158,6 +158,7 @@ function applyFocus() {
 function holdFocus() { const h = ui.focusHold; if (!h) return; if (h.moved || Date.now() > h.until) { ui.focusHold = null; return; } setTimeout(() => !h.moved && h.go(false), 60); }
 function clearFocusParam() { try { const u = new URL(location.href); u.searchParams.delete("focus"); history.replaceState(null, "", u.pathname + u.search + u.hash); } catch (e) { /* ignore */ } }
 function afterRender() {
+  if (ui.tripId && isEditor()) setTimeout(() => syncOffline(), 1500);
   applyFocus(); holdFocus();
   splitWas = splitOn() + "|" + splitWide();
   if (isEditor() && store.trip) setTimeout(ensureRecs, 0);
@@ -503,7 +504,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v112";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v113";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -591,7 +592,7 @@ function header(opts = {}) {
       <details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
         ${isEditor() ? `${mi("settings", I.gear, "Trip Setup")}${mi("people", I.users, "Traveller Profiles")}<hr>
-        ${mi("bulk", I.clip, "Attach Documents…")}${mi("archive", I.archive, "Archive Documents (Zip)…")}<hr>` : ""}
+        ${mi("bulk", I.clip, "Attach Documents…")}${mi("offline", I.download || I.archive, "Offline Documents…")}${mi("archive", I.archive, "Archive Documents (Zip)…")}<hr>` : ""}
         ${mi("country", I.globe, "Country Info")}${mi("album", I.book, "Export Album (Word)")}
         ${isEditor() ? `<hr>${mi("export", I.download, "Download Backup")}${mi("import", I.upload, "Restore from Backup…")}` : ""}<hr>
         ${mi("signout", I.logout, "Sign Out")}</div></details>
@@ -1409,7 +1410,7 @@ function renderNow() {
   const countdown = next ? (next.time ? inWords(minsUntil(nextDate, next.time)) : nextDate === today ? "today" : nextDate === tomorrow ? "tomorrow" : inWords(dayDiff(today, nextDate) * 1440)) : "";
   const status = phase === "before" ? `Trip starts ${inWords(dayDiff(today, t.start) * 1440)} · ${fmtDate(t.start)}` : phase === "after" ? `Trip finished ${fmtDate(t.end)}` : `Day ${day} of ${N}${stay ? " · " + (areaOf(stay) || stay.short || stay.name) : ""}`;
   root.innerHTML = `${header({ views: true })}
-  <div class="now">${phase === "before" ? outsideBlock(p, "before") : ""}
+  <div class="now">${isEditor() && !offOn(ui.tripId) && phase !== "after" && dayDiff(today, store.trip.start) <= 21 && store.files.length ? `<button class="offhint" data-act="offline"><i>${I.download || I.archive}</i><span><b>Save the trip documents on this phone</b><small>Boarding passes, tickets and vouchers that open with no signal</small></span></button>` : ""}${phase === "before" ? outsideBlock(p, "before") : ""}
     <p class="nstatus">${esc(status)}${w ? ` · ${withPills(p, date)}` : ""}</p>
     ${phase === "after" ? `<section class="ncard"><h3>Welcome home</h3><p class="muted">Relive it in the Journey or the Journal, or make the photo album.</p>
         <div class="nacts"><button class="btn small" data-act="album"><i class="ic16">${I.book}</i>Export Album (Word)</button>${isEditor() ? `<button class="btn small" data-act="archive"><i class="ic16">${I.archive}</i>Archive Documents</button>` : ""}</div></section>`
@@ -1431,7 +1432,7 @@ function renderNow() {
   </div>`;
   wireHeader(); wireDays(); wireCheckins();
   root.querySelectorAll(".now [data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.()));
-  root.querySelectorAll(".now [data-file]").forEach((b) => (b.onclick = async () => { const f = store.files.find((x) => x.id === b.dataset.file); const w2 = window.open("", "_blank"); const u = await data.fileUrl(f); if (w2) w2.location = u; else location.href = u; }));
+  root.querySelectorAll(".now [data-file]").forEach((b) => (b.onclick = () => openFile(store.files.find((x) => x.id === b.dataset.file))));
 }
 // keep the countdown fresh while the Now screen is open
 setInterval(() => { if (ui.view === "now" && !ui.day && store.trip && !document.querySelector(".modal") && document.visibilityState === "visible" && !document.activeElement?.matches?.("input,textarea,select")) { const y = scrollY; render(); scrollTo(0, y); } }, 60000);
@@ -1608,7 +1609,7 @@ function wireCards() {
   root.querySelectorAll("[data-attach-entry]").forEach((inp) => (inp.onchange = async () => {
     const e = store.entries.find((x) => x.id === inp.dataset.attachEntry);
     await upload(inp.files, { entryId: e.id, date: e.date }); await data.saveEntry({ ...e, confirmed: true }); }));
-  root.querySelectorAll("[data-file]").forEach((b) => (b.onclick = async () => { const f = store.files.find((x) => x.id === b.dataset.file); const w = window.open("", "_blank"); const u = await data.fileUrl(f); if (w) w.location = u; else location.href = u; }));
+  root.querySelectorAll("[data-file]").forEach((b) => (b.onclick = () => openFile(store.files.find((x) => x.id === b.dataset.file))));
   root.querySelectorAll("[data-del-file]").forEach((b) => (b.onclick = () => { const f = store.files.find((x) => x.id === b.dataset.delFile); if (confirm(`Remove ${f.name}?`)) data.deleteFile(f); }));
   root.querySelectorAll("[data-attach-item]").forEach((inp) => (inp.onchange = () => upload(inp.files, { itemId: inp.dataset.attachItem })));
 }
@@ -1641,7 +1642,63 @@ const LABELS = { confirmation: "Confirmation", tickets: "Tickets", seats: "Seats
   cancel: "Cancellation", phone: "Phone", share: "Who Pays", host: "Host", checkIn: "Check-In", bags: "Bags", extras: "Extras", notes: "Notes" };
 const cap = (w) => String(w || "").replace(/^./, (c) => c.toUpperCase());
 const label = (k) => LABELS[k] || k;
-const fileLink = (f) => `<button class="filelink" data-file="${f.id}"><i class="ic16">${I.file}</i>${esc(f.name)}</button>`;
+const fileLink = (f) => `<button class="filelink${data.offline.ids.has(f.id) ? " off" : ""}" data-file="${f.id}" ${data.offline.ids.has(f.id) ? `title="Saved on this phone - opens without signal"` : ""}><i class="ic16">${I.file}</i>${esc(f.name)}${data.offline.ids.has(f.id) ? `<i class="offmark" aria-label="saved offline">${I.check}</i>` : ""}</button>`;
+// ---------------------------------------------------------------- offline travel documents (this phone)
+const offOn = (tid) => { try { return !!JSON.parse(localStorage.getItem("tp.offline") || "{}")[tid]; } catch (e) { return false; } };
+const setOff = (tid, v) => { try { const o = JSON.parse(localStorage.getItem("tp.offline") || "{}"); if (v) o[tid] = true; else delete o[tid]; localStorage.setItem("tp.offline", JSON.stringify(o)); } catch (e) { /* ignore */ } };
+const offList = (tid) => { try { return JSON.parse(localStorage.getItem("tp.offline.files") || "{}")[tid] || []; } catch (e) { return []; } };
+const setOffList = (tid, ids) => { try { const o = JSON.parse(localStorage.getItem("tp.offline.files") || "{}"); o[tid] = ids; localStorage.setItem("tp.offline.files", JSON.stringify(o)); } catch (e) { /* ignore */ } };
+const offState = { busy: false, done: 0, total: 0, sig: "", err: "" };
+// open a document: the copy on this phone if there is one (works with no signal), otherwise from the cloud
+async function openFile(f) {
+  if (!f) return;
+  const phone = matchMedia("(pointer: coarse)").matches;
+  const b = await data.offlineBlob(f.id);
+  if (b && phone) {   // phones: hand the saved copy to the phone's own viewer, with its real file name
+    const u = URL.createObjectURL(new Blob([b], { type: f.contentType || b.type })), a = document.createElement("a");
+    a.href = u; a.download = f.name || "document"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 60000); return;
+  }
+  const w = window.open("", "_blank");
+  const show = (u) => { if (w) w.location = u; else location.href = u; };
+  if (b) { const u = URL.createObjectURL(new Blob([b], { type: f.contentType || b.type })); show(u); setTimeout(() => URL.revokeObjectURL(u), 60000); return; }
+  if (!navigator.onLine) { w?.close(); return toast("No signal, and this document isn't saved on this phone"); }
+  try { show(await data.fileUrl(f)); } catch (e) { w?.close(); toast("Couldn't open: " + (e.code || e.message)); }
+}
+// keep every document of this trip on the phone (new ones are added, deleted ones removed)
+async function syncOffline(force) {
+  const tid = ui.tripId; if (!tid || !isEditor() || !offOn(tid) || offState.busy || !navigator.onLine) return;
+  await data.offline.ready;
+  const files = store.files.filter((f) => f.path || f.demoUrl), sig = files.map((f) => f.id).sort().join();
+  if (!force && sig === offState.sig) return;
+  const gone = offList(tid).filter((id) => !files.some((f) => f.id === id));
+  const want = files.filter((f) => !data.offline.ids.has(f.id));
+  if (gone.length) await data.removeOffline(gone).catch(() => {});
+  if (!want.length) { offState.sig = sig; setOffList(tid, files.map((f) => f.id)); return; }
+  Object.assign(offState, { busy: true, done: 0, total: want.length, err: "" });
+  try { await navigator.storage?.persist?.(); } catch (e) { /* not supported */ }
+  for (const f of want) { if (ui.tripId !== tid) break;
+    try { await data.saveOffline(f); } catch (e) { offState.err = e.code || e.message; console.warn("offline", f.name, e); }
+    offState.done++; document.querySelectorAll("[data-offprog]").forEach((x) => (x.textContent = `${offState.done} of ${offState.total}`)); }
+  offState.busy = false; offState.sig = offState.err ? "" : sig;
+  setOffList(tid, files.filter((f) => data.offline.ids.has(f.id)).map((f) => f.id));
+  const y = scrollY; render(); scrollTo(0, y);
+}
+function offlineForm() {
+  const tid = ui.tripId, on = offOn(tid), files = store.files.filter((f) => f.path || f.demoUrl), have = files.filter((f) => data.offline.ids.has(f.id));
+  const mb = (n) => (n / 1048576).toFixed(n > 1048576 * 10 ? 0 : 1) + " MB", size = files.reduce((a, f) => a + (f.size || 0), 0);
+  modal(`<h3>Offline Documents</h3>
+    <p class="muted small">Keep this trip's booking documents - boarding passes, tickets, vouchers, hotel confirmations - on <b>this phone</b>, so they open with no signal (airports, border crossings, theme park gates). New documents are added automatically while the phone is online.</p>
+    <label class="pswitch"><input type="checkbox" name="on" ${on ? "checked" : ""}><span>Keep this trip's documents on this phone</span></label>
+    <p class="small">${files.length} document${files.length === 1 ? "" : "s"} · about ${mb(size)} · <b>${have.length} saved on this phone</b>${offState.busy ? ` · saving <span data-offprog>${offState.done} of ${offState.total}</span>…` : ""}</p>
+    ${offState.err ? `<p class="jwarn small">Some couldn't be saved: ${esc(offState.err)}</p>` : ""}
+    <p class="muted small">Only on this phone - Debora turns it on on hers too. Documents marked with a tick are saved. Phones can clear saved files if they run very low on space; opening the app online saves them again.</p>`,
+    async (fd) => {
+      const v = fd.get("on") === "on"; setOff(tid, v);
+      if (v) { offState.sig = ""; toast(`Saving ${files.length - have.length} document${files.length - have.length === 1 ? "" : "s"} on this phone…`); setTimeout(() => syncOffline(true), 100); }
+      else if (have.length && confirm(`Remove the ${have.length} saved document${have.length > 1 ? "s" : ""} from this phone?`)) { await data.removeOffline(have.map((f) => f.id)); setOffList(tid, []); toast("Removed from this phone"); }
+    });
+}
+
 
 function renderDay() {
   if (ui.day === "before" || ui.day === "after") return renderOutside(ui.day);
@@ -3217,6 +3274,7 @@ const actions = {
     const b = document.querySelector(".modal button.primary"); if (b) b.textContent = "Download";
   },
   bulk: () => bulkAttach(),
+  offline: () => offlineForm(),
   country: () => (store.trip?.countryInfo?.codes?.length ? showCountryInfo({ id: ui.tripId, ...store.trip }) : isEditor() ? countryInfoFlow() : toast("No country info yet")),
   people: () => peopleList(),
   archive: () => archiveDocs(),

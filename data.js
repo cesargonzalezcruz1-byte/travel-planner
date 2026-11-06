@@ -426,7 +426,23 @@ export async function fileBlob(f) {
   catch (e) { if (e.code === "storage/unauthorized" || e.code === "storage/object-not-found") throw e;
     const res = await fetch(await fb.stM.getDownloadURL(r)); if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.blob(); }
 }
+// ---- documents kept on this device for offline use (Cache Storage; booking files are editor-only, so only editors' phones)
+const OFF_CACHE = "tp-docs-v1", offKey = (id) => new URL(`offline-doc/${encodeURIComponent(id)}`, location.href).href;
+export const offline = { ids: new Set(), ready: null };
+offline.ready = (async () => { try { const c = await caches.open(OFF_CACHE); (await c.keys()).forEach((r) => offline.ids.add(decodeURIComponent(r.url.split("/offline-doc/")[1] || ""))); } catch (e) { /* no cache storage */ } })();
+export async function saveOffline(f) {
+  const blob = await fileBlob(f), c = await caches.open(OFF_CACHE);
+  await c.put(offKey(f.id), new Response(blob, { headers: { "Content-Type": f.contentType || blob.type || "application/octet-stream", "X-Name": encodeURIComponent(f.name || "") } }));
+  offline.ids.add(f.id);
+}
+export async function offlineBlob(id) {
+  try { const r = await (await caches.open(OFF_CACHE)).match(offKey(id)); return r ? r.blob() : null; } catch (e) { return null; }
+}
+export async function removeOffline(ids) {
+  const c = await caches.open(OFF_CACHE); for (const id of ids) { await c.delete(offKey(id)); offline.ids.delete(id); }
+}
 export async function deleteFile(f) {
+  removeOffline([f.id]).catch(() => {});
   if (DEMO) { const t = mem(); t.files = t.files.filter((x) => x.id !== f.id); demoLoad(store.tripId); emit(); return; }
   try { await fb.stM.deleteObject(fb.stM.ref(fb.storage, f.path)); } catch (e) { /* already gone */ }
   await fb.fsM.deleteDoc(fb.fsM.doc(col("files"), f.id));

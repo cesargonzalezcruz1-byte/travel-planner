@@ -867,3 +867,8 @@ fieldset{min-width:0}
 .cinfo .ctabs{margin:4px 0 0}
 .cinfo .cemerg dd a{color:var(--accent);text-decoration:none}
 .errbox{white-space:pre-wrap;word-break:break-word;background:var(--soft);padding:10px;border-radius:10px;font-size:12px}
+/* offline documents */
+.filelink.off{border-color:color-mix(in srgb,#1F8A4C 45%,var(--line2))}
+.filelink .offmark{display:inline-flex;width:14px;height:14px;margin-left:6px;color:#1F8A4C} .filelink .offmark svg{width:100%;height:100%}
+.offhint{display:flex;align-items:center;gap:12px;width:100%;text-align:left;font:inherit;cursor:pointer;background:var(--card);border:1.5px dashed var(--accent);border-radius:16px;padding:10px 14px;margin:0 0 12px;color:var(--ink)}
+.offhint i{display:inline-flex;width:22px;height:22px;color:var(--accent);flex:none} .offhint i svg{width:100%;height:100%} .offhint span{display:grid} .offhint small{color:var(--muted)}

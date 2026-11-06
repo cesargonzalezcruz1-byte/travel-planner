@@ -22,4 +22,4 @@ export const AI_LOCATION = "global";
 export const MAPS_API_KEY = "AIzaSyCXZELvt-h-Di79tJGlsXMXvFXSNDcZlWo";
 export const MAP_ID = "";
 // Firebase App Check (required by Google for the AI from Nov 2026): reCAPTCHA Enterprise site key for this website. Empty = not used.
-export const APP_CHECK_SITE_KEY = "";   // optional Map ID from Google Cloud (Map Management); blank uses Google's demo map style
+export const APP_CHECK_SITE_KEY = "6LdB2xIuAAAAAIe4pMrnjKMCVwfeDwQl-ljJlKa0";   // optional Map ID from Google Cloud (Map Management); blank uses Google's demo map style

@@ -238,6 +238,45 @@ export async function extractDocFromFile(file) {
   throw lastErr;
 }
 
+// ------------------------------------------------------------------ country info (AI-written, kept on the trip)
+const L = (d) => ({ type: "array", items: { type: "string" }, description: d });
+const countrySchema = () => req({
+  country: S("Country name in English"),
+  entry: { type: "array", description: "One entry per passport nationality given", items: req({ passport: S("Passport nationality, e.g. Australian"),
+    summary: S("One line: what this passport holder needs to enter for a tourist trip of this length, e.g. 'ESTA approval needed (Visa Waiver Program), up to 90 days'"),
+    steps: L("Short practical steps or rules: how/where to apply, cost, how far ahead, passport validity, arrival forms, onward ticket, minors travelling, land border notes") }) },
+  currency: req({ name: S("Currency name"), code: S("ISO code"), cash: S("Cash vs card in one or two lines: cards widely accepted? need cash for? ATMs/fees tips"), tips: L("2-4 short money tips") }),
+  plugs: req({ types: S("Plug types, e.g. Type A and B"), voltage: S("Voltage and frequency, e.g. 120 V, 60 Hz"), adapter: S("Whether an Australian traveller needs an adapter and/or converter, one line") }),
+  tipping: req({ restaurants: S("Restaurants"), taxis: S("Taxis / rideshare"), hotels: S("Hotels: housekeeping, porters"), other: S("Tours, guides, bars, other") }),
+  emergency: req({ general: S("Main emergency number"), police: S("Police"), ambulance: S("Ambulance"), fire: S("Fire"), other: S("Tourist police, roadside help or other useful numbers") }),
+  driving: S("Driving side and key rules for visitors: licence/IDP, insurance, tolls, notable road rules"),
+  water: S("Tap water safe to drink?"),
+  goodToKnow: L("4-8 short practical tips specific to this trip: safety, health, SIM/eSIM, local customs, sales tax added at checkout, time zones, seasonal weather for these dates"),
+  official: { type: "array", description: "Official government sources to check entry rules (e.g. Smartraveller for Australians, the country's immigration site)", items: req({ name: S("Site name"), url: S("https URL") }) },
+});
+export async function countryInfoAI(code, ctx) {
+  if (DEMO) { await new Promise((r) => setTimeout(r, 500)); const nm = ctx.name;
+    return { country: nm, entry: ctx.passports.map((p) => ({ passport: p.nationality, summary: `Demo: what ${p.nationality} passport holders need for ${nm}`, steps: ["Apply online before you go", "Passport valid for the whole stay"] })),
+      currency: { name: "Demo Dollar", code: "DMD", cash: "Cards widely accepted; carry some cash for small shops.", tips: ["Pay in local currency, not AUD"] },
+      plugs: { types: "Type A and B", voltage: "120 V, 60 Hz", adapter: "Australian plugs need an adapter" },
+      tipping: { restaurants: "15-20%", taxis: "10-15%", hotels: "$2-5 per night housekeeping", other: "Guides 10-20%" },
+      emergency: { general: "911", police: "911", ambulance: "911", fire: "911", other: "" }, driving: "Drive on the right.", water: "Safe in most cities.",
+      goodToKnow: ["Sales tax is added at the till"], official: [{ name: "Smartraveller", url: "https://www.smartraveller.gov.au/" }] };
+  }
+  const pp = ctx.passports.map((p) => `${p.nationality} passport (${p.who.join(", ")})`).join("; ") || "Australian passports (assumed - no passports saved in the profiles)";
+  const prompt = `Write concise, practical country information for a family visiting ${ctx.name} (${code}) from ${ctx.from} to ${ctx.to}, travelling from ${ctx.origin || "Australia"}.
+Travellers' passports: ${pp}. Places on the itinerary: ${ctx.places || "not specified"}.
+Give entry requirements for EACH passport nationality listed (tourist visit). Be specific (names of schemes such as ESTA, eTA, FMM; costs; how far ahead to apply).
+Keep each text short and scannable - this is shown on a phone. Use the local currency symbol where useful.
+If something changes often (fees, visa rules), say so briefly. Only list real, official government URLs in "official".`;
+  let lastErr;
+  for (let i = 0; i < AI_MODELS.length; i++) {
+    try { const m = await getModel(i, countrySchema()); const res = await m.generateContent([{ text: prompt }]); return dropEmpty(JSON.parse(res.response.text())); }
+    catch (e) { lastErr = e; if (!/not.?found|404|unsupported|model/i.test(String(e.message || e))) break; }
+  }
+  throw lastErr;
+}
+
 // ------------------------------------------------------------------ phone notifications (check-in open), via Firebase Cloud Messaging
 // This device registers a push token in push/{hash} with the travellers it wants alerts for; the server function sends them.
 export const pushSupported = () => "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;

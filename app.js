@@ -1,7 +1,7 @@
 import * as data from "./data.js";
 import { drawDayMap, mapsReady, searchPlaces, findPlace, geocodeText, computeRoute, distanceKm } from "./map.js";
 import { buildAlbum, areaOf } from "./album.js";
-import { AIRPORT_TZ, checkinUrl, checkinInfo, timeIn } from "./checkin-core.js";
+import { AIRPORT_TZ, TZ_COUNTRY, checkinUrl, checkinInfo, timeIn } from "./checkin-core.js";
 // Preview another date: add ?today=2027-01-14 to the address to see the app as it will look on that day
 (() => { const m = location.search.match(/[?&]today=(\d{4}-\d{2}-\d{2})/); if (!m) return;
   const R = Date, off = new R(m[1] + "T12:00:00").getTime() - R.now();   // shift the clock, keep it ticking
@@ -159,6 +159,7 @@ function holdFocus() { const h = ui.focusHold; if (!h) return; if (h.moved || Da
 function clearFocusParam() { try { const u = new URL(location.href); u.searchParams.delete("focus"); history.replaceState(null, "", u.pathname + u.search + u.hash); } catch (e) { /* ignore */ } }
 function afterRender() {
   applyFocus(); holdFocus();
+  if (ui.pendingCountry && ui.pendingCountry === ui.tripId && store.trip && !document.querySelector(".modal")) { ui.pendingCountry = null; setTimeout(countryInfoFlow, 900); }
   splitWas = splitOn() + "|" + splitWide();
   if (isEditor() && store.trip) setTimeout(ensureRecs, 0);
 }
@@ -246,6 +247,8 @@ function renderHome() {
         return `<button type="button" class="tc-warn ${lvl}" data-docwarn="${esc(t.id)}" title="${esc(iss.map((x) => (x.per.name || x.per.code) + ": " + x.st.text).join("\n"))}"><i class="ic16">${I.warn}</i>${lvl === "bad" ? "Document problem" : "Check documents"} · ${who.map(esc).join(", ")}</button>`; })()}
       <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
       <div class="tc-people">${(t.travellers || []).map((p, k) => `<span class="pchip tp" style="--pc:${upc(p.color) || TDEFAULT[k % TDEFAULT.length]}" title="${esc(p.name || p.code)}"><b>${esc(p.code)}</b></span>`).join("")}</div>
+      ${t.countryInfo?.codes?.length ? `<div class="tc-ctry">${t.countryInfo.codes.map((c) => `<button type="button" class="cchip" data-cinfo="${esc(t.id)}" data-c="${c}"><i>${I.globe}</i>${esc(countryName(c))}</button>`).join("")}</div>`
+        : isEditor() && t.end >= today ? `<div class="tc-ctry"><button type="button" class="cchip add" data-cnew="${esc(t.id)}"><i>${I.globe}</i>+ Country Info</button></div>` : ""}
       ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
     </article>`;
   };
@@ -263,10 +266,91 @@ function renderHome() {
   wireHeader();
   root.querySelectorAll("[data-open]").forEach((el) => {
     el.onclick = (e) => { const w = e.target.closest("[data-docwarn]"); if (w) return showTripDocIssues(store.trips.find((t) => t.id === w.dataset.docwarn));
+      const ci = e.target.closest("[data-cinfo]"); if (ci) return showCountryInfo(store.trips.find((t) => t.id === ci.dataset.cinfo), ci.dataset.c);
+      const cn = e.target.closest("[data-cnew]"); if (cn) { localStorage.setItem("tp.trip", cn.dataset.cnew); ui.pendingCountry = cn.dataset.cnew; return routeTo(cn.dataset.cnew); }
       if (e.target.closest("[data-settings]")) return; localStorage.setItem("tp.trip", el.dataset.open); routeTo(el.dataset.open); };
     el.onkeydown = (e) => { if (e.key === "Enter") el.click(); };
   });
   root.querySelectorAll("[data-settings]").forEach((b) => (b.onclick = () => tripForm(store.trips.find((t) => t.id === b.dataset.settings))));
+}
+
+// ---------------------------------------------------------------- country info (AI-written per country, kept on the trip)
+const REGION = (() => { try { return new Intl.DisplayNames(["en"], { type: "region" }); } catch (e) { return null; } })();
+const countryName = (c) => { try { return REGION?.of(c) || c; } catch (e) { return c; } };
+const COUNTRY_CODES = (() => { const out = {}; const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  for (const a of A) for (const b of A) { const c = a + b; const n = countryName(c); if (n && n !== c && !/Unknown/i.test(n)) out[n.toLowerCase()] = c; }
+  Object.assign(out, { usa: "US", "u.s.a.": "US", "united states of america": "US", us: "US", méxico: "MX", uk: "GB", england: "GB", scotland: "GB", "new zealand": "NZ", nz: "NZ", aotearoa: "NZ" });
+  return out; })();
+// the countries a trip visits: where flights land and where the stays are (not the country you fly out from)
+function tripCountries() {
+  const t = store.trip, inTrip = (i) => !(i.end < t.start || i.start > t.end), seen = new Map(), add = (c, d) => { if (c && !seen.has(c)) seen.set(c, d); };
+  const fl = store.items.filter((i) => i.type === "flight" && inTrip(i)).sort((a, b) => a.start.localeCompare(b.start));
+  const ctry = (a) => TZ_COUNTRY[AIRPORT_TZ[a]];
+  const home = fl.length ? ctry(codesOf(fl[0].route)[0]) : null;
+  fl.forEach((f) => codesOf(f.route).slice(1).forEach((a) => add(ctry(a), f.start)));
+  store.items.filter((i) => i.type === "stay" && inTrip(i)).forEach((i) => { const last = String(i.address || "").split(",").map((x) => x.replace(/\d+/g, "").trim()).filter(Boolean).at(-1) || "";
+    add(COUNTRY_CODES[last.toLowerCase()], i.start); });
+  if (home) seen.delete(home);
+  return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([c]) => c);
+}
+// passports from the travellers' profiles (passport documents), grouped by nationality
+function tripPassports() {
+  const by = {};
+  for (const x of (store.trip?.travellers || []).concat(store.trip?.extended || [])) {
+    const per = personFor(x), pp = (per?.docs || []).filter((d) => d.type === "passport" && d.country);
+    for (const d of pp) { const n = titleCase(d.country); (by[n] ||= new Set()).add(x.code); }
+  }
+  return Object.entries(by).map(([nationality, who]) => ({ nationality, who: [...who] }));
+}
+async function countryInfoFlow() {
+  if (!isEditor()) return;
+  const found = tripCountries(), have = store.trip.countryInfo?.codes || [];
+  const list = [...new Set(have.concat(found))];
+  const opts = Object.entries(COUNTRY_CODES).filter(([n, c]) => n === countryName(c).toLowerCase()).sort((a, b) => a[0].localeCompare(b[0]));
+  modal(`<h3>Country Info</h3><p class="muted small">Written by AI for this trip: entry requirements for your passports, money, plugs, tipping, emergency numbers and tips. Kept with the trip so everyone can read it, also offline.</p>
+    <fieldset class="pbox"><legend>Countries</legend><div id="ccl">${list.map((c) => `<label class="pcand"><input type="checkbox" name="c" value="${c}" checked><span><b>${esc(countryName(c))}</b>${have.includes(c) ? `<small class="muted">has info - tick to update it</small>` : ""}</span></label>`).join("") || `<p class="muted small">No countries found from the bookings yet.</p>`}</div>
+      <select data-cadd aria-label="Add a country"><option value="">+ Add a country…</option>${opts.map(([, c]) => `<option value="${c}">${esc(countryName(c))}</option>`).join("")}</select></fieldset>
+    <p class="muted small">Passports used: ${tripPassports().map((p) => `${esc(p.nationality)} (${p.who.map(esc).join(", ")})`).join("; ") || "none saved in the profiles - Australian assumed"}</p>`,
+    async (fd) => {
+      const pick = fd.getAll("c"); if (!pick.length) throw new Error("Tick at least one country");
+      const info = { ...(store.trip.countryInfo || {}) }, dataBy = { ...(info.data || {}) };
+      const places = [...new Set(store.items.filter((i) => i.type === "stay").map((i) => stayArea(i)).filter(Boolean))].join(", ");
+      const fl = store.items.filter((i) => i.type === "flight").sort((a, b) => a.start.localeCompare(b.start));
+      const origin = fl.length ? countryName(TZ_COUNTRY[AIRPORT_TZ[codesOf(fl[0].route)[0]]] || "AU") : "Australia";
+      for (const [k, c] of pick.entries()) {
+        toast(`Writing ${countryName(c)} (${k + 1} of ${pick.length})…`);
+        const x = await data.countryInfoAI(c, { name: countryName(c), from: store.trip.start, to: store.trip.end, origin, places, passports: tripPassports() });
+        dataBy[c] = { ...x, at: new Date().toISOString() };
+      }
+      const codes = list.filter((c) => pick.includes(c) || (have.includes(c) && dataBy[c]));
+      await data.saveTrip({ countryInfo: { codes: codes.filter((c) => dataBy[c]), data: Object.fromEntries(codes.filter((c) => dataBy[c]).map((c) => [c, dataBy[c]])) } }, ui.tripId);
+      toast("Country info ready"); setTimeout(() => showCountryInfo(store.trip, pick[0]), 300);
+    });
+  const m = [...document.querySelectorAll(".modal")].pop(); m.querySelector("button.primary").textContent = "Write with AI";
+  m.querySelector("[data-cadd]").onchange = (e) => { const c = e.target.value; e.target.value = ""; if (!c || m.querySelector(`input[value="${c}"]`)) return;
+    m.querySelector("#ccl").insertAdjacentHTML("beforeend", `<label class="pcand"><input type="checkbox" name="c" value="${c}" checked><span><b>${esc(countryName(c))}</b></span></label>`); };
+}
+function showCountryInfo(t, code) {
+  const ci = t.countryInfo; if (!ci?.codes?.length) return;
+  code = ci.codes.includes(code) ? code : ci.codes[0];
+  const x = ci.data[code] || {}, li = (a) => (a || []).filter(Boolean).map((v) => `<li>${esc(v)}</li>`).join("");
+  const tel = (v) => esc(v).replace(/(\+?\d[\d\s-]{1,14}\d|\b\d{3}\b)/g, (n) => `<a href="tel:${n.replace(/[\s-]/g, "")}">${n}</a>`);
+  const row = (k, v, f = esc) => (v ? `<dt>${k}</dt><dd>${f(v)}</dd>` : "");
+  infoBox(`<div class="cinfo"><h2>${esc(x.country || countryName(code))}</h2>
+    ${ci.codes.length > 1 ? `<div class="seg-mini ctabs">${ci.codes.map((c) => `<button type="button" class="${c === code ? "on" : ""}" data-ctab="${c}">${esc(countryName(c))}</button>`).join("")}</div>` : ""}
+    ${x.entry?.length ? `<section><h3>${I.file}Entry Requirements</h3>${x.entry.map((e) => `<div class="centry"><b>${esc(e.passport)} passport</b><p>${esc(e.summary)}</p><ul>${li(e.steps)}</ul></div>`).join("")}</section>` : ""}
+    ${x.currency ? `<section><h3>${I.wallet || ""}Money</h3><p><b>${esc(x.currency.name)}</b>${x.currency.code ? ` (${esc(x.currency.code)})` : ""}</p>${x.currency.cash ? `<p>${esc(x.currency.cash)}</p>` : ""}<ul>${li(x.currency.tips)}</ul></section>` : ""}
+    ${x.plugs ? `<section><h3>Plugs &amp; Power</h3><dl>${row("Plugs", x.plugs.types)}${row("Power", x.plugs.voltage)}${row("Adapter", x.plugs.adapter)}</dl></section>` : ""}
+    ${x.tipping ? `<section><h3>Tipping</h3><dl>${row("Restaurants", x.tipping.restaurants)}${row("Taxis", x.tipping.taxis)}${row("Hotels", x.tipping.hotels)}${row("Other", x.tipping.other)}</dl></section>` : ""}
+    ${x.emergency ? `<section class="cemerg"><h3>${I.warn}Emergency Numbers</h3><dl>${row("Emergency", x.emergency.general, tel)}${row("Police", x.emergency.police, tel)}${row("Ambulance", x.emergency.ambulance, tel)}${row("Fire", x.emergency.fire, tel)}${row("Other", x.emergency.other, tel)}</dl></section>` : ""}
+    ${x.driving || x.water ? `<section><h3>Getting Around &amp; Water</h3><dl>${row("Driving", x.driving)}${row("Tap water", x.water)}</dl></section>` : ""}
+    ${x.goodToKnow?.length ? `<section><h3>Good to Know</h3><ul>${li(x.goodToKnow)}</ul></section>` : ""}
+    ${x.official?.length ? `<section><h3>Check the Official Sources</h3><ul>${x.official.filter((o) => /^https:\/\//.test(o.url || "")).map((o) => `<li><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.name || o.url)}</a></li>`).join("")}</ul></section>` : ""}
+    <p class="muted small">Written by AI on ${x.at ? fmtDate(x.at.slice(0, 10)) : "?"}. Entry rules and fees change - check the official sites before you travel.</p>
+    ${isEditor() && ui.tripId === t.id ? `<button type="button" class="btn small" data-cupdate>Update with AI…</button>` : ""}</div>`);
+  const m = [...document.querySelectorAll(".modal")].pop();
+  m.querySelectorAll("[data-ctab]").forEach((b) => (b.onclick = () => { m.remove(); showCountryInfo(t, b.dataset.ctab); }));
+  m.querySelector("[data-cupdate]")?.addEventListener("click", () => { m.remove(); countryInfoFlow(); });
 }
 
 // ---------------------------------------------------------------- trip setup window
@@ -375,6 +459,7 @@ function tripForm(t) {
 const SV = (d, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}${extra}</svg>`;
 const I = {
   pin: SV('<path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
+  globe: SV('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'),
   walk: SV('<circle cx="13" cy="4" r="2"/><path d="m9 20 3-6 3 2v6M6 12l3-4 4 1 3 4 3 1"/><path d="M9 8 7 14"/>'),
   route: SV('<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>'),
   camera: SV('<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>'),
@@ -409,7 +494,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v107";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v108";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -498,7 +583,7 @@ function header(opts = {}) {
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
         ${isEditor() ? `${mi("settings", I.gear, "Trip Setup")}${mi("people", I.users, "Traveller Profiles")}<hr>
         ${mi("bulk", I.clip, "Attach Documents…")}${mi("archive", I.archive, "Archive Documents (Zip)…")}<hr>` : ""}
-        ${mi("album", I.book, "Export Album (Word)")}
+        ${mi("country", I.globe, "Country Info")}${mi("album", I.book, "Export Album (Word)")}
         ${isEditor() ? `<hr>${mi("export", I.download, "Download Backup")}${mi("import", I.upload, "Restore from Backup…")}` : ""}<hr>
         ${mi("signout", I.logout, "Sign Out")}</div></details>
     </div>
@@ -3123,6 +3208,7 @@ const actions = {
     const b = document.querySelector(".modal button.primary"); if (b) b.textContent = "Download";
   },
   bulk: () => bulkAttach(),
+  country: () => (store.trip?.countryInfo?.codes?.length ? showCountryInfo({ id: ui.tripId, ...store.trip }) : isEditor() ? countryInfoFlow() : toast("No country info yet")),
   people: () => peopleList(),
   archive: () => archiveDocs(),
   import: () => {

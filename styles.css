@@ -855,3 +855,14 @@ fieldset{min-width:0}
 .settle .s-lines li .lnk{text-align:left;font-weight:700;padding:0} .settle .s-lines li small{grid-column:1} .settle .s-lines li > span{grid-column:2;grid-row:1/3;align-self:center;font-weight:800}
 .settle .pos{color:#1F8A4C} .settle .neg{color:#C2410C}
 :root[data-theme="midnight"] .settle .scard.in .amt,:root[data-theme="midnight"] .settle .pos{color:#4ADE80} :root[data-theme="midnight"] .settle .scard.out .amt,:root[data-theme="midnight"] .settle .neg{color:#FB923C}
+/* country info */
+.tc-ctry{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.cchip{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line2);background:var(--card);color:var(--ink);border-radius:14px;padding:4px 10px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+.cchip i{display:inline-flex;width:14px;height:14px;color:var(--accent)} .cchip i svg{width:100%;height:100%} .cchip.add{color:var(--muted);border-style:dashed}
+.cinfo section{margin:14px 0 0} .cinfo h3{display:flex;align-items:center;gap:6px;font-size:15px;margin:0 0 6px} .cinfo h3 svg{width:16px;height:16px;color:var(--accent)}
+.cinfo p{margin:4px 0} .cinfo ul{margin:4px 0;padding-left:20px} .cinfo li{margin:2px 0}
+.cinfo dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0} .cinfo dt{font-weight:800;color:var(--muted);font-size:13px} .cinfo dd{margin:0}
+.cinfo .centry{padding:8px 10px;border-radius:10px;background:var(--soft);margin:0 0 8px} .cinfo .centry p{margin:2px 0 4px}
+.cinfo .cemerg dd a{font-weight:800;font-size:16px}
+.cinfo .ctabs{margin:4px 0 0}
+.cinfo .cemerg dd a{color:var(--accent);text-decoration:none}

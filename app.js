@@ -114,7 +114,7 @@ function render() {
   if (!store.ready) { root.innerHTML = `<div class="loading"><img class="logo-lg" src="icons/logo.svg" alt=""><br>Loading…</div>`; return; }
   if (!store.role) return renderLogin();
   if (store.role === "none") return renderNoAccess();
-  if (!ui.tripId) { data.openTrip(null); applyTheme(); renderHome(); return applyFocus(); }
+  if (!ui.tripId) { data.openTrip(ui.bgTrip || null); applyTheme(); renderHome(); return applyFocus(); }   // bgTrip: a trip's details loaded behind the home screen (Country Info)
   data.openTrip(ui.tripId);
   if (!store.trip && !store.items.length) return renderEmpty();
   if (!PEOPLE().includes(ui.person)) ui.person = PEOPLE()[0];
@@ -159,7 +159,6 @@ function holdFocus() { const h = ui.focusHold; if (!h) return; if (h.moved || Da
 function clearFocusParam() { try { const u = new URL(location.href); u.searchParams.delete("focus"); history.replaceState(null, "", u.pathname + u.search + u.hash); } catch (e) { /* ignore */ } }
 function afterRender() {
   applyFocus(); holdFocus();
-  if (ui.pendingCountry && ui.pendingCountry === ui.tripId && store.trip && !document.querySelector(".modal")) { ui.pendingCountry = null; setTimeout(countryInfoFlow, 900); }
   splitWas = splitOn() + "|" + splitWide();
   if (isEditor() && store.trip) setTimeout(ensureRecs, 0);
 }
@@ -267,7 +266,7 @@ function renderHome() {
   root.querySelectorAll("[data-open]").forEach((el) => {
     el.onclick = (e) => { const w = e.target.closest("[data-docwarn]"); if (w) return showTripDocIssues(store.trips.find((t) => t.id === w.dataset.docwarn));
       const ci = e.target.closest("[data-cinfo]"); if (ci) return showCountryInfo(store.trips.find((t) => t.id === ci.dataset.cinfo), ci.dataset.c);
-      const cn = e.target.closest("[data-cnew]"); if (cn) { localStorage.setItem("tp.trip", cn.dataset.cnew); ui.pendingCountry = cn.dataset.cnew; return routeTo(cn.dataset.cnew); }
+      const cn = e.target.closest("[data-cnew]"); if (cn) return countryInfoFlow(cn.dataset.cnew);
       if (e.target.closest("[data-settings]")) return; localStorage.setItem("tp.trip", el.dataset.open); routeTo(el.dataset.open); };
     el.onkeydown = (e) => { if (e.key === "Enter") el.click(); };
   });
@@ -302,8 +301,17 @@ function tripPassports() {
   }
   return Object.entries(by).map(([nationality, who]) => ({ nationality, who: [...who] }));
 }
-async function countryInfoFlow() {
+// make a trip's bookings available (also from the home screen, without opening the trip)
+async function loadTripData(tid) {
+  if (ui.tripId === tid && store.trip) return;
+  if (!ui.tripId) { ui.bgTrip = tid; data.openTrip(tid); }
+  for (let k = 0; k < 40 && !(store.tripId === tid && store.trip); k++) await new Promise((r) => setTimeout(r, 150));
+  await new Promise((r) => setTimeout(r, 500));   // let the bookings arrive too
+  if (!store.trip) throw new Error("Couldn't load the trip");
+}
+async function countryInfoFlow(tid = ui.tripId) {
   if (!isEditor()) return;
+  try { await loadTripData(tid); } catch (e) { return toast(e.message); }
   const found = tripCountries(), have = store.trip.countryInfo?.codes || [];
   const list = [...new Set(have.concat(found))];
   const opts = Object.entries(COUNTRY_CODES).filter(([n, c]) => n === countryName(c).toLowerCase()).sort((a, b) => a[0].localeCompare(b[0]));
@@ -324,8 +332,8 @@ async function countryInfoFlow() {
         dataBy[c] = { ...x, at: new Date().toISOString() };
       }
       const codes = list.filter((c) => pick.includes(c) || (have.includes(c) && dataBy[c]));
-      await data.saveTrip({ countryInfo: { codes: codes.filter((c) => dataBy[c]), data: Object.fromEntries(codes.filter((c) => dataBy[c]).map((c) => [c, dataBy[c]])) } }, ui.tripId);
-      toast("Country info ready"); setTimeout(() => showCountryInfo(store.trip, pick[0]), 300);
+      await data.saveTrip({ countryInfo: { codes: codes.filter((c) => dataBy[c]), data: Object.fromEntries(codes.filter((c) => dataBy[c]).map((c) => [c, dataBy[c]])) } }, tid);
+      toast("Country info ready"); setTimeout(() => showCountryInfo({ id: tid, ...store.trip }, pick[0]), 400);
     });
   const m = [...document.querySelectorAll(".modal")].pop(); m.querySelector("button.primary").textContent = "Write with AI";
   m.querySelector("[data-cadd]").onchange = (e) => { const c = e.target.value; e.target.value = ""; if (!c || m.querySelector(`input[value="${c}"]`)) return;
@@ -348,10 +356,10 @@ function showCountryInfo(t, code) {
     ${x.goodToKnow?.length ? `<section><h3>Good to Know</h3><ul>${li(x.goodToKnow)}</ul></section>` : ""}
     ${x.official?.length ? `<section><h3>Check the Official Sources</h3><ul>${x.official.filter((o) => /^https:\/\//.test(o.url || "")).map((o) => `<li><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.name || o.url)}</a></li>`).join("")}</ul></section>` : ""}
     <p class="muted small">Written by AI on ${x.at ? fmtDate(x.at.slice(0, 10)) : "?"}. Entry rules and fees change - check the official sites before you travel.</p>
-    ${isEditor() && ui.tripId === t.id ? `<button type="button" class="btn small" data-cupdate>Update with AI…</button>` : ""}</div>`);
+    ${isEditor() ? `<button type="button" class="btn small" data-cupdate>Update with AI…</button>` : ""}</div>`);
   const m = [...document.querySelectorAll(".modal")].pop();
   m.querySelectorAll("[data-ctab]").forEach((b) => (b.onclick = () => { m.remove(); showCountryInfo(t, b.dataset.ctab); }));
-  m.querySelector("[data-cupdate]")?.addEventListener("click", () => { m.remove(); countryInfoFlow(); });
+  m.querySelector("[data-cupdate]")?.addEventListener("click", () => { m.remove(); countryInfoFlow(t.id); });
 }
 
 // ---------------------------------------------------------------- trip setup window
@@ -495,7 +503,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v109";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v110";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),

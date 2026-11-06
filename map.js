@@ -130,3 +130,61 @@ export async function computeRoute(points, mode, optimize) {
   return { order: route.optimizedIntermediateWaypointIndex || null,
     legs: (route.legs || []).map((l) => ({ sec: parseInt(String(l.duration || "0").replace("s", ""), 10) || 0, m: l.distanceMeters || 0 })) };
 }
+
+// ---------------------------------------------------------------- whole-trip map: stays, flight paths, activities, and a day-by-day focus
+// model: { points: [{ key, q?, pos?, name, kind, glyph, color, days: [dates], small? }], flights: [{ from, to, days, label, color }], ground: [{ from, to, days }] }
+let tEl = null, tMap = null, tInfo = null;
+export async function drawTripMap(holder, model, msgEl) {
+  if (authFailed) throw new Error("Google Maps rejected the key");
+  await load();
+  const { Map, InfoWindow, Polyline } = await google.maps.importLibrary("maps");
+  const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
+  const { Geocoder } = await google.maps.importLibrary("geocoding");
+  if (!tEl) {
+    tEl = document.createElement("div"); tEl.className = "tmap-canvas-inner";
+    tMap = new Map(tEl, { mapId: MAP_ID || "DEMO_MAP_ID", center: { lat: 20, lng: -90 }, zoom: 3, gestureHandling: "greedy", mapTypeControl: false, streetViewControl: false, fullscreenControl: true });
+    tInfo = new InfoWindow();
+  }
+  holder.appendChild(tEl);
+  const sig = JSON.stringify(model);
+  if (sig === tMap.__sig && tMap.__ctl) { if (msgEl) msgEl.textContent = tMap.__msg || ""; return tMap.__ctl; }   // same trip and person: keep what's drawn
+  const token = (tMap.__token = (tMap.__token || 0) + 1);
+  const gc = new Geocoder(), pos = {}, missing = [];
+  await Promise.all(model.points.map(async (p) => { pos[p.key] = p.pos || (p.q ? await geocode(gc, p.q).catch(() => null) : null); if (!pos[p.key]) missing.push(p.name); }));
+  if (token !== tMap.__token) return tMap.__ready;   // a newer drawing started meanwhile
+  (tMap.__objs || []).forEach((o) => (o.setMap ? o.setMap(null) : (o.map = null))); tMap.__objs = [];
+  const markers = [], lines = [], all = new google.maps.LatLngBounds(); let any = false;
+  const seen = {};
+  for (const p of model.points) {
+    const at = pos[p.key]; if (!at) continue;
+    const k = at.lat.toFixed(3) + "," + at.lng.toFixed(3), dup = (seen[k] = (seen[k] || 0) + 1) - 1;
+    const position = { lat: at.lat + dup * 0.0006, lng: at.lng + dup * 0.0006 };
+    const el = document.createElement("div"); el.className = "mpin" + (p.small ? " small" : ""); el.style.setProperty("--pin", p.color); el.innerHTML = `<span>${p.glyph}</span>`;
+    const m = new AdvancedMarkerElement({ map: tMap, position, content: el, title: `${p.kind}: ${p.name}`, zIndex: p.small ? 1 : 5 });
+    m.addListener("click", () => { tInfo.setContent(`<div class="mpop"><b>${esc(p.name)}</b><div class="k" style="color:${p.color}">${esc(p.kind)}</div>${p.sub ? `<div>${esc(p.sub)}</div>` : ""}<a target="_blank" rel="noopener" href="${link(p.q || `${at.lat},${at.lng}`)}">Open in Google Maps</a></div>`); tInfo.open({ anchor: m, map: tMap }); });
+    markers.push({ p, m, el, position }); tMap.__objs.push(m); all.extend(position); any = true;
+  }
+  const mk = (from, to, opt) => { const a = pos[from], b = pos[to]; if (!a || !b) return null;
+    const l = new Polyline({ map: tMap, path: [a, b], ...opt }); tMap.__objs.push(l); return l; };
+  for (const f of model.flights) { const l = mk(f.from, f.to, { geodesic: true, strokeColor: f.color, strokeOpacity: 0, strokeWeight: 2,
+    icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, strokeColor: f.color, scale: 2.5 }, offset: "0", repeat: "12px" }, { icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 3, strokeColor: f.color, fillColor: f.color, fillOpacity: 1 }, offset: "55%" }] });
+    if (l) lines.push({ f, l, base: f.color }); }
+  for (const g of model.ground) { const l = mk(g.from, g.to, { strokeColor: g.color, strokeOpacity: 0.8, strokeWeight: 3 }); if (l) lines.push({ f: g, l, ground: true }); }
+  if (any) { tMap.fitBounds(all, 40); }
+  tMap.__msg = missing.length ? `Couldn't find on the map: ${[...new Set(missing)].join(", ")}` : "";
+  if (msgEl) msgEl.textContent = tMap.__msg;
+  // focus one day (or null = the whole trip)
+  const ctl = {
+    focus(date) {
+      const b = new google.maps.LatLngBounds(); let n = 0;
+      for (const x of markers) { const on = !date || x.p.days.includes(date); x.el.classList.toggle("dim", !on); x.el.classList.toggle("hot", !!date && on); x.m.zIndex = on ? 10 : 1; if (on) { b.extend(x.position); n++; } }
+      for (const x of lines) { const on = !date || x.f.days.includes(date);
+        if (x.ground) x.l.setOptions({ strokeOpacity: on ? 0.85 : 0.15, strokeWeight: date && on ? 5 : 3 });
+        else x.l.setOptions({ icons: x.l.get("icons").map((ic, k) => ({ ...ic, icon: { ...ic.icon, strokeOpacity: on ? 1 : 0.18, ...(k ? { fillOpacity: on ? 1 : 0.18 } : {}) } })) });
+        if (date && on) x.l.getPath().forEach((ll) => { b.extend(ll); n++; }); }
+      if (!date) { if (any) tMap.fitBounds(all, 40); return; }
+      if (n === 1) { tMap.setCenter(b.getCenter()); tMap.setZoom(11); } else if (n > 1) tMap.fitBounds(b, 60);
+    },
+  };
+  tMap.__sig = sig; tMap.__ctl = ctl; return ctl;
+}

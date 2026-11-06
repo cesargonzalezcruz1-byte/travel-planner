@@ -1,5 +1,5 @@
 import * as data from "./data.js";
-import { drawDayMap, mapsReady, searchPlaces, findPlace, geocodeText, computeRoute, distanceKm } from "./map.js";
+import { drawDayMap, drawTripMap, mapsReady, searchPlaces, findPlace, geocodeText, computeRoute, distanceKm } from "./map.js";
 import { buildAlbum, areaOf } from "./album.js";
 import { AIRPORT_TZ, TZ_COUNTRY, checkinUrl, checkinInfo, timeIn, isInternational } from "./checkin-core.js";
 // Preview another date: add ?today=2027-01-14 to the address to see the app as it will look on that day
@@ -29,7 +29,7 @@ const ALL_CODES = () => (store.trip?.travellers || []).concat(store.trip?.extend
 const NAME = (code) => (store.trip?.travellers || []).concat(store.trip?.extended || []).find((t) => t.code === code)?.name || code;
 
 let ui = { person: localStorage.getItem("tp.person") || "", day: null, tripId: null, swap: {}, view: "overview" };
-try { const v = localStorage.getItem("tp.view"); ui.view = ["now", "overview", "timeline", "journey", "budget"].includes(v) ? v : "overview"; } catch (e) { ui.view = "overview"; }
+try { const v = localStorage.getItem("tp.view"); ui.view = ["now", "overview", "timeline", "journey", "map", "budget"].includes(v) ? v : "overview"; } catch (e) { ui.view = "overview"; }
 try { ui.swap = JSON.parse(localStorage.getItem("tp.swap") || "{}"); } catch (e) { /* private mode */ }
 // routes:  #/  (trips)   #/t/<tripId>   #/t/<tripId>/<YYYY-MM-DD>
 function parseRoute() {
@@ -163,7 +163,7 @@ function afterRender() {
   splitWas = splitOn() + "|" + splitWide();
   if (isEditor() && store.trip) setTimeout(ensureRecs, 0);
 }
-const renderView = (v) => (v === "day" ? renderDay() : v === "now" ? renderNow() : v === "journey" ? renderJourney() : v === "timeline" ? renderTimeline() : v === "budget" && isEditor() ? renderBudget() : renderOverview());
+const renderView = (v) => (v === "day" ? renderDay() : v === "now" ? renderNow() : v === "journey" ? renderJourney() : v === "map" ? renderTripMap() : v === "timeline" ? renderTimeline() : v === "budget" && isEditor() ? renderBudget() : renderOverview());
 // ---- split view: on an unfolded foldable, tablet or computer, two views side by side (left / right), each with its own view icons.
 // A day opened from either side shows on the right; its home button brings the right side back to its view.
 const SPLIT_MIN = 680;
@@ -570,9 +570,10 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v116";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v117";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
+  map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
   stay: SV('<path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/>'),
   car: SV('<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2M9 17h6"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>'),
@@ -634,7 +635,7 @@ function applyTheme() {
 }
 
 // ---------------------------------------------------------------- header: trip title, initials (traveller menu), view icons, + and ⋯
-const VIEWS = [["now", "Now", "clock"], ["overview", "Overview", "grid"], ["timeline", "Timeline", "list"], ["journey", "Journey", "route"], ["budget", "Budget", "wallet"]];
+const VIEWS = [["now", "Now", "clock"], ["overview", "Overview", "grid"], ["timeline", "Timeline", "list"], ["journey", "Journey", "route"], ["map", "Map", "map"], ["budget", "Budget", "wallet"]];
 const viewsFor = () => VIEWS.filter((v) => v[0] !== "budget" || isEditor());
 function header(opts = {}) {
   const t = store.trip || {}; const today = iso(new Date());
@@ -645,6 +646,7 @@ function header(opts = {}) {
     <div class="hero-top">
       <button class="iconbtn" data-home aria-label="All trips" title="All trips">${ICON.menu}</button>
       <div class="hero-title"><span class="hero-sub">${esc(sub)}</span><span class="hero-name">${esc(t.title || "Travel Planner")}</span></div>
+      <button class="iconbtn" data-act="ask" aria-label="Ask the trip" title="Ask the trip">${I.chat}</button>
       <details class="more who"><summary class="pbtn" style="--pc:${mc};--pi:${inkOn(mc)}" aria-label="Traveller: ${esc(NAME(me))} - change" title="Change traveller">${esc(me)}</summary>
         <div class="pop"><span class="pop-role">Show itinerary for</span>
         ${PEOPLE().map((p) => `<button data-person="${p}" class="${p === me ? "on" : ""}"><span class="sw" style="background:${pcolor(p)};color:${inkOn(pcolor(p))}">${esc(p)}</span><span class="grow">${esc(NAME(p))}</span>${p === me ? "✓" : ""}</button>`).join("")}</div></details>
@@ -654,7 +656,6 @@ function header(opts = {}) {
       ${opts.views ? `<nav class="vseg${viewsFor().length > 3 ? " icons" : ""}" aria-label="View">${viewsFor().map(([k, l, ic]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}" aria-label="${l}" title="${l}">${ICON[ic]}${ui.view === k && viewsFor().length <= 3 ? `<span>${l}</span>` : ""}</button>`).join("")}</nav>` : `<span class="hero-hint">${esc(NAME(me))}'s day</span>`}
       <span class="grow"></span>
       ${ui.pane !== 1 ? splitToggle() : ""}
-      <button class="iconbtn" data-act="ask" aria-label="Ask the trip" title="Ask the trip">${I.chat}</button>
       ${isEditor() ? `<button class="iconbtn" data-act="add" aria-label="Add booking" title="Add booking">${ICON.plus}</button>` : ""}
       <details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
@@ -1546,6 +1547,66 @@ function renderOutside(side) {
   root.querySelectorAll("[data-ogo]").forEach((b) => (b.onclick = () => { const d2 = side === "before" ? t.start : t.end;
     if (pane !== null && pane !== undefined) { ui.splitDay[pane] = d2; return render(); }
     ui.slide = side === "before" ? "from-right" : "from-left"; routeTo(ui.tripId, d2, true); }));
+}
+
+// ---------------------------------------------------------------- whole-trip map: every stay, flight path and activity, and where we were each day
+let tripMapCtl = null, tripMapPlay = null;
+function tripMapModel(p) {
+  const t = store.trip, inTrip = (a, b) => !(b < t.start || a > t.end), cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const C = { flight: cssv("--flight"), stay: cssv("--stay"), car: cssv("--car"), act: cssv("--act") };
+  const span = (a, b) => { const out = []; for (let d = a; d <= b; d = addDays(d, 1)) out.push(d); return out; };
+  const points = [], flights = [], ground = [], pt = {};
+  const add = (x) => { if (pt[x.key]) { pt[x.key].days = [...new Set(pt[x.key].days.concat(x.days))]; return; } pt[x.key] = x; points.push(x); };
+  const its = itemsFor(p).filter((i) => inTrip(i.start, i.end || i.start));
+  const stays = its.filter((i) => i.type === "stay" && (i.address || i.name)).sort((a, b) => a.start.localeCompare(b.start));
+  stays.forEach((i) => add({ key: "s:" + i.id, q: i.address || i.name, name: i.short || i.name, kind: "Stay", sub: `${fmtDate(i.start)} – ${fmtDate(i.end)}`, glyph: ICON.stay, color: C.stay, days: span(i.start, i.end) }));
+  const fl = its.filter((i) => i.type === "flight");
+  fl.forEach((f) => { const c = codesOf(f.route), ds = span(f.start, f.end || f.start);
+    c.forEach((a) => add({ key: "a:" + a, q: /^[A-Z]{3}$/.test(a) ? a + " airport" : a, name: a, kind: "Airport", glyph: ICON.flight, color: C.flight, days: ds, small: true }));
+    for (let k = 0; k + 1 < c.length; k++) flights.push({ from: "a:" + c[k], to: "a:" + c[k + 1], days: ds, label: `${c[k]} → ${c[k + 1]}`, color: C.flight }); });
+  for (let k = 0; k + 1 < stays.length; k++) { const a = stays[k], b = stays[k + 1], d = b.start;   // moving between stays by road (no flight that day)
+    if (!fl.some((f) => f.start <= d && d <= (f.end || f.start))) ground.push({ from: "s:" + a.id, to: "s:" + b.id, days: [d], color: C.car }); }
+  store.entries.filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed && (e.who || []).includes(p) && e.date && inTrip(e.date, e.endDate || e.date) && (e.geo || e.place))
+    .forEach((e) => add({ key: "e:" + e.id, pos: e.geo ? { lat: e.geo.lat, lng: e.geo.lng } : null, q: e.geo ? "" : e.place, name: firstText(e.text), kind: "Activity", sub: fmtDate(e.date), glyph: ICON.act, color: C.act, days: span(e.date, e.endDate || e.date), small: true }));
+  return { points, flights, ground };
+}
+function tripMapDay(p, d) {
+  if (!d) return `<b>Whole trip</b> · ${days().length} days`;
+  const its = itemsFor(p).filter((i) => i.start <= d && d <= (i.end || i.start)), n = days().indexOf(d) + 1;
+  const fl = its.filter((i) => i.type === "flight").map((f) => codesOf(f.route).join(" → ")), night = its.find((i) => i.type === "stay" && i.start <= d && d < i.end);
+  const acts = entriesFor(p, d).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed).map((e) => firstText(e.text));
+  return `<b>Day ${n} · ${esc(WD[D(d).getDay()].slice(0, 3))} ${esc(fmtDate(d))}</b>${fl.length ? ` · ${ICON.flight}${esc(fl.join(", "))}` : ""}${night ? ` · ${ICON.stay}${esc(night.short || night.name)}` : ""}${acts.length ? ` · ${ICON.act}${esc(acts.slice(0, 3).join(", "))}${acts.length > 3 ? ` +${acts.length - 3}` : ""}` : ""}
+    <button class="lnk" data-day="${d}">Open day →</button>`;
+}
+function renderTripMap() {
+  const p = ui.person, ds = days(), i0 = Math.max(0, ds.indexOf(ui.mapDay) + 1);
+  clearInterval(tripMapPlay); tripMapPlay = null;
+  root.innerHTML = `${header({ views: true })}
+  <div class="tmap">
+    <div class="tmap-canvas">${mapsReady() ? "" : `<p class="muted">The trip map needs the Google Maps key.</p>`}</div>
+    <p class="muted small tmap-msg"></p>
+    <div class="tmap-days card">
+      <div class="tmap-ctl"><button class="iconbtn sm" data-mstep="-1" aria-label="Previous day">‹</button>
+        <input type="range" min="0" max="${ds.length}" value="${i0}" data-mrange aria-label="Day of the trip (0 = whole trip)">
+        <button class="iconbtn sm" data-mstep="1" aria-label="Next day">›</button><button class="btn tiny" data-mplay>▶ Play</button></div>
+      <div class="tmap-info">${tripMapDay(p, ds[i0 - 1])}</div>
+      <div class="tmap-legend muted small"><span><i style="background:var(--stay)"></i>Stays</span><span><i class="dash" style="border-color:var(--flight)"></i>Flights</span><span><i style="background:var(--car)"></i>By road</span><span><i style="background:var(--act)"></i>Activities</span></div>
+    </div>
+  </div>`;
+  wireHeader(); wireDays();
+  const range = root.querySelector("[data-mrange]"), info = root.querySelector(".tmap-info");
+  const set = (k) => { k = Math.max(0, Math.min(ds.length, k)); range.value = k; ui.mapDay = ds[k - 1] || null; info.innerHTML = tripMapDay(p, ui.mapDay); wireDays(); tripMapCtl?.focus(ui.mapDay); };
+  range.oninput = () => set(+range.value);
+  root.querySelectorAll("[data-mstep]").forEach((b) => (b.onclick = () => set(+range.value + +b.dataset.mstep)));
+  root.querySelector("[data-mplay]").onclick = (ev) => {
+    if (tripMapPlay) { clearInterval(tripMapPlay); tripMapPlay = null; ev.target.textContent = "▶ Play"; return; }
+    ev.target.textContent = "❚❚ Pause"; if (+range.value >= ds.length) set(0);
+    tripMapPlay = setInterval(() => { if (!range.isConnected || +range.value >= ds.length) { clearInterval(tripMapPlay); tripMapPlay = null; if (range.isConnected) ev.target.textContent = "▶ Play"; return; } set(+range.value + 1); }, 1600);
+  };
+  if (!mapsReady()) return;
+  const holder = root.querySelector(".tmap-canvas");
+  drawTripMap(holder, tripMapModel(p), root.querySelector(".tmap-msg")).then((ctl) => { if (!holder.isConnected) return; tripMapCtl = ctl; ctl.focus(ui.mapDay || null); })
+    .catch((e) => { holder.innerHTML = `<p class="muted">${esc(e.message || "Couldn't load the map")}</p>`; });
 }
 
 // ---------------------------------------------------------------- Timeline view (one card per day)

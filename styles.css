@@ -891,3 +891,16 @@ fieldset{min-width:0}
 .ask-form{display:flex;gap:8px} .ask-form input{flex:1;min-width:0}
 .ask-dots{display:inline-flex;gap:4px} .ask-dots i{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:askd 1s infinite ease-in-out} .ask-dots i:nth-child(2){animation-delay:.15s} .ask-dots i:nth-child(3){animation-delay:.3s}
 @keyframes askd{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+/* whole-trip map */
+.tmap{max-width:980px;margin:0 auto;padding:12px 12px 40px;display:grid;gap:10px}
+.tmap-canvas{position:relative;height:min(62vh,600px);border-radius:18px;overflow:hidden;background:var(--soft)} .tmap-canvas > .muted{padding:20px}
+.tmap-canvas-inner{width:100%;height:100%}
+.tmap-days{padding:12px 14px;display:grid;gap:8px}
+.tmap-ctl{display:flex;align-items:center;gap:8px} .tmap-ctl input[type=range]{flex:1;accent-color:var(--accent)}
+.tmap-ctl .iconbtn.sm{width:34px;height:34px;font-size:20px;border-radius:50%;border:1.5px solid var(--line2);background:var(--card);color:var(--ink)}
+.tmap-info{font-size:14px;line-height:1.5} .tmap-info svg{width:15px;height:15px;vertical-align:-3px;margin:0 3px 0 2px;color:var(--muted)} .tmap-info .lnk{margin-left:6px;font-weight:800}
+.tmap-legend{display:flex;flex-wrap:wrap;gap:12px} .tmap-legend span{display:inline-flex;align-items:center;gap:6px} .tmap-legend i{width:12px;height:12px;border-radius:50%;display:inline-block}
+.tmap-legend i.dash{width:18px;height:0;border-radius:0;border-top:2.5px dashed}
+.mpin.small{transform:rotate(-45deg) scale(.72)} .mpin.dim{opacity:.28;filter:grayscale(.6)} .mpin.hot{transform:rotate(-45deg) scale(1.25);z-index:10} .mpin.small.hot{transform:rotate(-45deg) scale(1)}
+.mpin{transition:transform .25s,opacity .25s}
+@media (max-width:460px){ .hero-name{font-size:clamp(16px,4.5vw,21px)} }

@@ -385,7 +385,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v104";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v105";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -2390,7 +2390,7 @@ const DEVICE = (() => { try { let d = localStorage.getItem("tp.device"); if (!d)
 const jStore = (k, v) => { try { if (v === undefined) return localStorage.getItem(k) || ""; localStorage.setItem(k, v); } catch {} return ""; };
 const jui = { draft: {}, reply: null, edit: null, rate: {}, focus: null, photos: {}, drop: {} };   // photos: new ones waiting to upload; drop: existing ones to remove
 const MAX_PHOTOS = 10;
-// shrink a photo in the browser before upload: ~1600 px for the album and the full view, ~480 px for the journal grid
+// shrink a photo in the browser before upload: ~2560 px for the printed album and the full view, ~480 px for the journal grid
 async function shrinkPhoto(file) {
   let bmp; try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); }
   catch (e) { bmp = await new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => no(new Error("This photo format can't be opened here - try a JPEG or PNG")); im.src = URL.createObjectURL(file); }); }
@@ -2398,7 +2398,7 @@ async function shrinkPhoto(file) {
   const out = (max, q) => { const k = Math.min(1, max / Math.max(W, H)), c = document.createElement("canvas"); c.width = Math.round(W * k); c.height = Math.round(H * k);
     const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
     return new Promise((ok) => c.toBlob((b) => ok({ blob: b, w: c.width, h: c.height }), "image/jpeg", q)); };
-  const full = await out(1600, 0.82), thumb = await out(480, 0.75);
+  const full = await out(2560, 0.88), thumb = await out(480, 0.75);   // 2560 px prints sharp on a full A4 page
   return { full: full.blob, thumb: thumb.blob, w: full.w, h: full.h, preview: URL.createObjectURL(thumb.blob) };
 }
 function photoGrid(photos, postId) {

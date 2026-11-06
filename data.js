@@ -298,7 +298,7 @@ export async function deleteJournal(id) {
   await fb.fsM.deleteDoc(fb.fsM.doc(col("journal"), id));
   await deleteJournalPhotos(gone.flatMap((x) => x.photos || []));
 }
-// ---- journal photos: resized in the browser (about 1600 px, plus a small thumbnail) and kept in Storage under the trip
+// ---- journal photos: resized in the browser (about 2560 px, plus a small thumbnail) and kept in Storage under the trip
 export const newJournalId = () => uid("j");
 export async function uploadJournalPhoto(postId, full, thumb, w, h) {
   const id = uid("ph");

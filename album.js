@@ -28,7 +28,22 @@ export function areaOf(i) {
 const C = { accent: "6E4BD8", ink: "1F1B2E", muted: "6B6880", star: "E59A0B", line: "D9D4EA" };
 
 export function buildAlbum(docx, { trip, items, entries, journal }, opts = {}) {
-  const { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, LevelFormat, BorderStyle } = docx;
+  const { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, LevelFormat, BorderStyle, ImageRun, Table, TableRow, TableCell, WidthType } = docx;
+  const pics = opts.photos || new Map();   // photo id -> bytes (fetched by the app before building)
+  const img = (ph, maxW, maxH) => { const k = Math.min(maxW / ph.w, maxH / ph.h, 1e9);
+    return new ImageRun({ type: "jpg", data: pics.get(ph.id), transformation: { width: Math.round(ph.w * k), height: Math.round(ph.h * k) } }); };
+  const NB = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, noBorders = { top: NB, bottom: NB, left: NB, right: NB, insideHorizontal: NB, insideVertical: NB };
+  // one photo: full width; more: two to a row
+  const photoBlock = (list) => {
+    list = (list || []).filter((ph) => pics.has(ph.id) && ph.w && ph.h); if (!list.length) return [];
+    if (list.length === 1) return [new Paragraph({ children: [img(list[0], 600, 450)], alignment: AlignmentType.CENTER, spacing: { before: 120, after: 120 } })];
+    const rows = []; for (let k = 0; k < list.length; k += 2) rows.push(list.slice(k, k + 2));
+    return [new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: noBorders,
+      rows: rows.map((r) => new TableRow({ cantSplit: true, children: [0, 1].map((c) => new TableCell({ borders: noBorders, width: { size: 50, type: WidthType.PERCENTAGE },
+        margins: { top: 60, bottom: 60, left: 60, right: 60 },
+        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: r[c] ? [img(r[c], 292, 260)] : [] })] })) })) }),
+      new Paragraph({ spacing: { after: 60 }, children: [] })];
+  };
   const from = opts.from || trip.start, to = opts.to || trip.end;
   const travellers = trip.travellers || [];
   const everyone = travellers.concat(trip.extended || []);
@@ -98,6 +113,7 @@ export function buildAlbum(docx, { trip, items, entries, journal }, opts = {}) {
         const act = j.activityId && entries.find((e) => e.id === j.activityId);
         body.push(P([T(j.author || "Someone", { bold: true }), ...(j.rating && act ? [T("  "), stars(j.rating), T(`  ${firstLine(act.text)}`, { color: C.muted, size: 18 })] : [])], { spacing: { before: 160, after: 40 }, keepNext: true }));
         String(j.text || "").split(/\n+/).filter(Boolean).forEach((line) => body.push(P(T(line, { italics: false }), { spacing: { after: 40 } })));
+        body.push(...photoBlock(j.photos));
         posts.filter((r) => r.replyTo === j.id).sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || "")).forEach((r) =>
           body.push(P([T(`${r.author || "Someone"}: `, { bold: true, color: C.muted }), T(String(r.text || "").replace(/\n+/g, " "), { color: C.muted })],
             { indent: { left: 360 }, border: { left: { style: BorderStyle.SINGLE, size: 12, color: C.line, space: 8 } }, spacing: { before: 40, after: 40 } })));
@@ -109,7 +125,7 @@ export function buildAlbum(docx, { trip, items, entries, journal }, opts = {}) {
   return new Document({
     creator: "Travel Planner", title: `${trip.title} – Album`,
     styles: {
-      default: { document: { run: { font: "Calibri", size: 23, color: C.ink }, paragraph: { spacing: { line: 300 } } } },
+      default: { document: { run: { font: "Calibri", size: 23, color: C.ink }, paragraph: { spacing: { line: 300, lineRule: "auto" } } } },
       paragraphStyles: [{ id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
         run: { font: "Georgia", size: 44, bold: true, color: C.ink }, paragraph: { outlineLevel: 0 } }],
     },

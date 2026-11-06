@@ -154,6 +154,7 @@ export async function deleteTrip(id) {
     const snap = await fsM.getDocs(fsM.collection(fb.db, "trips", id, name));
     for (const d of snap.docs) {
       if (name === "files" && d.data().path) { try { await fb.stM.deleteObject(fb.stM.ref(fb.storage, d.data().path)); } catch (e) { /* gone */ } }
+      if (name === "journal" && d.data().photos) await deleteJournalPhotos(d.data().photos);
       await fsM.deleteDoc(d.ref);
     }
   }
@@ -291,9 +292,30 @@ export async function setVote(key, info, code, on) {
   await fsM.setDoc(fsM.doc(col("votes"), key), { name: String(info.name || "").slice(0, 200), kind: info.kind || "", up: on ? fsM.arrayUnion(code) : fsM.arrayRemove(code), updatedAt: now() }, { merge: true });
 }
 export async function deleteJournal(id) {
+  const gone = store.journal.filter((x) => x.id === id || x.replyTo === id);
   if (DEMO) { const t = mem(); t.journal = (t.journal || []).filter((x) => x.id !== id && x.replyTo !== id); demoLoad(store.tripId); emit(); return; }
   for (const r of store.journal.filter((x) => x.replyTo === id)) await fb.fsM.deleteDoc(fb.fsM.doc(col("journal"), r.id)).catch(() => {});
   await fb.fsM.deleteDoc(fb.fsM.doc(col("journal"), id));
+  await deleteJournalPhotos(gone.flatMap((x) => x.photos || []));
+}
+// ---- journal photos: resized in the browser (about 1600 px, plus a small thumbnail) and kept in Storage under the trip
+export const newJournalId = () => uid("j");
+export async function uploadJournalPhoto(postId, full, thumb, w, h) {
+  const id = uid("ph");
+  if (DEMO) return { id, path: "", tpath: "", url: URL.createObjectURL(full), turl: URL.createObjectURL(thumb), w, h };
+  const base = `trips/${store.tripId}/journal/${postId}/${id}`, put = async (path, blob) => {
+    const r = fb.stM.ref(fb.storage, path); await fb.stM.uploadBytes(r, blob, { contentType: "image/jpeg", cacheControl: "private, max-age=31536000" }); return fb.stM.getDownloadURL(r); };
+  const [url, turl] = await Promise.all([put(base + ".jpg", full), put(base + "_t.jpg", thumb)]);
+  return { id, path: base + ".jpg", tpath: base + "_t.jpg", url, turl, w, h };
+}
+export async function deleteJournalPhotos(photos) {
+  if (DEMO) return;
+  for (const ph of photos || []) for (const p of [ph.path, ph.tpath].filter(Boolean)) { try { await fb.stM.deleteObject(fb.stM.ref(fb.storage, p)); } catch (e) { /* already gone */ } }
+}
+// a photo's bytes for the Word album (through the security rules; falls back to its link)
+export async function photoBytes(ph) {
+  if (!DEMO && ph.path) { try { return await fb.stM.getBytes(fb.stM.ref(fb.storage, ph.path)); } catch (e) { console.warn("getBytes", e); } }
+  const r = await fetch(ph.url); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.arrayBuffer();
 }
 // Who travels together on a day: manual overrides on the trip (pair key "A|B", sorted, so it is the same for both people).
 // value true/false = override; null = back to automatic (worked out from shared bookings)

@@ -6,6 +6,15 @@ service firebase.storage {
         && request.auth.token.email_verified == true
         && request.auth.token.email in ['cesar.gonzalez.cruz1@gmail.com', 'deb777deb@gmail.com'];
     }
+    function isFamily() {
+      return request.auth != null && request.auth.token.email == 'family@travelplanner.app';
+    }
+    // Journal photos: everyone on the trip can add and see them (JPEGs resized by the app, max 5 MB each)
+    match /trips/{tripId}/journal/{postId}/{fileName} {
+      allow read: if isEditor() || isFamily();
+      allow create: if (isEditor() || isFamily()) && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+      allow delete: if isEditor() || isFamily();
+    }
     // Booking documents (PDFs, images): editors only, max 25 MB per file
     match /trips/{tripId}/files/{fileId}/{fileName} {
       allow read, delete: if isEditor();

@@ -802,3 +802,23 @@ fieldset{min-width:0}
 .rec{align-items:center}
 .vhint{display:grid;gap:6px;margin:4px 0 8px} .vhint > .muted{display:block} .vhint > .muted svg{width:14px;height:14px;vertical-align:-2px;margin-right:5px}
 .vhint .ddots{display:flex;flex-wrap:wrap;gap:6px}
+/* journal photos */
+.jpicks{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 2px}
+.jpick{position:relative;width:64px;height:64px;border-radius:10px;overflow:hidden;background:var(--soft)}
+.jpick img{width:100%;height:100%;object-fit:cover;display:block}
+.jpick.busy{background:linear-gradient(90deg,var(--soft),var(--line),var(--soft));background-size:200% 100%;animation:jshim 1.1s linear infinite}
+@keyframes jshim{to{background-position:-200% 0}}
+.jpick button{position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;border:0;background:#000a;color:#fff;font-size:12px;line-height:22px;padding:0;cursor:pointer}
+.jaddph{display:inline-flex;align-items:center;gap:6px;cursor:pointer} .jaddph svg{width:16px;height:16px}
+.jphotos{display:grid;gap:4px;margin:8px 0 4px;border-radius:14px;overflow:hidden;max-width:520px}
+.jphotos.n1{grid-template-columns:1fr} .jphotos.n2{grid-template-columns:1fr 1fr} .jphotos.n3,.jphotos.n4{grid-template-columns:1fr 1fr 1fr}
+.jphotos.n4 .jph:first-child{grid-column:1/-1}
+.jph{border:0;padding:0;margin:0;background:var(--soft);cursor:zoom-in;aspect-ratio:1;overflow:hidden;display:block}
+.jphotos.n1 .jph{aspect-ratio:auto;max-height:420px} .jphotos.n4 .jph:first-child{aspect-ratio:16/9}
+.jph img{width:100%;height:100%;object-fit:cover;display:block}
+.lightbox{position:fixed;inset:0;z-index:1000;background:#000;display:flex;align-items:center;justify-content:center}
+.lightbox img{max-width:100vw;max-height:100vh;object-fit:contain}
+.lb-bar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:10px;padding:max(12px,env(safe-area-inset-top)) 14px 12px;color:#fff;background:linear-gradient(#0009,#0000);font-weight:700}
+.lb-bar span{margin-right:auto} .lb-btn{color:#fff;background:#fff2;border:0;border-radius:16px;padding:6px 12px;font:inherit;font-size:14px;cursor:pointer;text-decoration:none}
+.lb-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:64px;border:0;border-radius:12px;background:#fff2;color:#fff;font-size:30px;cursor:pointer}
+.lb-nav.prev{left:10px} .lb-nav.next{right:10px}

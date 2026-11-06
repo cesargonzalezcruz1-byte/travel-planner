@@ -353,6 +353,7 @@ function tripForm(t) {
 const SV = (d, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}${extra}</svg>`;
 const I = {
   pin: SV('<path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
+  camera: SV('<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>'),
   clip: SV('<path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/>'),
   trash: SV('<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>'),
   file: SV('<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M9 13h6M9 17h4"/>'),
@@ -384,7 +385,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v103";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v104";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -2387,7 +2388,39 @@ function wireRecs(p, date, others) {
 // The family can read and write here (and only here): comments, a discussion thread and activity ratings, per day.
 const DEVICE = (() => { try { let d = localStorage.getItem("tp.device"); if (!d) { d = Math.random().toString(36).slice(2, 10); localStorage.setItem("tp.device", d); } return d; } catch { return "nodevice"; } })();
 const jStore = (k, v) => { try { if (v === undefined) return localStorage.getItem(k) || ""; localStorage.setItem(k, v); } catch {} return ""; };
-const jui = { draft: {}, reply: null, edit: null, rate: {}, focus: null };
+const jui = { draft: {}, reply: null, edit: null, rate: {}, focus: null, photos: {}, drop: {} };   // photos: new ones waiting to upload; drop: existing ones to remove
+const MAX_PHOTOS = 10;
+// shrink a photo in the browser before upload: ~1600 px for the album and the full view, ~480 px for the journal grid
+async function shrinkPhoto(file) {
+  let bmp; try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+  catch (e) { bmp = await new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => no(new Error("This photo format can't be opened here - try a JPEG or PNG")); im.src = URL.createObjectURL(file); }); }
+  const W = bmp.width, H = bmp.height;
+  const out = (max, q) => { const k = Math.min(1, max / Math.max(W, H)), c = document.createElement("canvas"); c.width = Math.round(W * k); c.height = Math.round(H * k);
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+    return new Promise((ok) => c.toBlob((b) => ok({ blob: b, w: c.width, h: c.height }), "image/jpeg", q)); };
+  const full = await out(1600, 0.82), thumb = await out(480, 0.75);
+  return { full: full.blob, thumb: thumb.blob, w: full.w, h: full.h, preview: URL.createObjectURL(thumb.blob) };
+}
+function photoGrid(photos, postId) {
+  if (!photos?.length) return "";
+  return `<div class="jphotos n${Math.min(photos.length, 4)}">${photos.map((ph, k) => `<button type="button" class="jph" data-jphoto="${esc(postId)}" data-k="${k}" aria-label="Open photo ${k + 1} of ${photos.length}">
+    <img src="${esc(ph.turl || ph.url)}" alt="" loading="lazy" decoding="async"></button>`).join("")}</div>`;
+}
+// full-screen photo viewer: swipe or arrows for the next one
+function lightbox(photos, start) {
+  let k = start; const box = document.createElement("div"); box.className = "lightbox"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Photo");
+  const draw = () => { box.innerHTML = `<img src="${esc(photos[k].url)}" alt="">
+    <div class="lb-bar"><span>${k + 1} / ${photos.length}</span><a class="lb-btn" href="${esc(photos[k].url)}" target="_blank" rel="noopener" download>Open</a><button class="lb-btn" data-lbx aria-label="Close">✕</button></div>
+    ${photos.length > 1 ? `<button class="lb-nav prev" data-lbn="-1" aria-label="Previous">‹</button><button class="lb-nav next" data-lbn="1" aria-label="Next">›</button>` : ""}`;
+    box.querySelector("[data-lbx]").onclick = close; box.querySelectorAll("[data-lbn]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); go(+b.dataset.lbn); })); };
+  const go = (d) => { k = (k + d + photos.length) % photos.length; draw(); };
+  const key = (e) => { if (e.key === "Escape") close(); else if (e.key === "ArrowRight") go(1); else if (e.key === "ArrowLeft") go(-1); };
+  const close = () => { box.remove(); document.removeEventListener("keydown", key); };
+  let x0 = null; box.addEventListener("touchstart", (e) => (x0 = e.touches[0].clientX), { passive: true });
+  box.addEventListener("touchend", (e) => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1); });
+  box.addEventListener("click", (e) => { if (e.target === box || e.target.tagName === "IMG") close(); });
+  document.addEventListener("keydown", key); draw(); document.body.appendChild(box);
+}
 const STARS = (n, cls = "") => `<span class="stars ${cls}" aria-label="${n} out of 5">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= n ? "on" : ""}">★</i>`).join("")}</span>`;
 function authors() {
   const t = store.trip || {};
@@ -2415,14 +2448,18 @@ function avatar(j) {
   const ini = (j.authorCode || (j.author || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 3)).toUpperCase();
   return `<span class="javatar" style="${c ? `--pc:${c};color:${inkOn(c)}` : ""}">${esc(ini)}</span>`;
 }
-function composer(key, { placeholder, withRating, acts, value = "", rating = 0, actId = "", button = "Post" }) {
+function composer(key, { placeholder, withRating, acts, value = "", rating = 0, actId = "", button = "Post", photos = null }) {
   const draft = jui.draft[key] ?? value;
+  const keep = (photos || []).filter((ph) => !(jui.drop[key] || []).includes(ph.id)), adding = jui.photos[key] || [];
+  const pics = photos ? `<div class="jpicks">${keep.map((ph) => `<span class="jpick"><img src="${esc(ph.turl || ph.url)}" alt=""><button type="button" data-jpdrop="${esc(ph.id)}" aria-label="Remove photo">✕</button></span>`).join("")}
+      ${adding.map((ph, k) => `<span class="jpick${ph.busy ? " busy" : ""}">${ph.preview ? `<img src="${ph.preview}" alt="">` : ""}<button type="button" data-jpnew="${k}" aria-label="Remove photo">✕</button></span>`).join("")}
+      ${keep.length + adding.length < MAX_PHOTOS ? `<label class="btn tiny jaddph">${I.camera}Add Photos<input type="file" accept="image/*" multiple hidden data-jpfile></label>` : `<span class="muted small">${MAX_PHOTOS} photos max</span>`}</div>` : "";
   const r = jui.rate[key] ?? { rating, actId };
   return `<form class="jcomposer" data-jform="${key}">
     <textarea name="text" rows="${key === "new" ? 3 : 2}" maxlength="4000" placeholder="${placeholder}" data-jkey="${key}">${esc(draft)}</textarea>
     ${withRating && acts.length ? `<div class="jrate"><select name="act" aria-label="Activity to rate"><option value="">Rate an activity (optional)…</option>${acts.map((a) => `<option value="${a.id}" ${a.id === r.actId ? "selected" : ""}>${esc(a.text.replace(/\s*\n[\s\S]*/, "").slice(0, 60))}</option>`).join("")}</select>
       <span class="starpick" role="radiogroup" aria-label="Rating">${[1, 2, 3, 4, 5].map((i) => `<button type="button" class="${i <= r.rating ? "on" : ""}" data-star="${i}" aria-label="${i} star${i > 1 ? "s" : ""}">★</button>`).join("")}</span><input type="hidden" name="rating" value="${r.rating}"></div>` : ""}
-    <div class="jfoot">${key !== "new" ? `<button type="button" class="btn tiny" data-jcancel>Cancel</button>` : ""}<button class="btn small primary">${button}</button></div></form>`;
+    ${pics}<div class="jfoot">${key !== "new" ? `<button type="button" class="btn tiny" data-jcancel>Cancel</button>` : ""}<button class="btn small primary">${button}</button></div></form>`;
 }
 function journalHtml(date) {
   const acts = dayActivities(date);
@@ -2432,11 +2469,11 @@ function journalHtml(date) {
   const me = myAuthor();
   const actName = (id) => { const a = store.entries.find((e) => e.id === id); return a ? a.text.replace(/\s*\n[\s\S]*/, "").slice(0, 60) : "an activity"; };
   const post = (j, isReply) => jui.edit === j.id
-    ? `<div class="jpost${isReply ? " reply" : ""}">${composer("edit:" + j.id, { placeholder: "", withRating: !isReply, acts, value: j.text, rating: j.rating || 0, actId: j.activityId || "", button: "Save" })}</div>`
+    ? `<div class="jpost${isReply ? " reply" : ""}">${composer("edit:" + j.id, { placeholder: "", withRating: !isReply, acts, value: j.text, rating: j.rating || 0, actId: j.activityId || "", button: "Save", photos: isReply ? null : j.photos || [] })}</div>`
     : `<div class="jpost${isReply ? " reply" : ""}">${avatar(j)}<div class="jn-body">
       <div class="jmeta"><b>${esc(j.author || "Someone")}</b><span class="muted small">${when(j.createdAt)}${j.updatedAt && j.createdAt && j.updatedAt.slice(0, 16) !== j.createdAt.slice(0, 16) ? " · edited" : ""}</span></div>
       ${j.activityId && j.rating ? `<div class="jrated">${STARS(j.rating)} <span class="small">${esc(actName(j.activityId))}</span></div>` : ""}
-      ${j.text ? `<p class="jtext">${esc(j.text).replace(/\n/g, "<br>")}</p>` : ""}
+      ${j.text ? `<p class="jtext">${esc(j.text).replace(/\n/g, "<br>")}</p>` : ""}${photoGrid(j.photos, j.id)}
       <div class="jn-acts">${!isReply ? `<button class="lnk" data-jreply="${j.id}">Reply</button>` : ""}${canChange(j) ? `<button class="lnk" data-jedit="${j.id}">Edit</button><button class="lnk danger" data-jdel="${j.id}">Delete</button>` : ""}</div></div></div>`;
   const thread = (j) => `<div class="jthread">${post(j, false)}${replies(j.id).map((r) => post(r, true)).join("")}
       ${jui.reply === j.id ? `<div class="jpost reply">${composer("reply:" + j.id, { placeholder: "Write a reply…", button: "Reply" })}</div>` : ""}</div>`;
@@ -2450,7 +2487,7 @@ function journalHtml(date) {
       <div class="jas"><span class="muted small">Posting as</span>
         <select data-jauthor aria-label="Posting as">${me ? "" : `<option value="">Choose…</option>`}${authors().map((a) => `<option value="${esc(a.code)}" ${me && me.code === a.code ? "selected" : ""}>${esc(a.name)}</option>`).join("")}
           ${me && !me.code ? `<option value="name:${esc(me.name)}" selected>${esc(me.name)}</option>` : ""}<option value="other">Other…</option></select></div>
-      ${composer("new", { placeholder: "How was the day? Share a story, a tip or what you'd do again…", withRating: true, acts })}
+      ${composer("new", { placeholder: "How was the day? Share a story, a tip or what you'd do again…", withRating: true, acts, photos: [] })}
     </div></section>`;
 }
 function wireJournal(date) {
@@ -2477,25 +2514,48 @@ function wireJournal(date) {
       const n = +b.dataset.star; hid.value = +hid.value === n ? 0 : n;
       f.querySelectorAll("[data-star]").forEach((x) => x.classList.toggle("on", +x.dataset.star <= +hid.value)); setR();
     }));
-    f.querySelector("[data-jcancel]")?.addEventListener("click", () => { delete jui.draft[key]; delete jui.rate[key]; jui.reply = jui.edit = null; jui.focus = null; rerender(); });
+    f.querySelector("[data-jcancel]")?.addEventListener("click", () => { delete jui.draft[key]; delete jui.rate[key]; delete jui.photos[key]; delete jui.drop[key]; jui.reply = jui.edit = null; jui.focus = null; rerender(); });
+    const inp = f.querySelector("[data-jpfile]");
+    if (inp) inp.onchange = async () => {
+      const list = (jui.photos[key] ||= []), room = MAX_PHOTOS - list.length - ((store.journal.find((j) => "edit:" + j.id === key)?.photos || []).filter((ph) => !(jui.drop[key] || []).includes(ph.id)).length);
+      const files = [...inp.files].slice(0, Math.max(0, room)); if (inp.files.length > files.length) toast(`Up to ${MAX_PHOTOS} photos per post`);
+      const slots = files.map(() => ({ busy: true })); list.push(...slots); rerender();
+      for (let k = 0; k < files.length; k++) {
+        try { Object.assign(slots[k], await shrinkPhoto(files[k]), { busy: false }); }
+        catch (e) { list.splice(list.indexOf(slots[k]), 1); toast(e.message || "Couldn't open that photo"); }
+        rerender();
+      }
+    };
+    f.querySelectorAll("[data-jpnew]").forEach((b) => (b.onclick = () => { jui.photos[key].splice(+b.dataset.jpnew, 1); rerender(); }));
+    f.querySelectorAll("[data-jpdrop]").forEach((b) => (b.onclick = () => { (jui.drop[key] ||= []).push(b.dataset.jpdrop); rerender(); }));
     f.onsubmit = async (ev) => {
       ev.preventDefault();
       const text = f.text.value.trim(), rating = +(hid?.value || 0), actId = sel?.value || "";
       if (rating && !actId) return toast("Pick which activity you're rating");
       if (actId && !rating) return toast("Tap the stars to rate it");
-      if (!text && !rating) return toast("Write something first");
+      const adding = jui.photos[key] || [];
+      if (adding.some((ph) => ph.busy)) return toast("Still preparing the photos…");
+      if (!text && !rating && !adding.length) return toast("Write something or add a photo first");
       const me = myAuthor();
       if (!me) { toast("Choose who's posting first"); sec.querySelector("[data-jauthor]").focus(); return; }
       const [mode, id] = key.split(":");
       const old = mode === "edit" ? store.journal.find((j) => j.id === id) : null;
       const post = old ? { ...old, text, ...(old.replyTo ? {} : { rating, activityId: actId }) }
-        : { date, text, author: me.name, authorCode: me.code || "", device: DEVICE, ...(mode === "reply" ? { replyTo: id } : { rating, activityId: actId }) };
+        : { id: data.newJournalId(), date, text, author: me.name, authorCode: me.code || "", device: DEVICE, ...(mode === "reply" ? { replyTo: id } : { rating, activityId: actId }) };
       if (!post.activityId) { delete post.activityId; delete post.rating; }
-      f.querySelector("button.primary").disabled = true;
-      try { await data.saveJournal(post); delete jui.draft[key]; delete jui.rate[key]; jui.reply = jui.edit = null; jui.focus = null; rerender(); toast(old ? "Saved" : "Posted"); }
-      catch (x) { f.querySelector("button.primary").disabled = false; toast(x.code === "permission-denied" ? "The journal needs the new Firestore rules published" : "Couldn't post: " + (x.code || x.message)); }
+      const btn = f.querySelector("button.primary"); btn.disabled = true;
+      try {
+        const dropped = (old?.photos || []).filter((ph) => (jui.drop[key] || []).includes(ph.id)), kept = (old?.photos || []).filter((ph) => !dropped.includes(ph));
+        const up = [];
+        for (let k = 0; k < adding.length; k++) { btn.textContent = `Uploading photo ${k + 1} of ${adding.length}…`; up.push(await data.uploadJournalPhoto(post.id, adding[k].full, adding[k].thumb, adding[k].w, adding[k].h)); }
+        if (mode !== "reply") { post.photos = kept.concat(up); if (!post.photos.length) delete post.photos; }
+        await data.saveJournal(post); if (dropped.length) data.deleteJournalPhotos(dropped);
+        delete jui.draft[key]; delete jui.rate[key]; delete jui.photos[key]; delete jui.drop[key]; jui.reply = jui.edit = null; jui.focus = null; rerender(); toast(old ? "Saved" : "Posted"); }
+      catch (x) { btn.disabled = false; btn.textContent = old ? "Save" : mode === "reply" ? "Reply" : "Post";
+        toast(x.code === "permission-denied" ? "The journal needs the new Firestore rules published" : x.code === "storage/unauthorized" ? "Photos need the new Storage rules published" : "Couldn't post: " + (x.code || x.message)); }
     };
   });
+  sec.querySelectorAll("[data-jphoto]").forEach((b) => (b.onclick = () => { const j = store.journal.find((x) => x.id === b.dataset.jphoto); if (j?.photos?.length) lightbox(j.photos, +b.dataset.k); }));
   sec.querySelectorAll("[data-jreply]").forEach((b) => (b.onclick = () => { jui.reply = b.dataset.jreply; jui.edit = null; jui.focus = "reply:" + jui.reply; rerender(); }));
   sec.querySelectorAll("[data-jedit]").forEach((b) => (b.onclick = () => { jui.edit = b.dataset.jedit; jui.reply = null; jui.focus = "edit:" + jui.edit; rerender(); }));
   sec.querySelectorAll("[data-jdel]").forEach((b) => (b.onclick = async () => {
@@ -2788,12 +2848,20 @@ const actions = {
     const t = store.trip;
     modal(`<h2>Export Album</h2><p class="muted small">A Word document with a page per day: where you stayed, what you did and the journal. No costs or confirmation numbers.</p>
       <div class="row2"><label>From<input type="date" name="from" value="${t.start}" min="${t.start}" max="${t.end}" required></label>
-      <label>To<input type="date" name="to" value="${t.end}" min="${t.start}" max="${t.end}" required></label></div>`, async (fd) => {
+      <label>To<input type="date" name="to" value="${t.end}" min="${t.start}" max="${t.end}" required></label></div>
+      ${(store.journal || []).some((j) => j.photos?.length) ? `<label class="pswitch"><input type="checkbox" name="photos" checked><span>Include the journal photos</span></label>` : ""}`, async (fd) => {
       const from = fd.get("from"), to = fd.get("to");
       if (from > to) { toast("'From' must be before 'To'"); throw Object.assign(new Error(""), { back: true }); }
       toast("Building the album…");
       const docx = await import("https://cdn.jsdelivr.net/npm/docx@9.5.1/+esm");
-      const doc = buildAlbum(docx, { trip: t, items: store.items, entries: store.entries, journal: store.journal }, { from, to });
+      const photos = new Map();
+      if (fd.get("photos")) {
+        const want = (store.journal || []).filter((j) => j.date >= from && j.date <= to && !j.replyTo).flatMap((j) => j.photos || []);
+        let n = 0, bad = 0;
+        for (const ph of want) { toast(`Adding photos… ${++n} of ${want.length}`); try { photos.set(ph.id, new Uint8Array(await data.photoBytes(ph))); } catch (e) { bad++; console.warn("photo", e); } }
+        if (bad) toast(`${bad} photo${bad > 1 ? "s" : ""} couldn't be downloaded and were left out`);
+      }
+      const doc = buildAlbum(docx, { trip: t, items: store.items, entries: store.entries, journal: store.journal }, { from, to, photos });
       const blob = await docx.Packer.toBlob(doc);
       const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
       a.download = `${(t.title || "Trip").replace(/&/g, "and").replace(/[^\w\- ]+/g, "").replace(/\s+/g, " ").trim()} Album ${from}${to !== from ? " to " + to : ""}.docx`; a.click();

@@ -284,6 +284,28 @@ If something changes often (fees, visa rules), say so briefly. Only list real, o
   throw new Error(String(lastErr?.message || lastErr).replace(/^\[?FirebaseError\]?:?\s*/i, "").slice(0, 300));
 }
 
+// ------------------------------------------------------------------ "Ask the trip": answers from the itinerary
+export async function askTripAI(question, context, history) {
+  if (DEMO) { await new Promise((r) => setTimeout(r, 500)); const m = context.match(/\d{4}-\d\d-\d\d/); return { answer: `Demo answer to: **${question}**\nThe AI reads the whole itinerary to answer.`, days: m ? [m[0]] : [] }; }
+  const schema = { type: "object", properties: { answer: { type: "string", description: "The answer for the family, short and friendly. Plain text; **bold** allowed; new lines for lists." },
+    days: { type: "array", items: { type: "string" }, description: "Trip dates YYYY-MM-DD the answer is about (for 'open this day' links); empty if none" } }, required: ["answer", "days"] };
+  const prompt = `You are the family's trip assistant. Answer ONLY from the itinerary below (and general travel knowledge where the itinerary is silent - say so when you do).
+If the itinerary doesn't have the answer, say what's missing. Be concise: one to five short lines. Use dd-mmm-yy dates (e.g. 27-Dec-26) and 24h local times with the place's time zone when relevant.
+"Leave for the airport" = 3 hours before an international departure, 2 hours before a domestic one (plus travel time to the airport if known).
+${history.length ? "Earlier in this chat:\n" + history.map((h) => `Q: ${h.q}\nA: ${h.a}`).join("\n") + "\n" : ""}
+ITINERARY
+${context}
+
+QUESTION: ${question}`;
+  let lastErr;
+  for (let i = 0; i < AI_MODELS.length; i++) {
+    try { const m = await getModel(i, schema); const res = await m.generateContent([{ text: prompt }]); return JSON.parse(res.response.text()); }
+    catch (e) { lastErr = e; console.warn("ask AI", AI_MODELS[i], e);
+      if (!/not.?found|404|unsupported|model|429|exhausted|quota|50\d|unavailable|overloaded|deadline|timeout|fetch/i.test(String(e.message || e) + (e.code || ""))) break; }
+  }
+  throw new Error(String(lastErr?.message || lastErr).slice(0, 300));
+}
+
 // ------------------------------------------------------------------ phone notifications (check-in open), via Firebase Cloud Messaging
 // This device registers a push token in push/{hash} with the travellers it wants alerts for; the server function sends them.
 export const pushSupported = () => "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;

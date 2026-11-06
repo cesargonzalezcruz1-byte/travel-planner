@@ -1,7 +1,7 @@
 import * as data from "./data.js";
 import { drawDayMap, mapsReady, searchPlaces, findPlace, geocodeText, computeRoute, distanceKm } from "./map.js";
 import { buildAlbum, areaOf } from "./album.js";
-import { AIRPORT_TZ, TZ_COUNTRY, checkinUrl, checkinInfo, timeIn } from "./checkin-core.js";
+import { AIRPORT_TZ, TZ_COUNTRY, checkinUrl, checkinInfo, timeIn, isInternational } from "./checkin-core.js";
 // Preview another date: add ?today=2027-01-14 to the address to see the app as it will look on that day
 (() => { const m = location.search.match(/[?&]today=(\d{4}-\d{2}-\d{2})/); if (!m) return;
   const R = Date, off = new R(m[1] + "T12:00:00").getTime() - R.now();   // shift the clock, keep it ticking
@@ -274,6 +274,71 @@ function renderHome() {
   root.querySelectorAll("[data-settings]").forEach((b) => (b.onclick = () => tripForm(store.trips.find((t) => t.id === b.dataset.settings))));
 }
 
+// ---------------------------------------------------------------- "Ask the trip": a chat answered by the AI from the itinerary
+// The itinerary as plain text for the AI (private details - confirmation numbers, costs - only for editors)
+function tripContext() {
+  const t = store.trip, ed = isEditor(), who = (a) => (a || []).join(",") || "everyone";
+  const tz = (c) => AIRPORT_TZ[c] || "", L = [];
+  const now = new Date();
+  L.push(`TRIP: ${t.title} from ${t.start} to ${t.end}. Today is ${iso(now)} ${now.toTimeString().slice(0, 5)} (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Asked by: ${NAME(ui.person)} (${ui.person}).`);
+  L.push("TRAVELLERS: " + (t.travellers || []).map((x) => `${x.code}=${x.name}`).join("; ") + ((t.extended || []).length ? " | OTHERS JOINING SOMETIMES: " + t.extended.map((x) => `${x.code}=${x.name}`).join("; ") : ""));
+  L.push("BOOKINGS:");
+  for (const i of store.items.slice().sort((a, b) => a.start.localeCompare(b.start) || (a.dep || "").localeCompare(b.dep || ""))) {
+    const pv = ed ? store.priv[i.id] || {} : {}, priv = ed ? ["confirmation", "seats", "tickets", "phone", "cancel", "cost", "dueAtHotel"].filter((k) => pv[k]).map((k) => `${k}: ${pv[k]}`).join("; ") : "";
+    const side = i.end < t.start ? " [before the trip]" : i.start > t.end ? " [after the trip]" : "";
+    if (i.type === "flight") { const c = codesOf(i.route);
+      L.push(`- FLIGHT ${i.start}${i.end !== i.start ? "→" + i.end : ""} ${c.join("-")} ${[i.airline, i.number].filter(Boolean).join(" ")} departs ${i.dep || "?"} (${tz(c[0])}) arrives ${i.arr || "?"} (${tz(c.at(-1))}), ${isInternational(i) ? "international" : "domestic"}; who: ${who(i.who)}${i.note ? "; note: " + i.note : ""}${priv ? "; " + priv : ""}${side}`); }
+    else if (i.type === "stay") L.push(`- STAY ${i.start} to ${i.end} (check-out day) ${i.name || ""}${i.area ? " in " + i.area : ""}; address: ${i.address || "?"}; check-in ${i.checkin || "?"}, check-out ${i.checkout || "?"}; who: ${who(i.who)}${i.status === "tbc" ? "; NOT BOOKED YET" : ""}${i.note ? "; note: " + i.note : ""}${priv ? "; " + priv : ""}${side}`);
+    else L.push(`- CAR ${i.start} to ${i.end} ${[i.company, i.vehicle].filter(Boolean).join(" ")}; pick-up ${i.pickup || "?"} ${i.pickupTime || ""}; drop-off ${i.dropoff || "?"} ${i.dropoffTime || ""}; who: ${who(i.who)}${i.note ? "; note: " + i.note : ""}${priv ? "; " + priv : ""}${side}`);
+  }
+  const acts = store.entries.filter((e) => e.kind === "activity").sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  if (acts.length) { L.push("ACTIVITIES (confirmed = booked/in the itinerary, planned = maybe, idea = recommended only):");
+    acts.forEach((e) => { const pv = ed ? store.priv[e.id] || {} : {};
+      L.push(`- ${e.date}${e.endDate && e.endDate !== e.date ? "→" + e.endDate : ""} [${e.status === "recommended" ? "idea" : e.confirmed ? "confirmed" : "planned"}] ${String(e.text || "").replace(/\s+/g, " ")}${e.place ? " @ " + e.place : ""}; who: ${who(e.who)}${votesFor("e_" + e.id).length ? `; votes: ${votesFor("e_" + e.id).join(",")}` : ""}${ed && pv.cost ? "; cost: " + pv.cost : ""}`); }); }
+  const coms = store.entries.filter((e) => e.kind === "comment");
+  if (coms.length) { L.push("NOTES:"); coms.forEach((e) => L.push(`- ${e.date}: ${String(e.text || "").replace(/\s+/g, " ")} (${who(e.who)})`)); }
+  const ci = t.countryInfo;
+  if (ci?.codes?.length) { L.push("COUNTRY INFO:"); ci.codes.forEach((c) => { const x = ci.data[c] || {};
+    L.push(`- ${x.country || c}: currency ${x.currency?.name || "?"}; plugs ${x.plugs?.types || "?"} ${x.plugs?.voltage || ""}; emergency ${x.emergency?.general || "?"}; tipping restaurants ${x.tipping?.restaurants || "?"}; entry: ${(x.entry || []).map((e) => e.passport + ": " + e.summary).join(" / ")}`); }); }
+  return L.join("\n");
+}
+const chats = {};   // this session's conversation per trip
+const fmtAnswer = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
+function askTrip() {
+  const tid = ui.tripId, log = (chats[tid] ||= []);
+  const m = document.createElement("div"); m.className = "modal";
+  m.innerHTML = `<div class="sheet askbox"><div class="ask-head"><h3>${I.chat}Ask the Trip</h3><button type="button" class="btn tiny" data-askx aria-label="Close">✕</button></div>
+    <div class="ask-log" aria-live="polite"></div>
+    <div class="ask-sugg"></div>
+    <form class="ask-form"><input name="q" autocomplete="off" placeholder="e.g. When do we leave for the airport on 27 Dec?" aria-label="Your question"><button class="btn primary">Ask</button></form>
+    <p class="muted small">Answered by AI from this trip's itinerary - double-check anything important.${isEditor() ? "" : " Private details like confirmation numbers aren't included."}</p></div>`;
+  document.body.appendChild(m);
+  const logEl = m.querySelector(".ask-log"), form = m.querySelector("form"), inp = form.q;
+  const close = () => m.remove();
+  m.querySelector("[data-askx]").onclick = close; m.onclick = (e) => { if (e.target === m) close(); };
+  const next = store.items.filter((i) => i.type === "flight" && i.start >= iso(new Date())).sort((a, b) => a.start.localeCompare(b.start))[0];
+  const sugg = [next && `When do we leave for the airport for the ${fmtDate(next.start)} flight?`, `Where are we staying on ${fmtDate(iso(new Date()) >= store.trip.start && iso(new Date()) <= store.trip.end ? iso(new Date()) : store.trip.start)}?`,
+    "What's planned for tomorrow?", "Which activities still need booking?"].filter(Boolean);
+  const draw = () => {
+    logEl.innerHTML = log.map((x) => `<div class="ask-q">${esc(x.q)}</div><div class="ask-a${x.err ? " err" : ""}">${x.a == null ? `<span class="ask-dots"><i></i><i></i><i></i></span>` : fmtAnswer(x.a)}
+      ${(x.days || []).filter((d) => d >= store.trip.start && d <= store.trip.end).slice(0, 4).map((d) => `<button type="button" class="lnk" data-askday="${d}">Open ${fmtDate(d)} →</button>`).join(" ")}</div>`).join("")
+      || `<p class="muted small">Ask anything about the trip: times, places, who's where, what's booked.</p>`;
+    m.querySelector(".ask-sugg").innerHTML = log.length ? "" : sugg.map((q) => `<button type="button" class="cchip" data-askq="${esc(q)}">${esc(q)}</button>`).join("");
+    logEl.scrollTop = logEl.scrollHeight;
+    logEl.querySelectorAll("[data-askday]").forEach((b) => (b.onclick = () => { close(); routeTo(tid, b.dataset.askday); }));
+    m.querySelectorAll("[data-askq]").forEach((b) => (b.onclick = () => ask(b.dataset.askq)));
+  };
+  const ask = async (q) => {
+    q = q.trim(); if (!q) return; inp.value = "";
+    const turn = { q, a: null }; log.push(turn); draw();
+    try { const r = await data.askTripAI(q, tripContext(), log.filter((x) => x !== turn && x.a && !x.err).slice(-4)); turn.a = r.answer || "…"; turn.days = r.days || []; }
+    catch (e) { turn.a = "Couldn't get an answer: " + (e.message || e); turn.err = true; }
+    if (m.isConnected) draw();
+  };
+  form.onsubmit = (e) => { e.preventDefault(); ask(inp.value); };
+  draw(); setTimeout(() => inp.focus(), 50);
+}
+
 // ---------------------------------------------------------------- country info (AI-written per country, kept on the trip)
 const REGION = (() => { try { return new Intl.DisplayNames(["en"], { type: "region" }); } catch (e) { return null; } })();
 const countryName = (c) => { try { return REGION?.of(c) || c; } catch (e) { return c; } };
@@ -469,6 +534,7 @@ function tripForm(t) {
 const SV = (d, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}${extra}</svg>`;
 const I = {
   pin: SV('<path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
+  chat: SV('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>'),
   globe: SV('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'),
   walk: SV('<circle cx="13" cy="4" r="2"/><path d="m9 20 3-6 3 2v6M6 12l3-4 4 1 3 4 3 1"/><path d="M9 8 7 14"/>'),
   route: SV('<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>'),
@@ -504,7 +570,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v115";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v116";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -588,6 +654,7 @@ function header(opts = {}) {
       ${opts.views ? `<nav class="vseg${viewsFor().length > 3 ? " icons" : ""}" aria-label="View">${viewsFor().map(([k, l, ic]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}" aria-label="${l}" title="${l}">${ICON[ic]}${ui.view === k && viewsFor().length <= 3 ? `<span>${l}</span>` : ""}</button>`).join("")}</nav>` : `<span class="hero-hint">${esc(NAME(me))}'s day</span>`}
       <span class="grow"></span>
       ${ui.pane !== 1 ? splitToggle() : ""}
+      <button class="iconbtn" data-act="ask" aria-label="Ask the trip" title="Ask the trip">${I.chat}</button>
       ${isEditor() ? `<button class="iconbtn" data-act="add" aria-label="Add booking" title="Add booking">${ICON.plus}</button>` : ""}
       <details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
@@ -3310,6 +3377,7 @@ const actions = {
   },
   bulk: () => bulkAttach(),
   offline: () => offlineForm(),
+  ask: () => askTrip(),
   country: () => (store.trip?.countryInfo?.codes?.length ? showCountryInfo({ id: ui.tripId, ...store.trip }) : isEditor() ? countryInfoFlow() : toast("No country info yet")),
   people: () => peopleList(),
   archive: () => archiveDocs(),

@@ -842,3 +842,16 @@ fieldset{min-width:0}
 .pwhy{margin:0 0 6px;color:var(--clash1-x)}
 .sheet label.pcand{display:flex;flex-direction:row;gap:8px;align-items:flex-start;margin:4px 0;font-weight:600} .pcand span{display:grid} .pcand input{margin-top:3px;flex:none}
 .psearch{display:flex;gap:6px;margin-top:6px} .psearch input{flex:1;min-width:0}
+/* settle up with other families */
+.sharebox [hidden]{display:none!important} .pctin{display:flex;align-items:center;gap:6px} .pctin input{width:5.5em}
+.famrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 8px} .famrow .famname{flex:1 1 160px;min-width:0} .famrow .ddots{display:flex;gap:6px;flex-wrap:wrap}
+.dd[disabled]{opacity:.35;cursor:not-allowed}
+.settle .scard{border-radius:16px;padding:12px 14px;margin:0 0 10px;background:var(--soft);border-left:5px solid var(--line2)}
+.settle .scard.in{border-left-color:#1F8A4C} .settle .scard.out{border-left-color:#C2410C}
+.settle .s-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap} .settle .s-who{display:flex;gap:4px} .settle .s-who .dd{cursor:default}
+.settle .s-bal{font-size:15px} .settle .scard.in .amt{color:#1F8A4C} .settle .scard.out .amt{color:#C2410C}
+.settle .s-lines{margin:8px 0} .settle .s-lines summary{cursor:pointer;color:var(--muted);font-size:13px;font-weight:700}
+.settle .s-lines ul{list-style:none;padding:0;margin:6px 0} .settle .s-lines li{display:grid;grid-template-columns:1fr auto;gap:0 10px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.settle .s-lines li .lnk{text-align:left;font-weight:700;padding:0} .settle .s-lines li small{grid-column:1} .settle .s-lines li > span{grid-column:2;grid-row:1/3;align-self:center;font-weight:800}
+.settle .pos{color:#1F8A4C} .settle .neg{color:#C2410C}
+:root[data-theme="midnight"] .settle .scard.in .amt,:root[data-theme="midnight"] .settle .pos{color:#4ADE80} :root[data-theme="midnight"] .settle .scard.out .amt,:root[data-theme="midnight"] .settle .neg{color:#FB923C}

@@ -291,6 +291,9 @@ function tripForm(t) {
     <fieldset class="pbox"><legend>Others Joining Sometimes (Optional)</legend>
       <div id="ext">${(t.extended || []).map((p) => row(p, "e")).join("")}</div>
       <div class="addrow">${savedPick("e")}<button type="button" class="btn tiny" data-addp="e">New Person (Create Profile)</button></div></fieldset>
+    ${isEditor() ? `<fieldset class="pbox" id="famsbox"><legend>Families for Settling Up (Optional)</legend><div id="fams"></div>
+      <button type="button" class="btn tiny" data-addfam>+ Add Family</button>
+      <p class="muted small">Group the people joining into families - each family gets its own balance in Budget (Settle Up). Then mark costs as shared with, or paid by, a family.</p></fieldset>` : ""}
     <p class="muted small">Everyone on a trip has a profile: initials (how they appear in the itinerary), full name (helps the AI match names on bookings), their colour and documents. Tap Profile to change them.</p>
     ${isNew ? "" : `<fieldset class="pbox"><legend>Notifications (This Phone)</legend><div class="pushset">${pushSetupHtml(t)}</div></fieldset>`}
     <fieldset class="pbox"><legend>Colour Theme</legend><div class="themes">
@@ -314,7 +317,10 @@ function tripForm(t) {
       if (dup && !confirm(`${dup.name} has the same colour as another traveller on this trip. Save anyway?`)) throw Object.assign(new Error(""), { back: true });
       for (const p of travellers.concat(extended)) { try { const before = personFor(p); p.pid = await rememberPerson(p);
         if (p.color && before && upc(before.color) !== upc(p.color)) syncPersonColor({ ...before, id: p.pid, color: p.color }); } catch (e) { console.warn("people", e); } }
-      const id = await data.saveTrip({ title: fd.get("title").trim(), start: fd.get("start"), end: fd.get("end"), travellers, extended, theme: fd.get("theme") || "ink" }, isNew ? null : t.id);
+      const extCodes = extended.map((p) => p.code);
+      const famList = fams.map((f) => ({ ...f, members: f.members.filter((c) => extCodes.includes(c)) })).filter((f) => f.members.length)
+        .map((f) => ({ id: f.id, name: f.name.trim() || joinNames(f.members.map((c) => extended.find((p) => p.code === c)?.name || c)), members: f.members }));
+      const id = await data.saveTrip({ title: fd.get("title").trim(), start: fd.get("start"), end: fd.get("end"), travellers, extended, families: famList, theme: fd.get("theme") || "ink" }, isNew ? null : t.id);
       if (isNew) { ui.person = travellers[0].code; localStorage.setItem("tp.person", ui.person); routeTo(id); }
     }, isNew ? null : async () => {
       const typed = prompt(`This deletes "${t.title}" with all its bookings, activities and documents for everyone. Type DELETE to confirm.`);
@@ -323,6 +329,22 @@ function tripForm(t) {
     });
   const form = [...document.querySelectorAll(".sheet")].pop();
   wirePushSetup(form, t);
+  // families for settling up: groups of the people joining (a person is in at most one)
+  const fams = (t.families || []).map((f) => ({ ...f, members: [...(f.members || [])] }));
+  const drawFams = () => { const box = form.querySelector("#fams"); if (!box) return;
+    const ext = [...form.querySelectorAll('.prow[data-kind="e"]')].map((r) => ({ code: r.dataset.code, name: r.dataset.name }));
+    box.innerHTML = !ext.length ? `<p class="muted small">Add the people joining above first.</p>` : fams.map((f, k) => `<div class="famrow">
+      <input class="famname" data-famname="${k}" value="${esc(f.name || "")}" placeholder="${esc(joinNames(f.members.map((c) => ext.find((p) => p.code === c)?.name || c)) || "Family name")}" aria-label="Family name">
+      <span class="ddots">${ext.map((p) => { const other = fams.some((g, j) => j !== k && g.members.includes(p.code)), on = f.members.includes(p.code);
+        return `<button type="button" class="dd${on ? " on" : ""}" data-fammem="${k}" data-c="${esc(p.code)}" ${other ? "disabled" : ""} style="--pc:${pcolor(p.code)}" aria-pressed="${on}" title="${esc(p.name)}${other ? " (in another family)" : ""}">${esc(p.code)}</button>`; }).join("")}</span>
+      <button type="button" class="btn tiny danger" data-famrm="${k}" aria-label="Remove family">✕</button></div>`).join(""); };
+  form.querySelector("[data-addfam]")?.addEventListener("click", () => { fams.push({ id: "f" + Date.now().toString(36), name: "", members: [] }); drawFams(); });
+  form.querySelector("#fams")?.addEventListener("click", (e) => { const m = e.target.closest("[data-fammem]"), x = e.target.closest("[data-famrm]");
+    if (m) { const f = fams[+m.dataset.fammem], c = m.dataset.c; f.members = f.members.includes(c) ? f.members.filter((y) => y !== c) : f.members.concat(c); drawFams(); }
+    if (x) { fams.splice(+x.dataset.famrm, 1); drawFams(); } });
+  form.querySelector("#fams")?.addEventListener("input", (e) => { const n = e.target.closest("[data-famname]"); if (n) fams[+n.dataset.famname].name = n.value; });
+  const extBox = form.querySelector("#ext"); if (extBox) new MutationObserver(drawFams).observe(extBox, { childList: true, subtree: true });
+  drawFams();
   const addRow = (per, kind) => {
     if ([...form.querySelectorAll(".prow")].some((r) => r.dataset.pid === per.id || r.dataset.code === per.code)) return toast(`${per.name} is already on this trip`);
     const color = kind === "t" ? upc(per.color) || nextColor() : "";
@@ -387,7 +409,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v106";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v107";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -505,7 +527,86 @@ function wireHeader() {
 const BCATS = [["flight", "Flights", "flight"], ["stay", "Stays", "stay"], ["car", "Cars", "car"], ["act", "Activities", "act"],
   ["food", "Food & Drink", "food"], ["transport", "Transport", "bus"], ["shopping", "Shopping", "bag"], ["other", "Other", "dots"]];
 const CURRENCIES = ["AUD", "USD", "MXN", "CAD", "NZD", "EUR", "GBP"];
-const SHARE = { ours: "Us", split: "Shared - split TBC", theirs: "Family (not ours)" };
+const SHARE = { ours: "Us", split: "Shared with a family", theirs: "A family's cost (not ours)" };
+// ---- settling up with other families (grouped in Trip Setup from "Others joining sometimes")
+const joinNames = (a) => (a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " & " + a.at(-1));
+const families = () => (store.trip?.families || []).filter((f) => f.id && (f.members || []).length);
+const famName = (id) => families().find((f) => f.id === id)?.name || "Family";
+const pctOf = (r) => { const v = parseFloat(r.theirPct); return v >= 0 && v <= 100 ? v : 50; };
+// which family a cost is settled with: the one it's shared with / belongs to, or the one that paid for something of ours
+function famOf(r) {
+  const fams = families(), ok = (id) => fams.some((f) => f.id === id);
+  if ((r.share || "ours") === "ours") return r.paidBy && r.paidBy !== "us" && ok(r.paidBy) ? r.paidBy : null;
+  if (ok(r.fam)) return r.fam;
+  if (r.paidBy && r.paidBy !== "us" && ok(r.paidBy)) return r.paidBy;
+  return fams.length === 1 ? fams[0].id : null;
+}
+// our part of a cost (in home currency): all of it, our share of a shared cost, or nothing for a family's own cost
+const ourPart = (r) => (r.home == null ? 0 : r.share === "theirs" ? 0 : r.share === "split" ? (famOf(r) ? r.home * (1 - pctOf(r) / 100) : 0) : r.home);
+function shareFields(pv, n = (k) => "priv." + k) {
+  const fams = families(), sh = pv.share || "ours";
+  return `<div class="sharebox" data-sharebox>
+    <label>Whose Cost<select name="${n("share")}" data-sh>${Object.entries(SHARE).map(([k, l]) => `<option value="${k}" ${sh === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+    ${fams.length ? `<div class="row"><label data-shf>Family<select name="${n("fam")}">${fams.map((f) => `<option value="${esc(f.id)}" ${(pv.fam || fams[0].id) === f.id ? "selected" : ""}>${esc(f.name)}</option>`).join("")}</select></label>
+      <label data-shp>Their Share<span class="pctin"><input name="${n("theirPct")}" type="number" min="0" max="100" step="1" inputmode="numeric" value="${esc(pv.theirPct ?? 50)}">%</span></label></div>
+      <label>Paid By<select name="${n("paidBy")}" data-pb><option value="us">Us</option>${fams.map((f) => `<option value="${esc(f.id)}" ${pv.paidBy === f.id ? "selected" : ""}>${esc(f.name)}</option>`).join("")}</select></label>`
+      : sh !== "ours" ? `<p class="muted small">To track who owes what, group the people joining into families in Trip Setup.</p>` : ""}</div>`;
+}
+function wireShare(form) {
+  const box = form?.querySelector("[data-sharebox]"); if (!box) return;
+  const sync = () => { const v = box.querySelector("[data-sh]").value;
+    box.querySelector("[data-shf]")?.toggleAttribute("hidden", v === "ours"); box.querySelector("[data-shp]")?.toggleAttribute("hidden", v !== "split"); };
+  box.addEventListener("change", sync); sync();
+}
+const settlements = () => Object.entries(store.priv).filter(([, v]) => v && v.kind === "settle").map(([id, v]) => ({ id, ...v })).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+// running balance per family: + they owe us, - we owe them
+function settleData(B) {
+  const S = B.S, out = families().map((f) => ({ f, bal: 0, lines: [], noRate: 0 }));
+  for (const r of B.rows) {
+    const fid = famOf(r); if (!fid || !r.m) continue; const o = out.find((x) => x.f.id === fid); if (!o) continue;
+    if (r.home == null) { o.noRate++; continue; }
+    const our = ourPart(r), their = r.home - our, paidUs = (r.paidBy || "us") === "us";
+    const amt = paidUs ? their : -our; if (Math.abs(amt) < 0.005) continue;
+    o.bal += amt;
+    o.lines.push({ r, amt, what: paidUs ? (r.share === "theirs" ? "their cost - you paid" : `their ${pctOf(r)}% - you paid`) : (r.share === "ours" ? "yours - they paid" : `your ${100 - pctOf(r)}% - they paid`) });
+  }
+  for (const p of settlements()) { const o = out.find((x) => x.f.id === p.fam); if (!o) continue;
+    const v = toHome({ amt: +p.amount || 0, cur: p.currency || S.home }, S); if (v == null) { o.noRate++; continue; }
+    const amt = p.dir === "in" ? -v : v; o.bal += amt; o.lines.push({ pay: p, amt, what: p.dir === "in" ? "they paid you" : "you paid them" }); }
+  return out;
+}
+function settleHtml(B) {
+  const cur = B.S.home, fams = families();
+  if (!fams.length) return (store.trip?.extended || []).length ? `<section class="settle"><h3>Settle Up</h3><p class="muted small">Group the people joining into families in Trip Setup, then mark costs as shared or theirs. Each family gets a running balance here.</p></section>` : "";
+  const unlinked = B.rows.filter((r) => r.share === "split" && !famOf(r) && r.m).length;
+  return `<section class="settle"><h3>Settle Up</h3>
+    ${settleData(B).map(({ f, bal, lines, noRate }) => { const st = Math.abs(bal) < 0.5 ? "even" : bal > 0 ? "in" : "out";
+      return `<div class="scard ${st}">
+        <div class="s-top"><span class="s-who">${(f.members || []).map((c) => `<span class="dd on" style="--pc:${pcolor(c)}">${esc(c)}</span>`).join("")}</span>
+          <span class="s-bal">${st === "even" ? `<b>${esc(f.name)}</b> - all settled` : st === "in" ? `<b>${esc(f.name)}</b> owe${f.members.length === 1 ? "s" : ""} you <b class="amt">${money(bal, cur, 2)}</b>` : `You owe <b>${esc(f.name)}</b> <b class="amt">${money(-bal, cur, 2)}</b>`}</span></div>
+        ${lines.length ? `<details class="s-lines"><summary>${lines.filter((l) => l.r).length} cost${lines.filter((l) => l.r).length === 1 ? "" : "s"}${lines.some((l) => l.pay) ? ` · ${lines.filter((l) => l.pay).length} payment${lines.filter((l) => l.pay).length === 1 ? "" : "s"}` : ""}</summary>
+          <ul>${lines.map((l) => l.r ? `<li><button class="lnk" data-${l.r.src === "item" ? "bk" : l.r.src === "entry" ? "bact" : "exp"}="${esc(l.r.id)}">${esc(firstText(l.r.name))}</button><small class="muted">${l.r.date ? shortDate(l.r.date) + " · " : ""}${esc(l.what)}</small><span class="${l.amt > 0 ? "pos" : "neg"}">${l.amt > 0 ? "+" : "−"}${money(Math.abs(l.amt), cur, 2)}</span></li>`
+            : `<li class="pay"><button class="lnk" data-settle-edit="${esc(l.pay.id)}">${esc(l.pay.note || "Payment")}</button><small class="muted">${l.pay.date ? shortDate(l.pay.date) + " · " : ""}${esc(l.what)}</small><span class="${l.amt > 0 ? "pos" : "neg"}">${l.amt > 0 ? "+" : "−"}${money(Math.abs(l.amt), cur, 2)}</span></li>`).join("")}</ul>
+          <p class="muted small">+ they owe you · − you owe them</p></details>` : `<p class="muted small">No shared costs yet - mark a booking or expense as shared with ${esc(f.name)}.</p>`}
+        ${noRate ? `<p class="jwarn small">${noRate} amount${noRate > 1 ? "s" : ""} left out - add the exchange rate in Budget Settings</p>` : ""}
+        <button class="btn small" data-settle-pay="${esc(f.id)}">Record a Payment</button></div>`; }).join("")}
+    ${unlinked ? `<p class="jwarn small">${unlinked} shared cost${unlinked > 1 ? "s aren't" : " isn't"} linked to a family yet - open ${unlinked > 1 ? "them" : "it"} below and choose the family.</p>` : ""}
+  </section>`;
+}
+function settleForm(fid, p) {
+  const S = budgetSettings(), B = budgetData(), d = settleData(B).find((x) => x.f.id === (p?.fam || fid)), bal = d ? d.bal : 0, isNew = !p;
+  const curs = [...new Set([S.home, ...Object.keys(S.rates), ...CURRENCIES])];
+  p = p || { fam: fid, dir: bal < 0 ? "out" : "in", amount: Math.abs(Math.round(bal * 100) / 100) || "", currency: S.home, date: iso(new Date()) };
+  modal(`<h3>${isNew ? "Record a Payment" : "Edit Payment"}</h3><p class="muted small">${esc(famName(p.fam))} · balance now ${Math.abs(bal) < 0.5 ? "settled" : bal > 0 ? `they owe you ${money(bal, S.home, 2)}` : `you owe them ${money(-bal, S.home, 2)}`}</p>
+    <label class="pcand"><input type="radio" name="dir" value="in" ${p.dir === "in" ? "checked" : ""}><span><b>${esc(famName(p.fam))} paid us</b></span></label>
+    <label class="pcand"><input type="radio" name="dir" value="out" ${p.dir === "out" ? "checked" : ""}><span><b>We paid ${esc(famName(p.fam))}</b></span></label>
+    <div class="row"><label>Amount<input name="amount" type="number" step="0.01" min="0" inputmode="decimal" value="${esc(p.amount)}" required></label>
+      <label>Currency<select name="currency">${curs.map((c) => `<option ${c === (p.currency || S.home) ? "selected" : ""}>${c}</option>`).join("")}</select></label></div>
+    <div class="row"><label>Date<input type="date" name="date" value="${esc(p.date || iso(new Date()))}"></label><label>Note<input name="note" value="${esc(p.note || "")}" placeholder="e.g. Bank transfer"></label></div>`,
+    async (fd) => { const amount = parseFloat(fd.get("amount")); if (!(amount > 0)) throw new Error("Enter an amount");
+      await data.savePrivate(p.id || null, { kind: "settle", fam: p.fam, dir: fd.get("dir"), amount, currency: fd.get("currency"), date: fd.get("date"), note: fd.get("note").trim() }); },
+    isNew ? null : () => data.deletePrivate(p.id));
+}
 const usedMethods = () => [...new Set(Object.values(store.priv).map((v) => (v && v.paidWith || "").trim()).filter((m) => m && !/^paid$/i.test(m)))].sort();
 const payMethods = () => { const s = store.priv._budget; return s && Array.isArray(s.methods) ? s.methods : usedMethods(); };
 const budgetSettings = () => { const s = store.priv._budget || {}; return { home: s.home || "AUD", rates: s.rates || { USD: 1.5 }, total: +s.total || 0, cats: s.cats || {} }; };
@@ -525,15 +626,15 @@ function budgetData() {
     const pv = store.priv[i.id] || {}, m = parseMoney(pv.cost, S.home), due = parseMoney(pv.dueAtHotel, S.home);
     rows.push({ src: "item", id: i.id, cat: KIND[i.type], date: i.start, end: i.end, who: i.who || [], tbc: i.status === "tbc",
       name: i.type === "flight" ? `${codesOf(i.route).join(" → ")} ${i.number || ""}`.trim() : i.type === "stay" ? i.name : `${i.company || "Car"}${i.vehicle ? " · " + i.vehicle.replace(/\s*\(.*\)$/, "") : ""}`,
-      m, home: toHome(m, S), due: toHome(due, S), share: pv.share || "ours", paidWith: pv.paidWith || "" });
+      m, home: toHome(m, S), due: toHome(due, S), share: pv.share || "ours", fam: pv.fam, paidBy: pv.paidBy, theirPct: pv.theirPct, paidWith: pv.paidWith || "" });
   }
   for (const e of store.entries.filter((x) => x.kind === "activity" && x.status !== "recommended")) {
     const pv = store.priv[e.id] || {}; const m = parseMoney(pv.cost, S.home); if (!m) continue;
-    rows.push({ src: "entry", id: e.id, cat: "act", date: e.date, name: e.text, who: e.who || [], m, home: toHome(m, S), share: pv.share || "ours", planned: !e.confirmed });
+    rows.push({ src: "entry", id: e.id, cat: "act", date: e.date, name: e.text, who: e.who || [], m, home: toHome(m, S), share: pv.share || "ours", fam: pv.fam, paidBy: pv.paidBy, theirPct: pv.theirPct, planned: !e.confirmed });
   }
   for (const x of expenses()) {
     const m = { amt: +x.amount || 0, cur: x.currency || S.home };
-    rows.push({ src: "expense", id: x.id, cat: x.cat || "other", date: x.date, name: x.text || "Expense", who: x.who || [], m, home: toHome(m, S), share: "ours", paidWith: x.paidWith || "" });
+    rows.push({ src: "expense", id: x.id, cat: x.cat || "other", date: x.date, name: x.text || "Expense", who: x.who || [], m, home: toHome(m, S), share: x.share || "ours", fam: x.fam, paidBy: x.paidBy, theirPct: x.theirPct, paidWith: x.paidWith || "" });
   }
   const cats = Object.fromEntries(BCATS.map(([k]) => [k, { booked: 0, spent: 0, shared: 0, due: 0 }]));
   let noCost = 0, unknownRate = new Set();
@@ -542,8 +643,9 @@ function budgetData() {
     if (r.m && r.home === null) unknownRate.add(r.m.cur);
     const c = cats[r.cat] || cats.other, v = r.home || 0;
     if (r.share === "theirs") continue;
-    if (r.share === "split") { c.shared += v; continue; }
-    if (r.src === "expense") c.spent += v; else c.booked += v;
+    if (r.share === "split" && !famOf(r)) { c.shared += v; continue; }   // shared, but with no family chosen yet
+    const ov = ourPart(r);
+    if (r.src === "expense") c.spent += ov; else c.booked += ov;
     if (r.due) c.due += r.due;
   }
   const sum = (k) => Object.values(cats).reduce((a, c) => a + c[k], 0);
@@ -565,12 +667,12 @@ function renderBudget() {
   const exp = B.rows.filter((r) => r.src === "expense");
   const byDay = {}; exp.forEach((r) => (byDay[r.date] = byDay[r.date] || []).push(r));
   const expHtml = Object.keys(byDay).sort().reverse().map((d) => `<h4 class="bd-date">${d ? `${WD[D(d).getDay()]} ${longDate(d)}` : "No date"}<span>${money(byDay[d].reduce((a, r) => a + (r.home || 0), 0), cur, 2)}</span></h4>
-      ${byDay[d].map((r) => `<button class="bl-row c-${r.cat}" data-exp="${r.id}"><span class="dot"></span><span class="bl-name">${esc(r.name)}${r.paidWith ? `<small>${esc(r.paidWith)}</small>` : ""}</span><span class="bl-amt">${money(r.m.amt, r.m.cur, 2)}${r.m.cur !== cur && r.home !== null ? `<small>${money(r.home, cur, 2)}</small>` : ""}</span></button>`).join("")}`).join("");
+      ${byDay[d].map((r) => `<button class="bl-row c-${r.cat}" data-exp="${r.id}"><span class="dot"></span><span class="bl-name">${esc(r.name)}${r.paidWith || famOf(r) ? `<small>${[r.paidWith, famOf(r) && (r.share === "split" ? `shared with ${famName(famOf(r))}` : r.share === "theirs" ? `${famName(famOf(r))}'s` : `paid by ${famName(famOf(r))}`)].filter(Boolean).map(esc).join(" · ")}</small>` : ""}</span><span class="bl-amt">${money(r.m.amt, r.m.cur, 2)}${r.m.cur !== cur && r.home !== null ? `<small>${money(r.home, cur, 2)}</small>` : ""}</span></button>`).join("")}`).join("");
   const bk = B.rows.filter((r) => r.src !== "expense").sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const sideOf = (r) => { const t = store.trip; if (!r.date || !t?.start) return ""; const last = r.end && r.end > r.date && r.src === "item" ? addDays(r.end, -1) : (r.end || r.date);
     return last < t.start ? "before" : r.date > t.end ? "after" : ""; };
   const bkHtml = bk.map((r) => `<button class="bl-row c-${r.cat}${!r.m ? " missing" : ""}${sideOf(r) ? " out " + sideOf(r) : ""}" data-${r.src === "item" ? "bk" : "bact"}="${r.id}"><span class="dot"></span>
-      <span class="bl-name">${esc(r.name)}<small>${r.date ? shortDate(r.date) + (r.end && r.end !== r.date ? " – " + shortDate(r.end) : "") : ""}${r.share !== "ours" ? " · " + SHARE[r.share] : ""}${r.planned ? " · not confirmed" : ""}${r.tbc ? " · to book" : ""}${sideOf(r) ? ` · <span class="otag">${sideOf(r) === "before" ? "Before Trip" : "After Trip"}</span>` : ""}</small></span>
+      <span class="bl-name">${esc(r.name)}<small>${r.date ? shortDate(r.date) + (r.end && r.end !== r.date ? " – " + shortDate(r.end) : "") : ""}${r.share !== "ours" ? " · " + (famOf(r) ? (r.share === "split" ? `shared with ${famName(famOf(r))} (${pctOf(r)}% theirs)` : `${famName(famOf(r))}'s`) : SHARE[r.share]) : r.paidBy && r.paidBy !== "us" && famOf(r) ? ` · paid by ${famName(famOf(r))}` : ""}${r.planned ? " · not confirmed" : ""}${r.tbc ? " · to book" : ""}${sideOf(r) ? ` · <span class="otag">${sideOf(r) === "before" ? "Before Trip" : "After Trip"}</span>` : ""}</small></span>
       <span class="bl-amt">${r.m ? money(r.m.amt, r.m.cur, 2) : (r.tbc ? "To book" : "Add cost")}${r.m && r.m.cur !== cur && r.home !== null ? `<small>${money(r.home, cur, 2)}</small>` : ""}${r.due ? `<small>+ ${money(r.due, cur, 2)} due</small>` : ""}</span></button>`).join("");
   root.innerHTML = `${header({ views: true })}
     <div class="bd">
@@ -581,13 +683,14 @@ function renderBudget() {
         ${S.total ? `<div class="bar big${total > S.total ? " over" : ""}"><i style="width:${pct}%"></i></div><p class="bd-target">${pct}% of ${money(S.total, cur)} budget · ${total > S.total ? `${money(total - S.total, cur)} over` : `${money(S.total - total, cur)} left`}</p>` : `<p class="bd-target">No total budget set yet - add one in Budget Settings.</p>`}
         <div class="bd-chips">
           ${B.due ? `<span>Still to pay at properties <b>${money(B.due, cur)}</b></span>` : ""}
-          ${B.shared ? `<span>Family shares to settle <b>${money(B.shared, cur)}</b></span>` : ""}
+          ${B.shared ? `<span>Shared, no family chosen <b>${money(B.shared, cur)}</b></span>` : ""}
           ${B.noCost ? `<span class="warn">${B.noCost} booking${B.noCost > 1 ? "s" : ""} without a cost</span>` : ""}
           ${B.toBook ? `<span>${B.toBook} still to book</span>` : ""}
           ${B.unknownRate.length ? `<span class="warn">Add an exchange rate for ${B.unknownRate.join(", ")}</span>` : ""}
         </div>
         <div class="bd-acts"><button class="btn primary" data-add-exp>+ Add Expense</button><button class="btn" data-bsettings>Budget Settings</button></div>
       </section>
+      ${settleHtml(B)}
       <section class="charts"><h3>Charts</h3>${donutChart(B)}${dailyChart(B)}${cumulativeChart(B)}</section>
       <section><h3>By Category</h3><ul class="bc">${catRows || `<li class="muted">No costs yet.</li>`}</ul>
         <div class="bd-rates"><p class="muted small">All amounts in ${cur}${Object.keys(S.rates).length ? ` · ${Object.entries(S.rates).map(([c, r]) => `1 ${c} = ${r} ${cur}`).join(" · ")}` : ""}${store.priv._budget?.ratesDate ? ` · rates of ${longDate(store.priv._budget.ratesDate)}` : " · rates entered by hand"}</p>
@@ -604,6 +707,8 @@ function wireBudget() {
   root.querySelectorAll("[data-bact]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.bact))));
   root.querySelectorAll("[data-bsettings]").forEach((b) => (b.onclick = budgetForm));
   root.querySelectorAll("[data-rates]").forEach((b) => (b.onclick = refreshRates));
+  root.querySelectorAll("[data-settle-pay]").forEach((b) => (b.onclick = () => settleForm(b.dataset.settlePay)));
+  root.querySelectorAll("[data-settle-edit]").forEach((b) => (b.onclick = () => settleForm(null, { id: b.dataset.settleEdit, ...store.priv[b.dataset.settleEdit] })));
 }
 // latest rates (European Central Bank daily reference rates via Frankfurter - free, no key); returns { USD: 1.52, ... } in home currency
 async function fetchRates(home, curs) {
@@ -642,11 +747,12 @@ function dailyCosts(B, spentOnly) {
   const out = ds.map(blank), pre = blank(), post = blank();   // costs on days before / after the trip get their own grey bucket
   const put = (d, k, v) => { if (d in idx) out[idx[d]][k] += v; else if (ds.length) (d < ds[0] ? pre : post)[k] += v; };
   for (const r of B.rows) {
-    if (!r.home || r.share !== "ours" || (spentOnly && r.src !== "expense")) continue;
+    const amt = ourPart(r);
+    if (!amt || (spentOnly && r.src !== "expense")) continue;
     const k = CHART_ORDER.includes(r.cat) ? r.cat : "other";
     if (r.src === "item" && (r.cat === "stay" || r.cat === "car") && r.end && r.end > r.date) {
-      const n = dayDiff(r.date, r.end); for (let j = 0; j < n; j++) put(addDays(r.date, j), k, r.home / n);
-    } else put(r.date, k, r.home);
+      const n = dayDiff(r.date, r.end); for (let j = 0; j < n; j++) put(addDays(r.date, j), k, amt / n);
+    } else put(r.date, k, amt);
   }
   const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
   return { ds, out, pre, post, preT: sum(pre), postT: sum(post) };
@@ -770,12 +876,14 @@ function expenseForm(x) {
     <div class="row"><label>Category<select name="cat">${BCATS.map(([k, l]) => `<option value="${k}" ${k === (x.cat || "food") ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label>Date<input type="date" name="date" value="${x.date || defaultExpenseDate()}"></label></div>
     ${payField(x.paidWith)}
+    ${shareFields(x, (k) => "s_" + k)}
     ${whoBoxes(x.who || PEOPLE())}`,
     async (fd) => {
       const amount = parseFloat(fd.get("amount")); if (!(amount >= 0)) throw new Error("Enter an amount");
-      await data.savePrivate(x.id || null, { kind: "expense", text: fd.get("text").trim(), amount, currency: fd.get("currency"), cat: fd.get("cat"), date: fd.get("date"), paidWith: readPay(fd), who: fd.getAll("who") });
+      const sh = { share: fd.get("s_share") || "ours", fam: fd.get("s_fam") || "", paidBy: fd.get("s_paidBy") || "us", theirPct: fd.get("s_theirPct") || "" };
+      await data.savePrivate(x.id || null, { kind: "expense", text: fd.get("text").trim(), amount, currency: fd.get("currency"), cat: fd.get("cat"), date: fd.get("date"), paidWith: readPay(fd), who: fd.getAll("who"), ...sh });
     }, isNew ? null : () => data.deletePrivate(x.id));
-  wirePay(document.querySelector(".sheet"));
+  wirePay(document.querySelector(".sheet")); wireShare([...document.querySelectorAll(".sheet")].pop());
 }
 function budgetForm() {
   const S = budgetSettings();
@@ -2874,7 +2982,7 @@ function itemForm(item) {
   const isNew = !item.id; const pv = (item.id && store.priv[item.id]) || {};
   const typeSel = isNew ? `<label>Type<select name="type">${["flight", "stay", "car"].map((t) => `<option value="${t}" ${t === item.type ? "selected" : ""}>${cap(t)}</option>`).join("")}</select></label>` : "";
   const fieldsFor = (type, src = item) => FIELDS[type].map(([k, l]) => `<label>${l}<input name="${k}" value="${esc(src[k] || "")}"></label>`).join("");
-  const privKeys = [...new Set([...PRIV_KEYS, ...Object.keys(pv)])].filter((k) => !["share", "updatedBy", "updatedAt", "kind"].includes(k));
+  const privKeys = [...new Set([...PRIV_KEYS, ...Object.keys(pv)])].filter((k) => !["share", "fam", "paidBy", "theirPct", "updatedBy", "updatedAt", "kind"].includes(k));
   const statusSel = (st) => `<label>Status<select name="status"><option value="booked" ${st !== "tbc" ? "selected" : ""}>Booked</option><option value="tbc" ${st === "tbc" ? "selected" : ""}>TBC</option></select></label>`;
   modal(`<h3>${isNew ? "Add Booking" : "Edit " + cap(item.type)}</h3>${PDF_BTN}${typeSel}
     ${whoBoxes(item.who || [ui.person])}
@@ -2884,7 +2992,7 @@ function itemForm(item) {
     <label>Note (Visible to Family)<input name="note" value="${esc(item.note || "")}"></label>
     <details class="privbox" ${Object.keys(pv).length ? "open" : ""}><summary>Private Details (Editors Only)</summary>
       ${privKeys.map((k) => k === "paidWith" ? payField(pv.paidWith, "priv.paidWith") : `<label>${esc(label(k))}<input name="priv.${k}" value="${esc(pv[k] || "")}"></label>`).join("")}
-      <label>Who Pays<select name="priv.share">${Object.entries(SHARE).map(([k, l]) => `<option value="${k}" ${(pv.share || "ours") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label></details>`,
+      ${shareFields(pv)}</details>`,
     async (fd, form) => {
       const type = fd.get("type") || item.type;
       const out = { ...item, type, who: fd.getAll("who"), start: fd.get("start"), end: fd.get("end"), note: fd.get("note"), status: fd.get("status") || item.status || "booked" };
@@ -2923,7 +3031,7 @@ function itemForm(item) {
     }, isNew ? null : () => data.deleteItem(item.id));
   const form = document.querySelector(".sheet");
   const sel = form.querySelector("select[name=type]");
-  wirePay(form);
+  wirePay(form); wireShare(form);
   const switchType = (t, src) => {
     form.querySelector("#typeFields").innerHTML = fieldsFor(t, src);
     form.querySelector("#statusBox").innerHTML = t !== "flight" ? statusSel(src.status) : "";
@@ -2957,7 +3065,7 @@ function entryForm(e) {
     ${whoBoxes(e.who)}
     ${e.kind === "activity" && isEditor() ? `<details class="privbox" ${store.priv[e.id]?.cost ? "open" : ""}><summary>Cost (Editors Only)</summary>
       <label>Cost<input name="pcost" value="${esc(store.priv[e.id]?.cost || "")}" placeholder="e.g. USD 240 or AU$95"></label>
-      <label>Who Pays<select name="pshare">${Object.entries(SHARE).map(([k, l]) => `<option value="${k}" ${(store.priv[e.id]?.share || "ours") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label></details>` : ""}`,
+      ${shareFields(store.priv[e.id] || {}, (k) => "p" + k)}</details>` : ""}`,
     async (fd, form) => {
       const out = { ...e, text: fd.get("text").trim(), place: fd.get("place") ?? e.place ?? "", status: fd.get("status") || "planned", confirmed: e.kind === "activity" ? (fd.get("confirmed") === "on" || !!form._pendingFile) && fd.get("status") !== "recommended" : true,
                     date: fd.get("date"), endDate: fd.get("endDate") || fd.get("date"), who: fd.getAll("who") };
@@ -2965,10 +3073,10 @@ function entryForm(e) {
       if (out.place !== (e.place || "") || out.text.split("\n")[0] !== String(e.text || "").split("\n")[0]) { delete out.geo; delete out.routeSkip; }   // place changed: look it up again for routes
       const id = await data.saveEntry(out);
       const pc = (fd.get("pcost") || "").trim(), had = store.priv[id] || store.priv[e.id];
-      if (pc || had?.cost) await data.savePrivate(id, { ...(had || {}), cost: pc, share: fd.get("pshare") || "ours" });
+      if (pc || had?.cost) await data.savePrivate(id, { ...(had || {}), cost: pc, share: fd.get("pshare") || "ours", fam: fd.get("pfam") || "", paidBy: fd.get("ppaidBy") || "us", theirPct: fd.get("ptheirPct") || "" });
       if (form._pendingFile) { toast("Attaching file…"); await data.uploadFile(form._pendingFile, { entryId: id, date: out.date }); toast("Saved and confirmed, with file attached"); }
     }, isNew ? null : () => data.deleteEntry(e.id));
-  const form = document.querySelector(".sheet");
+  const form = document.querySelector(".sheet"); wireShare(form);
   wireExtract(form, () => "activity", (r) => {
     const txt = [r.text || r.name, r.time ? "at " + r.time : ""].filter(Boolean).join(" ");
     setVal(form, "text", txt); setVal(form, "place", r.place || r.address); setVal(form, "pcost", r.private?.cost); setVal(form, "date", r.start || r.date); setVal(form, "endDate", r.end || r.start || r.date);

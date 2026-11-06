@@ -504,7 +504,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v114";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v115";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -1644,8 +1644,13 @@ const cap = (w) => String(w || "").replace(/^./, (c) => c.toUpperCase());
 const label = (k) => LABELS[k] || k;
 const fileLink = (f) => `<button class="filelink${data.offline.ids.has(f.id) ? " off" : ""}" data-file="${f.id}" ${data.offline.ids.has(f.id) ? `title="Saved on this phone - opens without signal"` : ""}><i class="ic16">${I.file}</i>${esc(f.name)}${data.offline.ids.has(f.id) ? `<i class="offmark" aria-label="saved offline">${I.check}</i>` : ""}</button>`;
 // ---------------------------------------------------------------- offline travel documents (this phone)
-const offOn = (tid) => { try { return !!JSON.parse(localStorage.getItem("tp.offline") || "{}")[tid]; } catch (e) { return false; } };
-const setOff = (tid, v) => { try { const o = JSON.parse(localStorage.getItem("tp.offline") || "{}"); if (v) o[tid] = true; else delete o[tid]; localStorage.setItem("tp.offline", JSON.stringify(o)); } catch (e) { /* ignore */ } };
+const offGet = (tid) => { try { return JSON.parse(localStorage.getItem("tp.offline") || "{}")[tid] || null; } catch (e) { return null; } };
+const offOn = (tid) => !!offGet(tid);
+const offWho = (tid) => { const v = offGet(tid); return v && Array.isArray(v.who) ? v.who : PEOPLE(); };
+const setOff = (tid, v) => { try { const o = JSON.parse(localStorage.getItem("tp.offline") || "{}"); if (v) o[tid] = v; else delete o[tid]; localStorage.setItem("tp.offline", JSON.stringify(o)); } catch (e) { /* ignore */ } };
+// whose a document is: the people on the booking or activity it's attached to (unattached ones count for everyone)
+const fileWho = (f) => { const it = f.itemId && store.items.find((i) => i.id === f.itemId), en = f.entryId && store.entries.find((e) => e.id === f.entryId); return (it || en)?.who || []; };
+const offWanted = (tid) => { const who = offWho(tid); return store.files.filter((f) => (f.path || f.demoUrl) && (!fileWho(f).length || fileWho(f).some((c) => who.includes(c)))); };
 const offList = (tid) => { try { return JSON.parse(localStorage.getItem("tp.offline.files") || "{}")[tid] || []; } catch (e) { return []; } };
 const setOffList = (tid, ids) => { try { const o = JSON.parse(localStorage.getItem("tp.offline.files") || "{}"); o[tid] = ids; localStorage.setItem("tp.offline.files", JSON.stringify(o)); } catch (e) { /* ignore */ } };
 const offState = { busy: false, done: 0, total: 0, sig: "", err: "" };
@@ -1654,23 +1659,44 @@ async function openFile(f) {
   if (!f) return;
   const phone = matchMedia("(pointer: coarse)").matches;
   const b = await data.offlineBlob(f.id);
-  if (b && phone) {   // phones: hand the saved copy to the phone's own viewer, with its real file name
-    const u = URL.createObjectURL(new Blob([b], { type: f.contentType || b.type })), a = document.createElement("a");
-    a.href = u; a.download = f.name || "document"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 60000); return;
-  }
+  if (b && phone) return docViewer(f, b);   // phones: show the saved copy inside the app (nothing lands in Downloads)
   const w = window.open("", "_blank");
   const show = (u) => { if (w) w.location = u; else location.href = u; };
   if (b) { const u = URL.createObjectURL(new Blob([b], { type: f.contentType || b.type })); show(u); setTimeout(() => URL.revokeObjectURL(u), 60000); return; }
   if (!navigator.onLine) { w?.close(); return toast("No signal, and this document isn't saved on this phone"); }
   try { show(await data.fileUrl(f)); } catch (e) { w?.close(); toast("Couldn't open: " + (e.code || e.message)); }
 }
+// in-app viewer: images as they are, PDFs drawn page by page with PDF.js (cached for offline by the service worker)
+const PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/";
+const loadPdfJs = () => import(PDFJS + "pdf.min.mjs").then((m) => { m.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.mjs"; return m; });
+async function docViewer(f, blob) {
+  const box = document.createElement("div"); box.className = "docview"; box.setAttribute("role", "dialog");
+  box.innerHTML = `<div class="dv-bar"><b>${esc(f.name)}</b><button class="lb-btn" data-dvz="-1" aria-label="Zoom out">−</button><button class="lb-btn" data-dvz="1" aria-label="Zoom in">+</button><button class="lb-btn" data-dvx aria-label="Close">✕</button></div><div class="dv-body"><p class="muted">Opening…</p></div>`;
+  document.body.appendChild(box); const body = box.querySelector(".dv-body"); let zoom = 1;
+  const close = () => box.remove();
+  box.querySelector("[data-dvx]").onclick = close;
+  box.querySelectorAll("[data-dvz]").forEach((b) => (b.onclick = () => { zoom = Math.max(0.6, Math.min(3, zoom + +b.dataset.dvz * 0.4)); body.style.setProperty("--z", zoom); }));
+  const type = f.contentType || blob.type || "";
+  if (/^image\//.test(type)) { const u = URL.createObjectURL(blob); body.innerHTML = `<img src="${u}" alt="">`; return; }
+  if (!/pdf/.test(type) && !/\.pdf$/i.test(f.name || "")) { body.innerHTML = `<p class="muted">This type of file can't be shown here.</p>`; return; }
+  try {
+    const pdfjs = await loadPdfJs(), doc = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+    body.innerHTML = "";
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n), vp = page.getViewport({ scale: 2 }), c = document.createElement("canvas");
+      c.width = vp.width; c.height = vp.height; body.appendChild(c); await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+    }
+  } catch (e) { console.warn("pdf view", e); body.innerHTML = `<p class="muted">Couldn't show this PDF here.</p><button class="btn" data-dvdl>Open in the phone's PDF viewer</button>`;
+    body.querySelector("[data-dvdl]").onclick = () => { const u = URL.createObjectURL(blob), a = document.createElement("a"); a.href = u; a.download = f.name || "document.pdf"; a.click(); }; }
+}
 // keep every document of this trip on the phone (new ones are added, deleted ones removed)
 async function syncOffline(force) {
   const tid = ui.tripId; if (!tid || !isEditor() || !offOn(tid) || offState.busy || !navigator.onLine) return;
   await data.offline.ready;
-  const files = store.files.filter((f) => f.path || f.demoUrl), sig = files.map((f) => f.id).sort().join();
+  if (!offState.warm) { offState.warm = true; loadPdfJs().catch(() => {}); fetch(PDFJS + "pdf.worker.min.mjs").catch(() => {}); }   // the in-app PDF viewer, cached for offline
+  const files = offWanted(tid), sig = files.map((f) => f.id).sort().join() + "|" + offWho(tid).join();
   if (!force && sig === offState.sig) return;
-  const gone = offList(tid).filter((id) => !files.some((f) => f.id === id));
+  const gone = [...new Set(offList(tid).concat(store.files.map((f) => f.id)))].filter((id) => data.offline.ids.has(id) && !files.some((f) => f.id === id));
   const want = files.filter((f) => !data.offline.ids.has(f.id));
   if (gone.length) await data.removeOffline(gone).catch(() => {});
   if (!want.length) { offState.sig = sig; setOffList(tid, files.map((f) => f.id)); return; }
@@ -1684,19 +1710,28 @@ async function syncOffline(force) {
   const y = scrollY; render(); scrollTo(0, y);
 }
 function offlineForm() {
-  const tid = ui.tripId, on = offOn(tid), files = store.files.filter((f) => f.path || f.demoUrl), have = files.filter((f) => data.offline.ids.has(f.id));
-  const mb = (n) => (n / 1048576).toFixed(n > 1048576 * 10 ? 0 : 1) + " MB", size = files.reduce((a, f) => a + (f.size || 0), 0);
+  const tid = ui.tripId, on = offOn(tid), all = store.files.filter((f) => f.path || f.demoUrl);
+  const mb = (n) => (n / 1048576).toFixed(n > 1048576 * 10 ? 0 : 1) + " MB";
+  let who = offWho(tid).slice();
+  const sum = () => { const fs = all.filter((f) => !fileWho(f).length || fileWho(f).some((c) => who.includes(c))), have = fs.filter((f) => data.offline.ids.has(f.id));
+    return `${fs.length} document${fs.length === 1 ? "" : "s"} · about ${mb(fs.reduce((a, f) => a + (f.size || 0), 0))} · <b>${have.length} saved on this phone</b>`; };
   modal(`<h3>Offline Documents</h3>
-    <p class="muted small">Keep this trip's booking documents - boarding passes, tickets, vouchers, hotel confirmations - on <b>this phone</b>, so they open with no signal (airports, border crossings, theme park gates). New documents are added automatically while the phone is online.</p>
-    <label class="pswitch"><input type="checkbox" name="on" ${on ? "checked" : ""}><span>Keep this trip's documents on this phone</span></label>
-    <p class="small">${files.length} document${files.length === 1 ? "" : "s"} · about ${mb(size)} · <b>${have.length} saved on this phone</b>${offState.busy ? ` · saving <span data-offprog>${offState.done} of ${offState.total}</span>…` : ""}</p>
+    <p class="muted small">Keep booking documents - boarding passes, tickets, vouchers, hotel confirmations - on <b>this phone</b>, so they open with no signal (airports, border crossings, theme park gates). New ones are added automatically while the phone is online.</p>
+    <label class="pswitch"><input type="checkbox" name="on" ${on ? "checked" : ""}><span>Keep documents on this phone</span></label>
+    <div class="offwho"><span class="muted small">Whose documents:</span><span class="ddots">${PEOPLE().map((c) => `<button type="button" class="dd${who.includes(c) ? " on" : ""}" data-offp="${esc(c)}" style="--pc:${pcolor(c)}" aria-pressed="${who.includes(c)}" title="${esc(NAME(c))}">${esc(c)}</button>`).join("")}</span></div>
+    <p class="small" data-offsum>${sum()}${offState.busy ? ` · saving <span data-offprog>${offState.done} of ${offState.total}</span>…` : ""}</p>
     ${offState.err ? `<p class="jwarn small">Some couldn't be saved: ${esc(offState.err)}</p>` : ""}
-    <p class="muted small">Only on this phone - Debora turns it on on hers too. Documents marked with a tick are saved. Phones can clear saved files if they run very low on space; opening the app online saves them again.</p>`,
+    <p class="muted small">They're kept inside the app (not in your Files, Downloads or Gallery). Unticking a person removes their documents from this phone; switching off removes them all. Uninstalling the app also deletes them. Documents marked ✓ are saved.</p>`,
     async (fd) => {
-      const v = fd.get("on") === "on"; setOff(tid, v);
-      if (v) { offState.sig = ""; toast(`Saving ${files.length - have.length} document${files.length - have.length === 1 ? "" : "s"} on this phone…`); setTimeout(() => syncOffline(true), 100); }
-      else if (have.length && confirm(`Remove the ${have.length} saved document${have.length > 1 ? "s" : ""} from this phone?`)) { await data.removeOffline(have.map((f) => f.id)); setOffList(tid, []); toast("Removed from this phone"); }
+      const v = fd.get("on") === "on";
+      if (v && !who.length) throw new Error("Pick at least one person");
+      if (v) { setOff(tid, { who }); offState.sig = ""; toast("Updating the documents on this phone…"); setTimeout(() => syncOffline(true), 100); }
+      else { setOff(tid, null); const have = all.filter((f) => data.offline.ids.has(f.id));
+        if (have.length && confirm(`Remove the ${have.length} saved document${have.length > 1 ? "s" : ""} from this phone?`)) { await data.removeOffline(have.map((f) => f.id)); setOffList(tid, []); toast("Removed from this phone"); } }
     });
+  const m = [...document.querySelectorAll(".modal")].pop();
+  m.querySelectorAll("[data-offp]").forEach((b) => (b.onclick = () => { const c = b.dataset.offp; who = who.includes(c) ? who.filter((x) => x !== c) : who.concat(c);
+    b.classList.toggle("on", who.includes(c)); b.setAttribute("aria-pressed", who.includes(c)); m.querySelector("[data-offsum]").innerHTML = sum(); }));
 }
 
 

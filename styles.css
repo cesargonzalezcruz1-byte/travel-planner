@@ -911,3 +911,9 @@ body.noscroll{overflow:hidden}
 .tms-bar > b{flex:1;min-width:140px;font-size:16px} .tms-bar .ddots{display:flex;gap:6px;flex-wrap:wrap}
 .tmapsheet .tmap{width:100%;flex:1}
 .cchip.map i{color:var(--stay)}
+/* trip map sheet: the map fills the space above the day panel */
+.tmapsheet .tmap{display:flex;flex-direction:column;gap:8px;max-width:none;padding:10px 12px max(12px,env(safe-area-inset-bottom))}
+.tmapsheet .tmap-canvas{flex:1 1 auto;height:auto;min-height:320px}
+.tmapsheet .tmap-msg:empty{display:none}
+.tmapsheet{overflow:hidden} .tmapsheet .tmap{min-height:0}
+.cchip.ask i{color:var(--accent)}

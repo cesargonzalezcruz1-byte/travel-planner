@@ -247,7 +247,7 @@ function renderHome() {
         return `<button type="button" class="tc-warn ${lvl}" data-docwarn="${esc(t.id)}" title="${esc(iss.map((x) => (x.per.name || x.per.code) + ": " + x.st.text).join("\n"))}"><i class="ic16">${I.warn}</i>${lvl === "bad" ? "Document problem" : "Check documents"} · ${who.map(esc).join(", ")}</button>`; })()}
       <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
       <div class="tc-people">${(t.travellers || []).map((p, k) => `<span class="pchip tp" style="--pc:${upc(p.color) || TDEFAULT[k % TDEFAULT.length]}" title="${esc(p.name || p.code)}"><b>${esc(p.code)}</b></span>`).join("")}</div>
-      <div class="tc-ctry"><button type="button" class="cchip map" data-tmap="${esc(t.id)}"><i>${ICON.map}</i>Trip Map</button>${t.countryInfo?.codes?.length ? t.countryInfo.codes.map((c) => `<button type="button" class="cchip" data-cinfo="${esc(t.id)}" data-c="${c}"><i>${I.globe}</i>${esc(countryName(c))}</button>`).join("")
+      <div class="tc-ctry"><button type="button" class="cchip ask" data-task="${esc(t.id)}"><i>${I.chat}</i>Ask</button><button type="button" class="cchip map" data-tmap="${esc(t.id)}"><i>${ICON.map}</i>Trip Map</button>${t.countryInfo?.codes?.length ? t.countryInfo.codes.map((c) => `<button type="button" class="cchip" data-cinfo="${esc(t.id)}" data-c="${c}"><i>${I.globe}</i>${esc(countryName(c))}</button>`).join("")
         : isEditor() && t.end >= today ? `<button type="button" class="cchip add" data-cnew="${esc(t.id)}"><i>${I.globe}</i>+ Country Info</button>` : ""}</div>
       ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
     </article>`;
@@ -269,6 +269,7 @@ function renderHome() {
       const ci = e.target.closest("[data-cinfo]"); if (ci) return showCountryInfo(store.trips.find((t) => t.id === ci.dataset.cinfo), ci.dataset.c);
       const cn = e.target.closest("[data-cnew]"); if (cn) return countryInfoFlow(cn.dataset.cnew);
       const tm = e.target.closest("[data-tmap]"); if (tm) return openTripMap(tm.dataset.tmap);
+      const ta = e.target.closest("[data-task]"); if (ta) return askTrip(ta.dataset.task);
       if (e.target.closest("[data-settings]")) return; localStorage.setItem("tp.trip", el.dataset.open); routeTo(el.dataset.open); };
     el.onkeydown = (e) => { if (e.key === "Enter") el.click(); };
   });
@@ -305,8 +306,9 @@ function tripContext() {
 }
 const chats = {};   // this session's conversation per trip
 const fmtAnswer = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
-function askTrip() {
-  const tid = ui.tripId, log = (chats[tid] ||= []);
+async function askTrip(tid = ui.tripId) {
+  try { await loadTripData(tid); } catch (e) { return toast(e.message); }
+  const log = (chats[tid] ||= []);
   const m = document.createElement("div"); m.className = "modal";
   m.innerHTML = `<div class="sheet askbox"><div class="ask-head"><h3>${I.chat}Ask the Trip</h3><button type="button" class="btn tiny" data-askx aria-label="Close">✕</button></div>
     <div class="ask-log" aria-live="polite"></div>
@@ -571,7 +573,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v118";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v119";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -647,7 +649,6 @@ function header(opts = {}) {
     <div class="hero-top">
       <button class="iconbtn" data-home aria-label="All trips" title="All trips">${ICON.menu}</button>
       <div class="hero-title"><span class="hero-sub">${esc(sub)}</span><span class="hero-name">${esc(t.title || "Travel Planner")}</span></div>
-      <button class="iconbtn" data-act="ask" aria-label="Ask the trip" title="Ask the trip">${I.chat}</button>
       <details class="more who"><summary class="pbtn" style="--pc:${mc};--pi:${inkOn(mc)}" aria-label="Traveller: ${esc(NAME(me))} - change" title="Change traveller">${esc(me)}</summary>
         <div class="pop"><span class="pop-role">Show itinerary for</span>
         ${PEOPLE().map((p) => `<button data-person="${p}" class="${p === me ? "on" : ""}"><span class="sw" style="background:${pcolor(p)};color:${inkOn(pcolor(p))}">${esc(p)}</span><span class="grow">${esc(NAME(p))}</span>${p === me ? "✓" : ""}</button>`).join("")}</div></details>
@@ -662,7 +663,7 @@ function header(opts = {}) {
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
         ${isEditor() ? `${mi("settings", I.gear, "Trip Setup")}${mi("people", I.users, "Traveller Profiles")}<hr>
         ${mi("bulk", I.clip, "Attach Documents…")}${mi("offline", I.download || I.archive, "Offline Documents…")}${mi("archive", I.archive, "Archive Documents (Zip)…")}<hr>` : ""}
-        ${mi("tripmap", ICON.map, "Trip Map")}${mi("country", I.globe, "Country Info")}${mi("album", I.book, "Export Album (Word)")}
+        ${mi("ask", I.chat, "Ask the Trip")}${mi("tripmap", ICON.map, "Trip Map")}${mi("country", I.globe, "Country Info")}${mi("album", I.book, "Export Album (Word)")}
         ${isEditor() ? `<hr>${mi("export", I.download, "Download Backup")}${mi("import", I.upload, "Restore from Backup…")}` : ""}<hr>
         ${mi("signout", I.logout, "Sign Out")}</div></details>
     </div>

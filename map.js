@@ -92,3 +92,41 @@ export async function searchPlaces(textQuery, near) {
   return (places || []).map((p) => ({ id: p.id, name: p.displayName || "", rating: p.rating || 0, count: p.userRatingCount || 0, address: p.formattedAddress || "",
     type: p.primaryTypeDisplayName || "", url: p.googleMapsURI || "", lat: p.location?.lat?.() ?? null, lng: p.location?.lng?.() ?? null }));
 }
+
+// ---------------------------------------------------------------- travel times between a day's stops (on demand)
+// Look a place up for routing: up to 3 candidates near the stay, with whether it looks vague (a whole town, far away, or nothing found).
+const BROAD = /^(locality|sublocality|administrative_area_level_\d|country|political|colloquial_area|postal_code|neighborhood|natural_feature)$/;
+const km = (a, b) => { const R = 6371, r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lng - a.lng) * r;
+  const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+export { km as distanceKm };
+export async function geocodeText(q) {
+  if (authFailed) throw new Error("Google Maps rejected the key");
+  await load(); const { Geocoder } = await google.maps.importLibrary("geocoding");
+  return geocode(new Geocoder(), q);
+}
+export async function findPlace(textQuery, near) {
+  if (authFailed) throw new Error("Google Maps rejected the key");
+  await load();
+  const { Place } = await google.maps.importLibrary("places");
+  const { places } = await Place.searchByText({ textQuery, fields: ["id", "displayName", "formattedAddress", "location", "types"], maxResultCount: 3, language: "en",
+    ...(near ? { locationBias: { center: near, radius: 30000 } } : {}) });
+  return (places || []).map((p) => { const lat = p.location?.lat?.(), lng = p.location?.lng?.();
+    return { id: p.id, name: p.displayName || "", address: p.formattedAddress || "", lat, lng, broad: (p.types || []).every((t) => BROAD.test(t)) && (p.types || []).length > 0,
+      km: near && lat != null ? Math.round(km(near, { lat, lng }) * 10) / 10 : null }; });
+}
+// One request to the Routes API: legs between origin, stops and destination (optionally letting Google pick the best order of the stops)
+export async function computeRoute(points, mode, optimize) {
+  if (!MAPS_API_KEY) throw new Error("No Google Maps key set up yet");
+  const wp = (p) => ({ location: { latLng: { latitude: p.lat, longitude: p.lng } } });
+  const body = { origin: wp(points[0]), destination: wp(points.at(-1)), intermediates: points.slice(1, -1).map(wp), travelMode: mode,
+    ...(mode === "DRIVE" ? { routingPreference: "TRAFFIC_UNAWARE" } : {}), ...(optimize && points.length > 3 ? { optimizeWaypointOrder: true } : {}), units: "METRIC" };
+  const r = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", { method: "POST",
+    headers: { "Content-Type": "application/json", "X-Goog-Api-Key": MAPS_API_KEY, "X-Goog-FieldMask": "routes.legs.duration,routes.legs.distanceMeters,routes.optimizedIntermediateWaypointIndex" },
+    body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const m = j.error?.message || `HTTP ${r.status}`;
+    throw new Error(/not been used|disabled|not enabled|SERVICE_DISABLED/i.test(m) ? "The Routes API isn't switched on for the Google key yet" : /referer|API_KEY_.*BLOCKED|not authorized/i.test(m) ? "The Google key doesn't allow the Routes API yet (key restrictions)" : m); }
+  const route = j.routes?.[0]; if (!route) throw new Error(mode === "WALK" ? "No walking route found" : "No route found between these places");
+  return { order: route.optimizedIntermediateWaypointIndex || null,
+    legs: (route.legs || []).map((l) => ({ sec: parseInt(String(l.duration || "0").replace("s", ""), 10) || 0, m: l.distanceMeters || 0 })) };
+}

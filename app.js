@@ -1,5 +1,5 @@
 import * as data from "./data.js";
-import { drawDayMap, mapsReady, searchPlaces } from "./map.js";
+import { drawDayMap, mapsReady, searchPlaces, findPlace, geocodeText, computeRoute, distanceKm } from "./map.js";
 import { buildAlbum, areaOf } from "./album.js";
 import { AIRPORT_TZ, checkinUrl, checkinInfo, timeIn } from "./checkin-core.js";
 // Preview another date: add ?today=2027-01-14 to the address to see the app as it will look on that day
@@ -353,6 +353,8 @@ function tripForm(t) {
 const SV = (d, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}${extra}</svg>`;
 const I = {
   pin: SV('<path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
+  walk: SV('<circle cx="13" cy="4" r="2"/><path d="m9 20 3-6 3 2v6M6 12l3-4 4 1 3 4 3 1"/><path d="M9 8 7 14"/>'),
+  route: SV('<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>'),
   camera: SV('<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>'),
   clip: SV('<path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/>'),
   trash: SV('<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>'),
@@ -385,7 +387,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v105";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v106";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
@@ -1497,8 +1499,8 @@ function renderDay() {
 
     <section><h3>Travel & Stays</h3>${its.length ? its.map((i) => itemCard(i, date)).join("") : `<p class="muted">No flights, hotels or cars today.</p>`}</section>
 
-    <section><h3>Activities</h3>${isEditor() ? `<p class="muted small">Tick ☑ to confirm - only confirmed activities show in the itinerary. Attaching a booking confirms it.</p>` : ""}<ul class="entries">${acts.map(entryLi).join("") || `<li class="muted">Nothing planned yet.</li>`}</ul>
-      ${isEditor() ? `<button class="btn small" data-new-entry="activity">+ Add Activity</button>` : ""}</section>
+    <section><h3>Activities</h3>${isEditor() ? `<p class="muted small">Tick ☑ to confirm - only confirmed activities show in the itinerary. Attaching a booking confirms it.</p>` : ""}<ul class="entries">${sortActs(acts, date).map(entryLi).join("") || `<li class="muted">Nothing planned yet.</li>`}</ul>
+      ${isEditor() ? `<button class="btn small" data-new-entry="activity">+ Add Activity</button>` : ""}${routePanel(p, date, acts)}</section>
 
     ${recsHtml(p, date, recs.slice().sort((a, b) => votesFor("e_" + b.id).length - votesFor("e_" + a.id).length).map(entryLi).join(""))}
 
@@ -1525,7 +1527,7 @@ function renderDay() {
   const dpane = ui.pane;
   root.querySelector("[data-back]").onclick = () => (dpane !== null && dpane !== undefined ? (ui.splitDay[dpane] = null, render()) : routeTo(ui.tripId, null));
   if (isEditor()) wireBudget();
-  wireJournal(date); wireRecs(p, date, others); wireCheckins(); wireVotes();
+  wireJournal(date); wireRecs(p, date, others); wireCheckins(); wireVotes(); wireRoute(p, date, acts);
   root.querySelectorAll("[data-with]").forEach((b) => (b.onclick = async () => {
     const o = b.dataset.with, next = !together(p, o, date), auto = autoTogether(p, o, date);
     try { await data.setTogether(date, p, o, next === auto ? null : next); toast(`${NAME(o)} ${next ? "with" : "not with"} ${NAME(p)} on ${shortDate(date)}`); }
@@ -2312,6 +2314,148 @@ function ensureRecs() {
   recLocations().filter((l) => (!have[l.key] || have[l.key].v !== REC_V) && !recState.tried.has(l.key) && !recState.busy.has(l.key))
     .forEach((l) => { recState.tried.add(l.key); recQueue = recQueue.then(() => fetchRecs(l)); });
 }
+// ---------------------------------------------------------------- travel times between the day's stops (on demand, Routes API)
+const ROUTE_KEY = (p, date) => `${date}_${p}`;
+const actSig = (acts) => acts.map((e) => [e.id, e.place || "", timeIn(e.text) || timeIn(e.time), e.routeSkip ? 1 : 0, e.geo ? 1 : 0].join("~")).join("|");
+const fmtDur = (sec) => { const m = Math.max(1, Math.round(sec / 60)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? " " + (m % 60) + " min" : ""}`; };
+const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`);
+// activities in the order chosen with "Use this order" (if any), otherwise as they are
+function sortActs(acts, date) {
+  if (!acts.some((e) => e.seq?.[date] != null)) return acts;
+  return acts.slice().sort((a, b) => (a.seq?.[date] ?? 999) - (b.seq?.[date] ?? 999));
+}
+function dayStays(p, date) {
+  const st = itemsFor(p).filter((i) => i.type === "stay");
+  return { morning: st.find((i) => i.start < date && date <= i.end), night: st.find((i) => i.start <= date && date < i.end) };
+}
+function routePanel(p, date, acts) {
+  const r = store.trip?.routes?.[ROUTE_KEY(p, date)];
+  if (!acts.length) return "";
+  if (!r) return isEditor() ? `<div class="rplan"><button class="btn small" data-route-plan>${I.route}Plan Route</button><span class="muted small">Travel times between today's stops and the best order to visit them</span></div>` : "";
+  const stale = r.sig !== actSig(acts);
+  const leg = (l) => `<li class="rleg ${l.mode}"><i>${l.mode === "walk" ? I.walk : ICON.car}</i>${fmtDur(l.sec)} · ${fmtDist(l.m)}</li>`;
+  const stop = (x, cls) => `<li class="rstop ${cls || ""}"><b>${esc(x.name)}</b>${x.time ? `<span class="rtime">${esc(x.time)}</span>` : ""}${x.match && x.match !== x.name ? `<small class="muted">${esc(x.match)}</small>` : ""}</li>`;
+  const pts = [r.from && { ...r.from, hotel: 1 }, ...r.stops, r.to && { ...r.to, hotel: 1 }].filter(Boolean);
+  const drive = r.legs.filter((l) => l.mode === "drive"), walk = r.legs.filter((l) => l.mode === "walk"), sum = (a, k) => a.reduce((x, l) => x + l[k], 0);
+  const cur = sortActs(acts, date).filter((e) => r.stops.some((x) => x.id === e.id)).map((e) => e.id).join(), sugg = r.stops.map((x) => x.id).join();
+  const gm = `https://www.google.com/maps/dir/?api=1&origin=${pts[0].lat},${pts[0].lng}&destination=${pts.at(-1).lat},${pts.at(-1).lng}${pts.length > 2 ? "&waypoints=" + pts.slice(1, -1).slice(0, 9).map((x) => `${x.lat},${x.lng}`).join("|") : ""}&travelmode=${walk.length && !drive.length ? "walking" : "driving"}`;
+  return `<div class="route${stale ? " stale" : ""}">
+    <div class="rhead2"><b>${I.route}Route</b><span class="muted small">${drive.length ? `${ICON.car}${fmtDur(sum(drive, "sec"))} · ${fmtDist(sum(drive, "m"))}` : ""}${drive.length && walk.length ? " &nbsp; " : ""}${walk.length ? `${I.walk}${fmtDur(sum(walk, "sec"))} · ${fmtDist(sum(walk, "m"))}` : ""}</span></div>
+    ${stale ? `<p class="jwarn small">The activities changed since this was worked out${isEditor() ? " - tap Recalculate" : ""}.</p>` : ""}
+    <ol class="rlist">${pts.map((x, k) => (k ? leg(r.legs[k - 1] || { mode: "drive", sec: 0, m: 0 }) : "") + stop(x, x.hotel ? "hotel" : "")).join("")}</ol>
+    ${(r.warn || []).map((w) => `<p class="jwarn small">${I.warn}${esc(w)}</p>`).join("")}
+    ${r.skipped?.length ? `<p class="muted small">Not included: ${r.skipped.map((x) => `${esc(x.name)}${isEditor() ? ` <button class="lnk" data-route-unskip="${esc(x.id)}">include</button>` : ""}`).join(", ")}</p>` : ""}
+    <div class="ractions">${isEditor() && !stale && cur !== sugg ? `<button class="btn small primary" data-route-apply>Use This Order</button>` : ""}
+      <a class="btn small" href="${esc(gm)}" target="_blank" rel="noopener">Open in Google Maps</a>
+      ${isEditor() ? `<span class="seg-mini rmode">${[["auto", "Auto"], ["walk", "Walk"], ["drive", "Drive"]].map(([v, l]) => `<button type="button" class="${(r.mode || "auto") === v ? "on" : ""}" data-route-mode="${v}">${l}</button>`).join("")}</span>
+        <button class="btn small" data-route-plan>Recalculate</button>` : ""}</div>
+    <p class="muted small">${r.optimised ? "Best order worked out by Google Maps" : r.fixed ? "Kept around the booked times" : "In the order planned"} · ${r.mode === "walk" ? "walking" : r.mode === "drive" ? "driving" : "walk under 1.5 km, otherwise drive"} · updated ${when(r.at)}</p>
+  </div>`;
+}
+// Ask about places that are vague (a whole town, far away, or not found): pick a match, search again, or leave the activity out
+function confirmPlaces(list, near) {
+  return new Promise((done) => {
+    let settled = false; const finish = (v) => { if (!settled) { settled = true; done(v); } };
+    const opts = (x) => `${x.cands.map((c, k) => `<label class="pcand"><input type="radio" name="pl_${x.e.id}" value="${k}" ${k === 0 && !x.why.startsWith("Nothing") ? "checked" : ""}><span><b>${esc(c.name)}</b><small class="muted">${esc(c.address)}${c.km != null ? ` · ${c.km} km from the hotel` : ""}</small></span></label>`).join("")}
+      <label class="pcand"><input type="radio" name="pl_${x.e.id}" value="skip" ${x.why.startsWith("Nothing") ? "checked" : ""}><span><b>Leave this activity out</b><small class="muted">It won't be part of the route</small></span></label>`;
+    modal(`<h2>Check These Places</h2><p class="muted small">These activities don't have a clear location. Pick the right place, search for it, or leave the activity out of the route. Your choice is remembered.</p>
+      ${list.map((x) => `<fieldset class="pconf" data-pc="${esc(x.e.id)}"><legend>${esc(firstText(x.e.text))}</legend><p class="small pwhy">${esc(x.why)}</p>
+        <div class="pcands">${opts(x)}</div>
+        <div class="psearch"><input type="text" placeholder="Search for the place…" value="${esc(x.e.place || firstText(x.e.text))}" data-pq><button type="button" class="btn small" data-ps>Search</button></div></fieldset>`).join("")}`,
+      async (fd) => { const out = {}; list.forEach((x) => { const v = fd.get("pl_" + x.e.id); out[x.e.id] = v === "skip" || v == null ? "skip" : x.cands[+v]; }); finish(out); });
+    const m = document.querySelector(".modal:last-of-type"); m.querySelector("button.primary").textContent = "Continue";
+    m.querySelector("[data-cancel]").addEventListener("click", () => finish(null)); m.addEventListener("click", (e) => { if (e.target === m) finish(null); });
+    m.querySelectorAll("fieldset[data-pc]").forEach((fs) => { const x = list.find((y) => y.e.id === fs.dataset.pc), q = fs.querySelector("[data-pq]");
+      const go = async () => { const b = fs.querySelector("[data-ps]"); b.disabled = true; b.textContent = "Searching…";
+        try { x.cands = await findPlace(q.value.trim(), near); x.why = x.cands.length ? "Pick the right one:" : "Nothing found - try another search, or leave it out"; }
+        catch (e) { toast(e.message); }
+        fs.querySelector(".pwhy").textContent = x.why; fs.querySelector(".pcands").innerHTML = opts(x); b.disabled = false; b.textContent = "Search"; };
+      fs.querySelector("[data-ps]").onclick = go; q.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } }; });
+  });
+}
+async function planRoute(p, date, acts, mode) {
+  mode ||= store.trip?.routes?.[ROUTE_KEY(p, date)]?.mode || "auto";
+  const { morning, night } = dayStays(p, date);
+  const hotelPos = async (s) => { if (!s) return null; const g = await geocodeText(s.address || s.name).catch(() => null); return g && { name: s.short || s.name, lat: g.lat, lng: g.lng }; };
+  toast("Looking up today's places…");
+  const from = await hotelPos(morning || night), to = night && night !== morning ? await hotelPos(night) : from;
+  const near = (to || from) && { lat: (to || from).lat, lng: (to || from).lng };
+  const stops = [], skipped = [], vague = [];
+  for (const e of acts) {
+    if (e.routeSkip) { skipped.push({ id: e.id, name: firstText(e.text) }); continue; }
+    if (e.geo) { stops.push({ e, at: e.geo }); continue; }
+    const q = e.place || firstText(e.text);
+    let cands = []; try { cands = await findPlace(q, near); } catch (x) { throw x; }
+    const top = cands[0];
+    const why = !top ? `Nothing found for "${q}"` : !e.place ? `No place entered - is it ${top.name}?` : top.broad ? `"${q}" is a whole area, not a specific place` : top.km != null && top.km > 40 ? `${top.name} is ${top.km} km from the hotel` : "";
+    if (why) vague.push({ e, cands, why }); else { stops.push({ e, at: top }); await data.saveEntry({ ...e, geo: { lat: top.lat, lng: top.lng, name: top.name, address: top.address } }).catch(() => {}); }
+  }
+  if (vague.length) {
+    const ans = await confirmPlaces(vague, near); if (!ans) return;
+    for (const x of vague) { const a = ans[x.e.id];
+      if (a === "skip") { skipped.push({ id: x.e.id, name: firstText(x.e.text) }); await data.saveEntry({ ...x.e, routeSkip: true }); }
+      else { const geo = { lat: a.lat, lng: a.lng, name: a.name, address: a.address }; stops.push({ e: x.e, at: geo }); await data.saveEntry({ ...x.e, geo }); } }
+  }
+  if (!stops.length) return toast("No activities with a place to route");
+  // keep booked times in their order; fit the others in where they add the least distance
+  const timeOf = (e) => timeIn(e.text) || timeIn(e.time);
+  const order0 = acts.map((e) => e.id), ord = (a, b) => order0.indexOf(a.e.id) - order0.indexOf(b.e.id);
+  stops.sort(ord);
+  const timed = stops.filter((x) => timeOf(x.e)).sort((a, b) => timeOf(a.e).localeCompare(timeOf(b.e))), free = stops.filter((x) => !timeOf(x.e));
+  let seq, optimise = false;
+  const start = from || null, end = to || null;
+  if (!timed.length) { seq = free; optimise = free.length >= 2 && !!start && !!end; }
+  else { seq = timed.slice();
+    for (const x of free) { let best = 0, cost = Infinity;
+      for (let k = 0; k <= seq.length; k++) { const a = k ? seq[k - 1].at : start, b = k < seq.length ? seq[k].at : end;
+        // not before an early-morning booking, nor after an evening one
+        const prevT = seq.slice(0, k).map((y) => timeOf(y.e)).filter(Boolean).at(-1), nextT = seq.slice(k).map((y) => timeOf(y.e)).find(Boolean);
+        const pen = (nextT && nextT < "10:00" ? 1e4 : 0) + (prevT && prevT >= "19:00" ? 1e4 : 0);
+        const c = pen + (a ? distanceKm(a, x.at) : 0) + (b ? distanceKm(x.at, b) : 0) - (a && b ? distanceKm(a, b) : 0); if (c < cost) { cost = c; best = k; } }
+      seq.splice(best, 0, x); } }
+  const pts = [start, ...seq.map((x) => x.at), end].filter(Boolean);
+  if (pts.length < 2) return toast("Need at least two places to work out travel times");
+  toast("Working out travel times…");
+  const first = await computeRoute(pts, mode === "walk" ? "WALK" : "DRIVE", optimise);
+  if (first.order) { seq = first.order.map((k) => seq[k]); }
+  const pts2 = [start, ...seq.map((x) => x.at), end].filter(Boolean);
+  let legs = first.legs.map((l) => ({ ...l, mode: mode === "walk" ? "walk" : "drive" }));
+  if (mode === "auto" && legs.some((l) => l.m < 2500)) {   // short hops on foot
+    try { const w = await computeRoute(pts2, "WALK", false); legs = legs.map((l, k) => (w.legs[k] && w.legs[k].m <= 1500 ? { ...w.legs[k], mode: "walk" } : l)); } catch (x) { console.warn("walk legs", x); }
+  }
+  // tight connections between booked times
+  const warn = [], idx = (x) => (start ? 1 : 0) + seq.indexOf(x);
+  for (let k = 1; k < seq.length; k++) { const b = seq[k]; if (!timeOf(b.e)) continue;
+    let j = k - 1; while (j >= 0 && !timeOf(seq[j].e)) j--; if (j < 0) continue; const a = seq[j];
+    const travel = legs.slice(idx(a), idx(b)).reduce((t, l) => t + l.sec, 0), [h1, m1] = timeOf(a.e).split(":").map(Number), [h2, m2] = timeOf(b.e).split(":").map(Number);
+    const gap = (h2 * 60 + m2) - (h1 * 60 + m1);
+    if (travel / 60 > gap - 15) warn.push(`Tight: ${fmtDur(travel)} of travel between ${firstText(a.e.text)} (${timeOf(a.e)}) and ${firstText(b.e.text)} (${timeOf(b.e)})`); }
+  const res = { at: new Date().toISOString(), mode, optimised: !!first.order, fixed: timed.length > 0, sig: "",
+    from: start, to: end, stops: seq.map((x) => ({ id: x.e.id, name: firstText(x.e.text), match: x.at.name || "", time: timeOf(x.e), lat: x.at.lat, lng: x.at.lng })),
+    legs: legs.map((l) => ({ mode: l.mode, sec: l.sec, m: l.m })), skipped, warn };
+  const fresh = store.entries.filter((e) => acts.some((a) => a.id === e.id));   // after saving places / skips
+  res.sig = actSig(acts.map((a) => fresh.find((e) => e.id === a.id) || a));
+  await data.saveTrip({ routes: { ...(store.trip.routes || {}), [ROUTE_KEY(p, date)]: res } }, ui.tripId);
+  toast(first.order ? "Route ready - best order worked out" : "Route ready");
+}
+function wireRoute(p, date, acts) {
+  const keep = () => { const y = scrollY; render(); scrollTo(0, y); };
+  const run = async (mode) => { const bs = root.querySelectorAll("[data-route-plan]"); bs.forEach((b) => (b.disabled = true));
+    try { await planRoute(p, date, acts, mode); } catch (e) { toast(e.message || "Couldn't work out the route"); bs.forEach((b) => (b.disabled = false)); } keep(); };
+  root.querySelectorAll("[data-route-plan]").forEach((b) => (b.onclick = () => (mapsReady() ? run() : toast("Needs the Google Maps key"))));
+  root.querySelectorAll("[data-route-mode]").forEach((b) => (b.onclick = () => run(b.dataset.routeMode)));
+  root.querySelectorAll("[data-route-unskip]").forEach((b) => (b.onclick = async () => { const e = store.entries.find((x) => x.id === b.dataset.routeUnskip);
+    if (e) { const { routeSkip, ...rest } = e; await data.saveEntry(rest); run(); } }));
+  root.querySelector("[data-route-apply]")?.addEventListener("click", async () => {
+    const r = store.trip.routes[ROUTE_KEY(p, date)], ids = r.stops.map((x) => x.id), rest = sortActs(acts, date).filter((e) => !ids.includes(e.id)).map((e) => e.id);
+    const all = ids.concat(rest);
+    for (const e of acts) { const n = all.indexOf(e.id); if (e.seq?.[date] !== n) await data.saveEntry({ ...e, seq: { ...(e.seq || {}), [date]: n } }); }
+    const fresh = store.entries.filter((e) => acts.some((a) => a.id === e.id));
+    await data.saveTrip({ routes: { ...(store.trip.routes || {}), [ROUTE_KEY(p, date)]: { ...r, sig: actSig(acts.map((a) => fresh.find((e) => e.id === a.id) || a)) } } }, ui.tripId);
+    toast("Activities reordered"); keep();
+  });
+}
+
 // ---- family votes: 👍 on recommended places and ideas, as the traveller whose itinerary is showing
 const votesFor = (key) => store.votes?.[key]?.up || [];
 const voter = () => (ui.voter && ALL_CODES().includes(ui.voter) ? ui.voter : ui.person);   // anyone on the trip, incl. others joining
@@ -2818,6 +2962,7 @@ function entryForm(e) {
       const out = { ...e, text: fd.get("text").trim(), place: fd.get("place") ?? e.place ?? "", status: fd.get("status") || "planned", confirmed: e.kind === "activity" ? (fd.get("confirmed") === "on" || !!form._pendingFile) && fd.get("status") !== "recommended" : true,
                     date: fd.get("date"), endDate: fd.get("endDate") || fd.get("date"), who: fd.getAll("who") };
       if (!out.who.length) throw new Error("Pick at least one person");
+      if (out.place !== (e.place || "") || out.text.split("\n")[0] !== String(e.text || "").split("\n")[0]) { delete out.geo; delete out.routeSkip; }   // place changed: look it up again for routes
       const id = await data.saveEntry(out);
       const pc = (fd.get("pcost") || "").trim(), had = store.priv[id] || store.priv[e.id];
       if (pc || had?.cost) await data.savePrivate(id, { ...(had || {}), cost: pc, share: fd.get("pshare") || "ours" });

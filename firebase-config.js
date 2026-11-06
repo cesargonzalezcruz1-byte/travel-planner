@@ -20,4 +20,6 @@ export const AI_MODELS = ["gemini-3.6-flash", "gemini-3-flash", "gemini-2.5-flas
 export const AI_LOCATION = "global";
 // Embedded day map (Google Maps JavaScript API + Geocoding API). Browser key restricted to the site. Empty = map hidden.
 export const MAPS_API_KEY = "AIzaSyCXZELvt-h-Di79tJGlsXMXvFXSNDcZlWo";
-export const MAP_ID = "";   // optional Map ID from Google Cloud (Map Management); blank uses Google's demo map style
+export const MAP_ID = "";
+// Firebase App Check (required by Google for the AI from Nov 2026): reCAPTCHA Enterprise site key for this website. Empty = not used.
+export const APP_CHECK_SITE_KEY = "";   // optional Map ID from Google Cloud (Map Management); blank uses Google's demo map style

@@ -1,7 +1,7 @@
 // Data layer: Firebase (Auth + Firestore + Storage) or an in-memory demo store for local testing.
 // Data model: trips/{tripId} (title, start, end, travellers, extended) with subcollections
 //   items (flights/stays/cars), entries (activities/comments), private (editors only), files (editors only).
-import { firebaseConfig, FAMILY_EMAIL, EDITORS, FIREBASE_SDK, AI_MODELS, AI_LOCATION } from "./firebase-config.js";
+import { firebaseConfig, FAMILY_EMAIL, EDITORS, FIREBASE_SDK, AI_MODELS, AI_LOCATION, APP_CHECK_SITE_KEY } from "./firebase-config.js";
 
 const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
 export const DEMO = isLocal && new URLSearchParams(location.search).has("demo");
@@ -40,6 +40,12 @@ export async function init(onAuth) {
     import(`${FIREBASE_SDK}/firebase-firestore.js`), import(`${FIREBASE_SDK}/firebase-storage.js`),
   ]);
   const app = appM.initializeApp(firebaseConfig);
+  // App Check: proves requests come from this app (Google requires it for the AI). Must start before the AI, Firestore and Storage are used.
+  if (APP_CHECK_SITE_KEY) {
+    try { const acM = await import(`${FIREBASE_SDK}/firebase-app-check.js`);
+      acM.initializeAppCheck(app, { provider: new acM.ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY), isTokenAutoRefreshEnabled: true }); }
+    catch (e) { console.warn("App Check", e); }
+  }
   const auth = authM.getAuth(app);
   let db;
   try { db = fsM.initializeFirestore(app, { localCache: fsM.persistentLocalCache({ tabManager: fsM.persistentMultipleTabManager() }) }); }

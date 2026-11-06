@@ -904,3 +904,10 @@ fieldset{min-width:0}
 .mpin.small{transform:rotate(-45deg) scale(.72)} .mpin.dim{opacity:.28;filter:grayscale(.6)} .mpin.hot{transform:rotate(-45deg) scale(1.25);z-index:10} .mpin.small.hot{transform:rotate(-45deg) scale(1)}
 .mpin{transition:transform .25s,opacity .25s}
 @media (max-width:460px){ .hero-name{font-size:clamp(16px,4.5vw,21px)} }
+/* trip map, opened from the trip card */
+body.noscroll{overflow:hidden}
+.tmapsheet{position:fixed;inset:0;z-index:900;background:var(--bg);overflow:auto;display:flex;flex-direction:column}
+.tms-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:max(10px,env(safe-area-inset-top)) 14px 10px;background:var(--hero, #16141F);color:#fff}
+.tms-bar > b{flex:1;min-width:140px;font-size:16px} .tms-bar .ddots{display:flex;gap:6px;flex-wrap:wrap}
+.tmapsheet .tmap{width:100%;flex:1}
+.cchip.map i{color:var(--stay)}

@@ -272,9 +272,10 @@ If something changes often (fees, visa rules), say so briefly. Only list real, o
   let lastErr;
   for (let i = 0; i < AI_MODELS.length; i++) {
     try { const m = await getModel(i, countrySchema()); const res = await m.generateContent([{ text: prompt }]); return dropEmpty(JSON.parse(res.response.text())); }
-    catch (e) { lastErr = e; if (!/not.?found|404|unsupported|model/i.test(String(e.message || e))) break; }
+    catch (e) { lastErr = e; console.warn("country AI", AI_MODELS[i], e);
+      if (!/not.?found|404|unsupported|model|429|exhausted|quota|50\d|unavailable|overloaded|deadline|timeout|fetch/i.test(String(e.message || e) + (e.code || ""))) break; }
   }
-  throw lastErr;
+  throw new Error(String(lastErr?.message || lastErr).replace(/^\[?FirebaseError\]?:?\s*/i, "").slice(0, 300));
 }
 
 // ------------------------------------------------------------------ phone notifications (check-in open), via Firebase Cloud Messaging

@@ -124,11 +124,12 @@ export async function nearestConsulate(country, at) {
 
 // Address suggestions while typing (Places Autocomplete; one session token per field so it's billed as one lookup)
 let acToken = null;
-export async function addressSuggest(input) {
+export async function addressSuggest(input, opts = {}) {
   if (authFailed) throw new Error("Google Maps rejected the key");
   await load(); const { AutocompleteSuggestion, AutocompleteSessionToken } = await google.maps.importLibrary("places");
   acToken ||= new AutocompleteSessionToken();
-  const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({ input, sessionToken: acToken, language: "en", includedPrimaryTypes: ["street_address", "premise", "subpremise", "route"] });
+  const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({ input, sessionToken: acToken, language: "en", ...(opts.any ? {} : { includedPrimaryTypes: ["street_address", "premise", "subpremise", "route"] }),
+    ...(opts.near ? { locationBias: { center: opts.near, radius: 50000 } } : {}) });
   return (suggestions || []).map((x) => x.placePrediction).filter(Boolean).map((p) => ({ main: p.mainText?.toString() || "", sub: p.secondaryText?.toString() || "", text: p.text?.toString() || "" }));
 }
 export const addressDone = () => { acToken = null; };

@@ -525,6 +525,24 @@ async function emergencySheet(tid = ui.tripId) {
   if (isEditor() && sosStays().some((i) => !store.trip.essentials?.[i.id]) && mapsReady()) run(sosStays().filter((i) => !store.trip.essentials?.[i.id]));
 }
 
+// Google Maps suggestions under a text field while typing (addresses, or any place with opts.any, biased near opts.near = an address)
+function acAttach(input, opts = {}) {
+  if (!input || !mapsReady() || input.dataset.ac) return; input.dataset.ac = "1"; input.autocomplete = "off";
+  const wrap = document.createElement("div"); wrap.className = "acwrap"; input.replaceWith(wrap); wrap.appendChild(input);
+  const list = document.createElement("div"); list.className = "aclist"; list.hidden = true; wrap.appendChild(list);
+  let tmr = 0, seq = 0, near = null, nearDone = !opts.near;
+  input.addEventListener("input", () => { clearTimeout(tmr); const q = input.value.trim();
+    if (q.length < 3) { list.hidden = true; return; }
+    tmr = setTimeout(async () => { const my = ++seq; let r = [];
+      if (!nearDone) { nearDone = true; try { const g = await geocodeText(opts.near); if (g) near = { lat: g.lat, lng: g.lng }; } catch (e) { /* no bias */ } }
+      try { r = await addressSuggest(q, { any: opts.any, near }); } catch (e) { console.warn("suggest", e); }
+      if (my !== seq) return;
+      list.innerHTML = r.slice(0, 5).map((x, k) => `<button type="button" data-ac="${k}"><b>${esc(x.main)}</b><small>${esc(x.sub)}</small></button>`).join("");
+      list.hidden = !r.length; list._r = r; }, 300); });
+  list.addEventListener("pointerdown", (e) => { const b = e.target.closest("[data-ac]"); if (!b) return; e.preventDefault();
+    input.value = list._r[+b.dataset.ac].text; list.hidden = true; addressDone(); input.dispatchEvent(new Event("change", { bubbles: true })); });
+  input.addEventListener("blur", () => setTimeout(() => (list.hidden = true), 150));
+}
 // ---------------------------------------------------------------- trip setup window
 function tripForm(t) {
   const isNew = !t; t = t || { title: "", start: "", end: "", travellers: [], extended: [] };
@@ -551,7 +569,7 @@ function tripForm(t) {
       <button type="button" class="btn tiny" data-addfam>+ Add Family</button>
       <p class="muted small">Group the people joining into families - each family gets its own balance in Budget (Settle Up). Then mark costs as shared with, or paid by, a family.</p></fieldset>` : ""}
     <p class="muted small">Everyone on a trip has a profile: initials (how they appear in the itinerary), full name (helps the AI match names on bookings), their colour and documents. Tap Profile to change them.</p>
-    ${isEditor() && !isNew ? `<fieldset class="pbox"><legend>Home Address (Editors Only)</legend><div class="acwrap"><input name="homeaddr" data-was="" value="" autocomplete="off" placeholder="Start typing, e.g. 12 Smith St, Paddington"><div class="aclist" hidden></div></div>
+    ${isEditor() && !isNew ? `<fieldset class="pbox"><legend>Home Address (Editors Only)</legend><input name="homeaddr" data-was="" value="" autocomplete="off" placeholder="Start typing, e.g. 12 Smith St, Paddington">
       <p class="muted small">Used for the "Leave now for the airport" alert on the first flight, worked out with live traffic. Later flights leave from where you're staying.</p></fieldset>` : ""}
     ${isNew ? "" : `<fieldset class="pbox"><legend>Notifications (This Phone)</legend><div class="pushset">${pushSetupHtml(t)}</div></fieldset>`}
     <fieldset class="pbox"><legend>Colour Theme</legend><div class="themes">
@@ -591,19 +609,7 @@ function tripForm(t) {
   wirePushSetup(form, t);
   const homeIn = form.querySelector("[name=homeaddr]");
   if (homeIn) data.homeAddress(t.id).then((v) => { homeIn.dataset.was = v; if (!homeIn.value) homeIn.value = v; });
-  if (homeIn && mapsReady()) {   // suggestions from Google Maps while typing
-    const list = homeIn.parentElement.querySelector(".aclist"); let tmr = 0, seq = 0;
-    homeIn.addEventListener("input", () => { clearTimeout(tmr); const q = homeIn.value.trim();
-      if (q.length < 4) { list.hidden = true; return; }
-      tmr = setTimeout(async () => { const my = ++seq; let r = [];
-        try { r = await addressSuggest(q); } catch (e) { console.warn("address", e); }
-        if (my !== seq) return;
-        list.innerHTML = r.slice(0, 5).map((x, k) => `<button type="button" data-ac="${k}"><b>${esc(x.main)}</b><small>${esc(x.sub)}</small></button>`).join("");
-        list.hidden = !r.length; list._r = r; }, 300); });
-    list.addEventListener("pointerdown", (e) => { const b = e.target.closest("[data-ac]"); if (!b) return; e.preventDefault();
-      homeIn.value = list._r[+b.dataset.ac].text; list.hidden = true; addressDone(); });
-    homeIn.addEventListener("blur", () => setTimeout(() => (list.hidden = true), 150));
-  }
+  if (homeIn) acAttach(homeIn);
   // families for settling up: groups of the people joining (a person is in at most one)
   const fams = (t.families || []).map((f) => ({ ...f, members: [...(f.members || [])] }));
   const drawFams = () => { const box = form.querySelector("#fams"); if (!box) return;
@@ -692,7 +698,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v129";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v130";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -3881,6 +3887,8 @@ function entryForm(e) {
       if (form._pendingFile) { toast("Attaching file…"); await data.uploadFile(form._pendingFile, { entryId: id, date: out.date }); toast("Saved and confirmed, with file attached"); }
     }, isNew ? null : () => data.deleteEntry(e.id));
   const form = document.querySelector(".sheet"); wireShare(form);
+  { const stay = store.items.find((i) => i.type === "stay" && i.status !== "tbc" && i.start <= e.date && e.date < i.end && (i.address || i.name));
+    acAttach(form.querySelector("input[name=place]"), { any: true, near: stay ? stay.address || stay.name : "" }); }
   wireExtract(form, () => "activity", (r) => {
     const txt = [r.text || r.name, r.time ? "at " + r.time : ""].filter(Boolean).join(" ");
     setVal(form, "text", txt); setVal(form, "place", r.place || r.address); setVal(form, "pcost", r.private?.cost); setVal(form, "date", r.start || r.date); setVal(form, "endDate", r.end || r.start || r.date);

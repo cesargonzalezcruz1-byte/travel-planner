@@ -93,6 +93,17 @@ export async function searchPlaces(textQuery, near) {
     type: p.primaryTypeDisplayName || "", url: p.googleMapsURI || "", lat: p.location?.lat?.() ?? null, lng: p.location?.lng?.() ?? null }));
 }
 
+// Address suggestions while typing (Places Autocomplete; one session token per field so it's billed as one lookup)
+let acToken = null;
+export async function addressSuggest(input) {
+  if (authFailed) throw new Error("Google Maps rejected the key");
+  await load(); const { AutocompleteSuggestion, AutocompleteSessionToken } = await google.maps.importLibrary("places");
+  acToken ||= new AutocompleteSessionToken();
+  const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({ input, sessionToken: acToken, language: "en", includedPrimaryTypes: ["street_address", "premise", "subpremise", "route"] });
+  return (suggestions || []).map((x) => x.placePrediction).filter(Boolean).map((p) => ({ main: p.mainText?.toString() || "", sub: p.secondaryText?.toString() || "", text: p.text?.toString() || "" }));
+}
+export const addressDone = () => { acToken = null; };
+
 // ---------------------------------------------------------------- travel times between a day's stops (on demand)
 // Look a place up for routing: up to 3 candidates near the stay, with whether it looks vague (a whole town, far away, or nothing found).
 const BROAD = /^(locality|sublocality|administrative_area_level_\d|country|political|colloquial_area|postal_code|neighborhood|natural_feature)$/;

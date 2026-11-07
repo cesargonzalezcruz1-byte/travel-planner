@@ -975,3 +975,6 @@ body.noscroll{overflow:hidden}
 .oblock .ob-head{row-gap:6px} .oblock .ob-head .obpack + .obpack{margin-left:6px}
 .gonow{display:flex;gap:8px;align-items:center;margin-top:8px;padding:8px 10px;border-radius:12px;background:color-mix(in srgb,var(--accent,#2563EB) 9%,var(--card));color:var(--ink)}
 .gonow span{display:flex;flex-direction:column;min-width:0} .gonow small{color:var(--muted);font-size:12px}
+.acwrap{position:relative} .aclist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--card);border:1px solid var(--line,#ddd);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);overflow:hidden}
+.aclist button{display:flex;flex-direction:column;align-items:flex-start;width:100%;text-align:left;padding:9px 12px;border:0;background:none;color:var(--ink);font:inherit;cursor:pointer;border-top:1px solid var(--line,#eee)}
+.aclist button:first-child{border-top:0} .aclist button:hover{background:color-mix(in srgb,var(--ink) 5%,var(--card))} .aclist small{color:var(--muted);font-size:12px}

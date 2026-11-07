@@ -1,5 +1,5 @@
 import * as data from "./data.js";
-import { drawDayMap, drawTripMap, mapsReady, searchPlaces, findPlace, geocodeText, computeRoute, distanceKm } from "./map.js";
+import { drawDayMap, drawTripMap, mapsReady, searchPlaces, findPlace, geocodeText, computeRoute, distanceKm, addressSuggest, addressDone } from "./map.js";
 import { buildAlbum, areaOf } from "./album.js";
 import { AIRPORT_TZ, TZ_COUNTRY, checkinUrl, checkinInfo, timeIn, isInternational } from "./checkin-core.js";
 // Preview another date: add ?today=2027-01-14 to the address to see the app as it will look on that day
@@ -459,7 +459,7 @@ function tripForm(t) {
       <button type="button" class="btn tiny" data-addfam>+ Add Family</button>
       <p class="muted small">Group the people joining into families - each family gets its own balance in Budget (Settle Up). Then mark costs as shared with, or paid by, a family.</p></fieldset>` : ""}
     <p class="muted small">Everyone on a trip has a profile: initials (how they appear in the itinerary), full name (helps the AI match names on bookings), their colour and documents. Tap Profile to change them.</p>
-    ${isEditor() && !isNew ? `<fieldset class="pbox"><legend>Home Address (Editors Only)</legend><input name="homeaddr" data-was="" value="" placeholder="e.g. 12 Smith St, Paddington QLD" autocomplete="street-address">
+    ${isEditor() && !isNew ? `<fieldset class="pbox"><legend>Home Address (Editors Only)</legend><div class="acwrap"><input name="homeaddr" data-was="" value="" autocomplete="off" placeholder="Start typing, e.g. 12 Smith St, Paddington"><div class="aclist" hidden></div></div>
       <p class="muted small">Used for the "Leave now for the airport" alert on the first flight, worked out with live traffic. Later flights leave from where you're staying.</p></fieldset>` : ""}
     ${isNew ? "" : `<fieldset class="pbox"><legend>Notifications (This Phone)</legend><div class="pushset">${pushSetupHtml(t)}</div></fieldset>`}
     <fieldset class="pbox"><legend>Colour Theme</legend><div class="themes">
@@ -499,6 +499,19 @@ function tripForm(t) {
   wirePushSetup(form, t);
   const homeIn = form.querySelector("[name=homeaddr]");
   if (homeIn) data.homeAddress(t.id).then((v) => { homeIn.dataset.was = v; if (!homeIn.value) homeIn.value = v; });
+  if (homeIn && mapsReady()) {   // suggestions from Google Maps while typing
+    const list = homeIn.parentElement.querySelector(".aclist"); let tmr = 0, seq = 0;
+    homeIn.addEventListener("input", () => { clearTimeout(tmr); const q = homeIn.value.trim();
+      if (q.length < 4) { list.hidden = true; return; }
+      tmr = setTimeout(async () => { const my = ++seq; let r = [];
+        try { r = await addressSuggest(q); } catch (e) { console.warn("address", e); }
+        if (my !== seq) return;
+        list.innerHTML = r.slice(0, 5).map((x, k) => `<button type="button" data-ac="${k}"><b>${esc(x.main)}</b><small>${esc(x.sub)}</small></button>`).join("");
+        list.hidden = !r.length; list._r = r; }, 300); });
+    list.addEventListener("pointerdown", (e) => { const b = e.target.closest("[data-ac]"); if (!b) return; e.preventDefault();
+      homeIn.value = list._r[+b.dataset.ac].text; list.hidden = true; addressDone(); });
+    homeIn.addEventListener("blur", () => setTimeout(() => (list.hidden = true), 150));
+  }
   // families for settling up: groups of the people joining (a person is in at most one)
   const fams = (t.families || []).map((f) => ({ ...f, members: [...(f.members || [])] }));
   const drawFams = () => { const box = form.querySelector("#fams"); if (!box) return;
@@ -587,7 +600,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v127";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v128";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),

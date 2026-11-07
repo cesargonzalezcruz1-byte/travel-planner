@@ -248,7 +248,7 @@ function renderHome() {
         return `<button type="button" class="tc-warn ${lvl}" data-docwarn="${esc(t.id)}" title="${esc(iss.map((x) => (x.per.name || x.per.code) + ": " + x.st.text).join("\n"))}"><i class="ic16">${I.warn}</i>${lvl === "bad" ? "Document problem" : "Check documents"} · ${who.map(esc).join(", ")}</button>`; })()}
       <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
       <div class="tc-people">${(t.travellers || []).map((p, k) => `<span class="pchip tp" style="--pc:${upc(p.color) || TDEFAULT[k % TDEFAULT.length]}" title="${esc(p.name || p.code)}"><b>${esc(p.code)}</b></span>`).join("")}</div>
-      <div class="tc-ctry"><button type="button" class="cchip ask" data-task="${esc(t.id)}"><i>${I.chat}</i>Ask</button><button type="button" class="cchip map" data-tmap="${esc(t.id)}"><i>${ICON.map}</i>Trip Map</button><button type="button" class="cchip stat" data-trecap="${esc(t.id)}"><i>${I.stats}</i>Recap</button><button type="button" class="cchip sos" data-tsos="${esc(t.id)}"><i>${I.warn}</i>Emergency</button>${t.countryInfo?.codes?.length ? t.countryInfo.codes.map((c) => `<button type="button" class="cchip" data-cinfo="${esc(t.id)}" data-c="${c}"><i>${I.globe}</i>${esc(countryName(c))}</button>`).join("")
+      <div class="tc-ctry"><button type="button" class="cchip ask" data-task="${esc(t.id)}"><i>${I.chat}</i>Ask</button><button type="button" class="cchip map" data-tmap="${esc(t.id)}"><i>${ICON.map}</i>Trip Map</button><button type="button" class="cchip stat" data-trecap="${esc(t.id)}"><i>${I.stats}</i>Recap</button>${t.start <= today ? `<button type="button" class="cchip reelc" data-treel="${esc(t.id)}"><i>${I.camera}</i>Reel</button>` : ""}<button type="button" class="cchip sos" data-tsos="${esc(t.id)}"><i>${I.warn}</i>Emergency</button>${t.countryInfo?.codes?.length ? t.countryInfo.codes.map((c) => `<button type="button" class="cchip" data-cinfo="${esc(t.id)}" data-c="${c}"><i>${I.globe}</i>${esc(countryName(c))}</button>`).join("")
         : isEditor() && t.end >= today ? `<button type="button" class="cchip add" data-cnew="${esc(t.id)}"><i>${I.globe}</i>+ Country Info</button>` : ""}</div>
       ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
     </article>`;
@@ -273,6 +273,7 @@ function renderHome() {
       const ta = e.target.closest("[data-task]"); if (ta) return askTrip(ta.dataset.task);
       const tr = e.target.closest("[data-trecap]"); if (tr) return showRecap(tr.dataset.trecap);
       const ts = e.target.closest("[data-tsos]"); if (ts) return emergencySheet(ts.dataset.tsos);
+      const tl = e.target.closest("[data-treel]"); if (tl) return travelReel(tl.dataset.treel);
       if (e.target.closest("[data-settings]")) return; localStorage.setItem("tp.trip", el.dataset.open); routeTo(el.dataset.open); };
     el.onkeydown = (e) => { if (e.key === "Enter") el.click(); };
   });
@@ -543,6 +544,118 @@ function acAttach(input, opts = {}) {
     input.value = list._r[+b.dataset.ac].text; list.hidden = true; addressDone(); input.dispatchEvent(new Event("change", { bubbles: true })); });
   input.addEventListener("blur", () => setTimeout(() => (list.hidden = true), 150));
 }
+// ---------------------------------------------------------------- Travel reel: the journal photos as a full-screen slideshow, day by day
+const reelUI = { speed: 5, music: "gentle", captions: true };
+try { Object.assign(reelUI, JSON.parse(localStorage.getItem("tp.reel") || "{}")); } catch (e) { /* defaults */ }
+// gentle generated background music (soft chords and a slow arpeggio - no copyright, no download)
+function reelMusic() {
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+  const ac = new AC(), out = ac.createGain(), lp = ac.createBiquadFilter(), dly = ac.createDelay(), fb2 = ac.createGain();
+  lp.type = "lowpass"; lp.frequency.value = 1800; dly.delayTime.value = 0.38; fb2.gain.value = 0.28; out.gain.value = 0;
+  lp.connect(out); lp.connect(dly); dly.connect(fb2); fb2.connect(dly); dly.connect(out); out.connect(ac.destination);
+  const hz = (m) => 440 * 2 ** ((m - 69) / 12);
+  const prog = [[48, 55, 60, 64, 67], [43, 55, 59, 62, 67], [45, 57, 60, 64, 69], [41, 53, 57, 60, 65]];   // C  G  Am  F
+  const bar = 3.2; let next = ac.currentTime + 0.1, k = 0, timer = 0;
+  const note = (m, t, len, vol, type) => { const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = hz(m);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + Math.min(0.6, len / 3)); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    o.connect(g); g.connect(lp); o.start(t); o.stop(t + len + 0.1); };
+  const sched = () => { while (next < ac.currentTime + 1.5) { const ch = prog[k % prog.length];
+      ch.slice(0, 4).forEach((m) => note(m, next, bar + 0.6, 0.05, "sine"));
+      [0, 1, 2, 3, 4, 3, 2, 1].forEach((x, j) => note(ch[x] + 12, next + j * (bar / 8), bar / 3, 0.035, "triangle"));
+      next += bar; k++; } };
+  return { start() { ac.resume(); sched(); timer = setInterval(sched, 400); out.gain.cancelScheduledValues(ac.currentTime); out.gain.linearRampToValueAtTime(0.9, ac.currentTime + 2); },
+    pause() { out.gain.cancelScheduledValues(ac.currentTime); out.gain.linearRampToValueAtTime(0, ac.currentTime + 0.4); },
+    resume() { ac.resume(); out.gain.cancelScheduledValues(ac.currentTime); out.gain.linearRampToValueAtTime(0.9, ac.currentTime + 0.8); },
+    stop() { clearInterval(timer); try { out.gain.linearRampToValueAtTime(0, ac.currentTime + 0.3); setTimeout(() => ac.close(), 500); } catch (e) { /* closed */ } } };
+}
+function reelSlides() {
+  const t = store.trip, posts = (store.journal || []).filter((j) => !j.replyTo && j.photos?.length && j.date)
+    .sort((a, b) => a.date.localeCompare(b.date) || String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+  const out = [], ds = days(); let last = "";
+  for (const j of posts) {
+    if (j.date !== last) { last = j.date;
+      const stay = store.items.find((i) => i.type === "stay" && i.start <= j.date && j.date < i.end);
+      out.push({ kind: "day", date: j.date, n: ds.indexOf(j.date) + 1, where: stay ? stayArea(stay) : "" }); }
+    const cap = String(j.text || "").split("\n")[0].trim();
+    j.photos.forEach((ph, k) => out.push({ kind: "photo", ph, cap: k === 0 && cap ? (cap.length > 110 ? cap.slice(0, 107) + "…" : cap) : "", by: j.author || "", date: j.date }));
+  }
+  return out;
+}
+async function travelReel(tid = ui.tripId) {
+  try { await loadTripData(tid); } catch (e) { return toast(e.message); }
+  const slides = reelSlides(), t = store.trip;
+  if (!slides.length) return toast("No journal photos yet - add some to the journal and they'll play here");
+  const nPh = slides.filter((s) => s.kind === "photo").length, nDays = slides.filter((s) => s.kind === "day").length;
+  const box = document.createElement("div"); box.className = "reel"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Travel reel");
+  document.body.appendChild(box); document.body.classList.add("noscroll");
+  let k = -1, playing = false, timer = 0, music = null, song = null, songUrl = "", lock = null, hideT = 0;
+  const save = () => { try { localStorage.setItem("tp.reel", JSON.stringify(reelUI)); } catch (e) { /* ignore */ } };
+  const preload = (i) => slides.slice(i, i + 3).forEach((s) => { if (s.kind === "photo" && !s.img) { s.img = new Image(); s.img.decoding = "async"; s.img.src = s.ph.url; } });
+  const close = () => { clearTimeout(timer); music?.stop(); song?.pause(); if (songUrl) URL.revokeObjectURL(songUrl); lock?.release?.().catch(() => {});
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); document.removeEventListener("keydown", key); document.body.classList.remove("noscroll"); box.remove(); };
+  const startScreen = () => { box.innerHTML = `<div class="reel-start"><button class="lb-btn reel-x" data-rx aria-label="Close">✕</button>
+      <div class="reel-cover">${slides.find((s) => s.kind === "photo") ? `<img src="${esc(slides.find((s) => s.kind === "photo").ph.turl || slides.find((s) => s.kind === "photo").ph.url)}" alt="">` : ""}</div>
+      <h2>${esc(t.title || "Our Trip")}</h2><p>${fmtDate(t.start)} – ${fmtDate(t.end)} · ${nPh} photo${nPh === 1 ? "" : "s"} over ${nDays} day${nDays === 1 ? "" : "s"}</p>
+      <div class="reel-opts"><span>Music</span><div class="seg-mini">${[["gentle", "Gentle"], ["song", "Song from Phone…"], ["off", "Off"]].map(([v, l]) => `<button type="button" data-rmus="${v}" class="${reelUI.music === v ? "on" : ""}">${l}</button>`).join("")}</div>
+        <span>Speed</span><div class="seg-mini">${[[7, "Slow"], [5, "Normal"], [3, "Fast"]].map(([v, l]) => `<button type="button" data-rspd="${v}" class="${reelUI.speed === v ? "on" : ""}">${l}</button>`).join("")}</div>
+        <span>Captions</span><div class="seg-mini">${[[true, "On"], [false, "Off"]].map(([v, l]) => `<button type="button" data-rcap="${v}" class="${reelUI.captions === v ? "on" : ""}">${l}</button>`).join("")}</div></div>
+      ${song ? `<p class="small reel-song">♪ ${esc(song.dataset.name || "Your song")}</p>` : ""}
+      <button class="btn primary reel-play" data-rplay>▶ Play</button><p class="small reel-tip">Tip: mirror your phone to the TV (Screen Mirroring / Cast) to show everyone.</p>
+      <input type="file" accept="audio/*" hidden data-rsong></div>`; };
+  const frame = () => { const s = slides[k];
+    if (!s) return `<div class="reel-card end"><h2>${esc(t.title || "The End")}</h2><p>${nPh} photos · ${nDays} days</p><button class="btn reel-again" data-ragain>↺ Watch Again</button></div>`;
+    if (s.kind === "day") return `<div class="reel-card day"><small>Day ${s.n > 0 ? s.n : ""}</small><h2>${esc(longDate(s.date))}</h2>${s.where ? `<p>${esc(s.where)}</p>` : ""}</div>`;
+    const ph = s.ph, tall = ph.h && ph.w && ph.h > ph.w, kb = ["kb1", "kb2", "kb3", "kb4"][k % 4];
+    return `<div class="reel-ph ${tall ? "tall" : ""}"><img class="reel-bg" src="${esc(ph.turl || ph.url)}" alt=""><img class="reel-img ${kb}" style="--dur:${reelUI.speed + 1.5}s" src="${esc(ph.url)}" alt="">
+      ${reelUI.captions && (s.cap || s.by) ? `<div class="reel-cap">${s.cap ? `<b>${esc(s.cap)}</b>` : ""}${s.by ? `<small>${esc(s.by)} · ${esc(fmtDate(s.date))}</small>` : ""}</div>` : ""}</div>`; };
+  const bar = () => `<div class="reel-ui"><div class="reel-prog"><i style="width:${Math.max(0, Math.min(100, ((k + 1) / slides.length) * 100))}%"></i></div>
+      <div class="reel-btns"><button class="lb-btn" data-rprev aria-label="Previous">‹</button><button class="lb-btn" data-rpause aria-label="${playing ? "Pause" : "Play"}">${playing ? "❚❚" : "▶"}</button><button class="lb-btn" data-rnext aria-label="Next">›</button>
+        <span class="grow"></span>${reelUI.music !== "off" ? `<button class="lb-btn" data-rmute aria-label="Music on or off">${box.dataset.muted ? "🔇" : "♪"}</button>` : ""}<button class="lb-btn" data-rx aria-label="Close">✕</button></div></div>`;
+  const show = () => { const old = box.querySelector(".reel-stage .reel-frame");
+    const st = box.querySelector(".reel-stage") || (box.innerHTML = `<div class="reel-stage"></div>`, box.querySelector(".reel-stage"));
+    const f = document.createElement("div"); f.className = "reel-frame"; f.innerHTML = frame(); st.appendChild(f);
+    requestAnimationFrame(() => f.classList.add("in")); if (old) { old.classList.remove("in"); setTimeout(() => old.remove(), 900); }
+    box.querySelector(".reel-ui")?.remove(); box.insertAdjacentHTML("beforeend", bar()); preload(k + 1); };
+  const schedule = () => { clearTimeout(timer); if (!playing || k >= slides.length) return;
+    const s = slides[k], ms = (s?.kind === "day" ? 2.6 : reelUI.speed) * 1000;
+    timer = setTimeout(() => { go(1); }, ms); };
+  const go = (d) => { k = Math.max(0, Math.min(slides.length, k + d)); show();
+    if (k >= slides.length) { playing = false; music?.pause(); if (song) { const fade = setInterval(() => { song.volume = Math.max(0, song.volume - 0.1); if (song.volume <= 0.05) { song.pause(); clearInterval(fade); } }, 150); } show(); return; }
+    schedule(); };
+  const setPlay = (on) => { playing = on; if (on) { if (box.dataset.muted !== "1") { music?.resume(); song?.play().catch(() => {}); } schedule(); } else { clearTimeout(timer); music?.pause(); song?.pause(); } show(); };
+  const wake = () => { box.classList.remove("idle"); clearTimeout(hideT); hideT = setTimeout(() => playing && box.classList.add("idle"), 2500); };
+  const start = async () => {
+    try { await box.requestFullscreen?.(); } catch (e) { /* not allowed - fine */ }
+    try { lock = await navigator.wakeLock?.request("screen"); } catch (e) { /* screen may sleep */ }
+    if (reelUI.music === "gentle") { music = reelMusic(); music?.start(); }
+    if (reelUI.music === "song" && song) { song.currentTime = 0; song.volume = 0.9; song.loop = true; song.play().catch(() => {}); }
+    playing = true; k = -1; box.innerHTML = ""; go(1); wake();
+  };
+  const key = (e) => { if (e.key === "Escape") close(); else if (e.key === "ArrowRight") go(1); else if (e.key === "ArrowLeft") go(-1); else if (e.key === " " && k >= 0) { e.preventDefault(); setPlay(!playing); } };
+  box.addEventListener("click", (e) => {
+    const b = (s) => e.target.closest(s); wake();
+    if (b("[data-rx]")) return close();
+    if (b("[data-rmus]")) { reelUI.music = b("[data-rmus]").dataset.rmus; save(); if (reelUI.music === "song" && !song) return box.querySelector("[data-rsong]").click(); return startScreen(); }
+    if (b("[data-rspd]")) { reelUI.speed = +b("[data-rspd]").dataset.rspd; save(); return startScreen(); }
+    if (b("[data-rcap]")) { reelUI.captions = b("[data-rcap]").dataset.rcap === "true"; save(); return startScreen(); }
+    if (b("[data-rplay]")) return start();
+    if (b("[data-ragain]")) { song && (song.volume = 0.9); return start(); }
+    if (b("[data-rprev]")) return go(-1);
+    if (b("[data-rnext]")) return go(1);
+    if (b("[data-rpause]")) return setPlay(!playing);
+    if (b("[data-rmute]")) { if (box.dataset.muted === "1") { delete box.dataset.muted; if (playing) { music?.resume(); song?.play().catch(() => {}); } } else { box.dataset.muted = "1"; music?.pause(); song?.pause(); } return show(); }
+    if (b(".reel-stage")) setPlay(!playing);   // tap the picture to pause / play
+  });
+  box.addEventListener("change", (e) => { const f = e.target.closest("[data-rsong]")?.files?.[0]; if (!f) { reelUI.music = song ? "song" : "gentle"; return startScreen(); }
+    if (songUrl) URL.revokeObjectURL(songUrl); songUrl = URL.createObjectURL(f); song = new Audio(songUrl); song.dataset.name = f.name.replace(/\.[^.]+$/, ""); reelUI.music = "song"; startScreen(); });
+  let x0 = null; box.addEventListener("touchstart", (e) => (x0 = e.touches[0].clientX), { passive: true });
+  box.addEventListener("touchend", (e) => { if (x0 == null || k < 0) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 50) { e.preventDefault(); go(dx < 0 ? 1 : -1); } });
+  box.addEventListener("pointermove", wake);
+  document.addEventListener("keydown", key);
+  if (reelUI.music === "song") reelUI.music = "gentle";   // a song has to be picked again each time
+  startScreen(); preload(0);
+}
+
 // ---------------------------------------------------------------- trip setup window
 function tripForm(t) {
   const isNew = !t; t = t || { title: "", start: "", end: "", travellers: [], extended: [] };
@@ -698,7 +811,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v130";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v131";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -788,7 +901,7 @@ function header(opts = {}) {
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
         ${isEditor() ? `${mi("settings", I.gear, "Trip Setup")}${mi("people", I.users, "Traveller Profiles")}<hr>
         ${mi("bulk", I.clip, "Attach Documents…")}${mi("offline", I.download || I.archive, "Offline Documents…")}${mi("archive", I.archive, "Archive Documents (Zip)…")}<hr>` : ""}
-        ${mi("todo", I.check, "To-dos")}${mi("pack", I.bag, "Packing Lists")}${mi("ask", I.chat, "Ask the Trip")}${mi("tripmap", ICON.map, "Trip Map")}${mi("recap", I.stats, "Trip Recap")}${mi("country", I.globe, "Country Info")}${mi("sos", I.warn, "Emergency &amp; Nearby")}${mi("album", I.book, "Export Album (Word)")}
+        ${mi("todo", I.check, "To-dos")}${mi("pack", I.bag, "Packing Lists")}${mi("ask", I.chat, "Ask the Trip")}${mi("tripmap", ICON.map, "Trip Map")}${mi("recap", I.stats, "Trip Recap")}${mi("reel", I.camera, "Travel Reel (Slideshow)")}${mi("country", I.globe, "Country Info")}${mi("sos", I.warn, "Emergency &amp; Nearby")}${mi("album", I.book, "Export Album (Word)")}
         ${isEditor() ? `<hr>${mi("export", I.download, "Download Backup")}${mi("import", I.upload, "Restore from Backup…")}` : ""}<hr>
         ${mi("signout", I.logout, "Sign Out")}</div></details>
     </div>
@@ -3942,6 +4055,7 @@ const actions = {
   tripmap: () => openTripMap(ui.tripId),
   recap: () => showRecap(ui.tripId),
   sos: () => emergencySheet(),
+  reel: () => travelReel(),
   pack: () => packingSheet(),
   todo: () => todoSheet(),
   country: () => (store.trip?.countryInfo?.codes?.length ? showCountryInfo({ id: ui.tripId, ...store.trip }) : isEditor() ? countryInfoFlow() : toast("No country info yet")),

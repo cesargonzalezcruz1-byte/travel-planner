@@ -991,3 +991,33 @@ body.noscroll{overflow:hidden}
 .sosi{font-size:20px;line-height:1.2} .sosm{display:grid;gap:2px;min-width:0} .sosm small{color:var(--muted);font-size:12px} .sosm .sosacts{margin-top:4px}
 .h24{color:#15803D} .sosbusy{color:var(--accent);font-weight:700}
 .soshl{padding:8px 12px;border-radius:12px;background:var(--soft);margin-bottom:8px} .soshl dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:6px 0 0;font-size:13.5px} .soshl dt{color:var(--muted)} .soshl dd{margin:0}
+/* travel reel */
+.cchip.reelc i{color:#DB2777}
+.reel{position:fixed;inset:0;z-index:950;background:#000;color:#fff;overflow:hidden;user-select:none;-webkit-user-select:none}
+.reel-start{height:100%;overflow:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:max(24px,env(safe-area-inset-top)) 20px 24px;text-align:center;background:radial-gradient(circle at 50% 30%,#2A2440,#000 75%)}
+.reel-start h2{margin:6px 0 0;font-size:26px} .reel-start p{margin:0;color:#CFC8E8}
+.reel-x{position:absolute;top:max(12px,env(safe-area-inset-top));right:12px}
+.reel-cover{width:min(62vw,280px);aspect-ratio:1;border-radius:22px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5)} .reel-cover img{width:100%;height:100%;object-fit:cover}
+.reel-opts{display:grid;grid-template-columns:auto auto;gap:8px 12px;align-items:center;margin:8px 0} .reel-opts > span{color:#CFC8E8;font-size:13px;font-weight:700;text-align:right}
+.reel .seg-mini{display:inline-flex;background:rgba(255,255,255,.1);border-radius:12px;padding:3px;gap:2px}
+.reel .seg-mini button{border:0;background:none;color:#fff;font:inherit;font-size:13px;font-weight:700;padding:6px 10px;border-radius:9px;cursor:pointer} .reel .seg-mini button.on{background:#fff;color:#16141F}
+.reel-play{font-size:17px;padding:12px 34px;margin-top:6px} .reel-tip,.reel-song{color:#9F98B8}
+.reel-stage{position:absolute;inset:0}
+.reel-frame{position:absolute;inset:0;opacity:0;transition:opacity .9s ease} .reel-frame.in{opacity:1}
+.reel-ph{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden}
+.reel-bg{position:absolute;inset:-40px;width:calc(100% + 80px);height:calc(100% + 80px);object-fit:cover;filter:blur(28px) brightness(.45)}
+.reel-img{position:relative;max-width:100%;max-height:100%;object-fit:contain;animation:var(--kb) var(--dur,6s) ease-out forwards}
+.reel-img.kb1{--kb:kb1}.reel-img.kb2{--kb:kb2}.reel-img.kb3{--kb:kb3}.reel-img.kb4{--kb:kb4}
+@keyframes kb1{from{transform:scale(1)}to{transform:scale(1.08)}} @keyframes kb2{from{transform:scale(1.08)}to{transform:scale(1)}}
+@keyframes kb3{from{transform:scale(1.06) translateX(-2%)}to{transform:scale(1.06) translateX(2%)}} @keyframes kb4{from{transform:scale(1.02) translateY(1.5%)}to{transform:scale(1.09) translateY(-1.5%)}}
+@media (prefers-reduced-motion:reduce){.reel-img{animation:none}}
+.reel-cap{position:absolute;left:0;right:0;bottom:0;padding:60px 22px max(84px,calc(env(safe-area-inset-bottom) + 76px));background:linear-gradient(transparent,rgba(0,0,0,.75));display:grid;gap:4px;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.reel-cap b{font-size:clamp(16px,2.4vw,24px);line-height:1.3} .reel-cap small{color:#DDD;font-size:13px}
+.reel-card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;background:radial-gradient(circle at 50% 40%,#2A2440,#000 75%)}
+.reel-card small{letter-spacing:.2em;text-transform:uppercase;color:#C4B5FD;font-weight:800} .reel-card h2{font-size:clamp(26px,5vw,48px);margin:8px 0} .reel-card p{color:#CFC8E8;font-size:18px;margin:0}
+.reel-card.day h2{animation:rise 1.2s ease-out} @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.reel-again{margin-top:16px}
+.reel-ui{position:absolute;left:0;right:0;bottom:0;padding:0 12px max(12px,env(safe-area-inset-bottom));transition:opacity .4s}
+.reel.idle .reel-ui{opacity:0;pointer-events:none} .reel.idle{cursor:none}
+.reel-prog{height:3px;background:rgba(255,255,255,.2);border-radius:2px;margin-bottom:10px;overflow:hidden} .reel-prog i{display:block;height:100%;background:#fff;transition:width .6s}
+.reel-btns{display:flex;gap:8px;align-items:center}

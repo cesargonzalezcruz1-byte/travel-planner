@@ -973,3 +973,5 @@ body.noscroll{overflow:hidden}
 .sheet .pitem.tdo input.tdue{min-height:0;height:32px;padding:2px 8px;font-size:12.5px;width:auto;border-radius:10px}
 .pitem.tdo.late .tdue{background:color-mix(in srgb,#C2410C 10%,var(--card))} .pitem.tdo.soon .tdue{background:color-mix(in srgb,#B7791F 10%,var(--card))}
 .oblock .ob-head{row-gap:6px} .oblock .ob-head .obpack + .obpack{margin-left:6px}
+.gonow{display:flex;gap:8px;align-items:center;margin-top:8px;padding:8px 10px;border-radius:12px;background:color-mix(in srgb,var(--accent,#2563EB) 9%,var(--card));color:var(--ink)}
+.gonow span{display:flex;flex-direction:column;min-width:0} .gonow small{color:var(--muted);font-size:12px}

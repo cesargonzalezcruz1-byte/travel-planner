@@ -459,6 +459,8 @@ function tripForm(t) {
       <button type="button" class="btn tiny" data-addfam>+ Add Family</button>
       <p class="muted small">Group the people joining into families - each family gets its own balance in Budget (Settle Up). Then mark costs as shared with, or paid by, a family.</p></fieldset>` : ""}
     <p class="muted small">Everyone on a trip has a profile: initials (how they appear in the itinerary), full name (helps the AI match names on bookings), their colour and documents. Tap Profile to change them.</p>
+    ${isEditor() && !isNew ? `<fieldset class="pbox"><legend>Home Address (Editors Only)</legend><input name="homeaddr" value="${esc(store.priv._home?.address || "")}" placeholder="e.g. 12 Smith St, Paddington QLD" autocomplete="street-address">
+      <p class="muted small">Used for the "Leave now for the airport" alert on the first flight, worked out with live traffic. Later flights leave from where you're staying.</p></fieldset>` : ""}
     ${isNew ? "" : `<fieldset class="pbox"><legend>Notifications (This Phone)</legend><div class="pushset">${pushSetupHtml(t)}</div></fieldset>`}
     <fieldset class="pbox"><legend>Colour Theme</legend><div class="themes">
       ${THEMES.map(([k, n, cs]) => `<label class="themecard"><input type="radio" name="theme" value="${k}" ${(t.theme || "ink") === k ? "checked" : ""}><span class="tsw">${cs.map((c) => `<i style="background:${c}"></i>`).join("")}</span><b>${n}</b></label>`).join("")}</div></fieldset>`,
@@ -484,6 +486,7 @@ function tripForm(t) {
       const extCodes = extended.map((p) => p.code);
       const famList = fams.map((f) => ({ ...f, members: f.members.filter((c) => extCodes.includes(c)) })).filter((f) => f.members.length)
         .map((f) => ({ id: f.id, name: f.name.trim() || joinNames(f.members.map((c) => extended.find((p) => p.code === c)?.name || c)), members: f.members }));
+      if (fd.has("homeaddr") && fd.get("homeaddr").trim() !== (store.priv._home?.address || "")) await data.savePrivate("_home", { address: fd.get("homeaddr").trim() });
       const id = await data.saveTrip({ title: fd.get("title").trim(), start: fd.get("start"), end: fd.get("end"), travellers, extended, families: famList, theme: fd.get("theme") || "ink" }, isNew ? null : t.id);
       if (isNew) { ui.person = travellers[0].code; localStorage.setItem("tp.person", ui.person); routeTo(id); }
     }, isNew ? null : async () => {
@@ -581,7 +584,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v125";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v126";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1359,7 +1362,7 @@ function pushSetupHtml(t) {
   const sw = (k, title, sub) => `<label class="pswitch"><span><b>${title}</b><small>${sub}</small></span><input type="checkbox" data-pcat="${k}" ${cats[k] !== false ? "checked" : ""} ${on.length ? "" : "disabled"}><i></i></label>`;
   return `<p class="muted small">Notifications on this phone for these travellers:</p>
     <div class="pushpeople">${(t.travellers || []).map((x) => `<label class="pp${on.includes(x.code) ? " on" : ""}" style="--pc:${pcolor(x.code)}"><input type="checkbox" data-pp="${esc(x.code)}" ${on.includes(x.code) ? "checked" : ""}>${esc(x.code)}</label>`).join("")}</div>
-    ${sw("important", "Important", "Check-in opens · time to leave for the airport · hotel check-out · car return · passport &amp; visa problems")}
+    ${sw("important", "Important", "Check-in opens · time to leave for the airport (live traffic) · hotel check-out · car return · passport &amp; visa problems")}
     ${sw("extras", "Extras", "New journal posts &amp; replies · itinerary changes · activities booked")}
     ${on.length ? `<button type="button" class="btn small" data-push-test><i class="ic16">${I.bell}</i>Send Test Notification</button>` : ""}`;
 }
@@ -1409,7 +1412,14 @@ function checkinHtml(f, compact = false) {
   return `<div class="cin ${c.status}"><div class="cin-t"><div class="cin-h"><b>${c.status === "open" ? "Online check-in is open" : `Online check-in opens ${untilWords(c.opens)}`}</b>${c.status === "open" ? "" : remind}</div>
       ${compact ? `<small class="one">${esc(flight)}</small><small class="one">${c.status === "open" ? "until 1 h before departure" : esc(localWhen(c.opens))}</small>`
         : `<small>${c.status === "open" ? `until about 1 hour before departure` : `${esc(localWhen(c.opens))} your time · usually ${c.hours} h before departure`}</small>`}</div>
-    ${c.status === "open" ? `<div class="nacts">${btn}</div>` : ""}</div>`;
+    ${c.status === "open" ? `<div class="nacts">${btn}</div>` : ""}</div>${goHtml(f)}`;
+}
+// "Go now": leave time worked out with live traffic (the server refreshes it through the morning of the flight)
+function goHtml(f) {
+  const g = f.go; if (!g || g.connection || !g.leave || g.dep !== +checkinFor(f).dep || Date.now() > g.dep) return "";
+  let t = ""; try { t = new Date(g.leave).toLocaleTimeString("en-AU", { timeZone: g.tz || undefined, hour: "numeric", minute: "2-digit" }); } catch (e) { t = new Date(g.leave).toLocaleTimeString(); }
+  const ago = Math.max(0, Math.round((Date.now() - g.checked) / 60000));
+  return `<div class="gonow"><i class="ic16">${ICON.car}</i><span><b>Leave by ${esc(t)}</b><small>${g.mins} min drive from ${esc(g.from)} with traffic · updated ${ago < 2 ? "just now" : ago < 60 ? ago + " min ago" : Math.round(ago / 60) + " h ago"}</small></span></div>`;
 }
 // calendar reminders (.ics) - one per flight, an alert when check-in opens
 function icsFor(flights) {

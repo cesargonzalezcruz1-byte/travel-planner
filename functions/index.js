@@ -49,6 +49,62 @@ const placeTz = (place, fallback) => { const m = String(place || "").trim().matc
 // a reminder is due when its time has come, but not more than `grace` ago (so nothing is sent late or twice)
 const due = (at, now, grace = 45 * MIN) => at && now >= +at && now - at < grace;
 
+// ---- "Go now": traffic-aware drive time to the airport (Routes API), refreshed through the day
+const MAPS_KEY = "AIzaSyCXZELvt-h-Di79tJGlsXMXvFXSNDcZlWo";   // the public Maps key (same one the app uses); used only if the service account can't call Routes
+async function driveMinutes(from, to, at) {
+  const body = JSON.stringify({ origin: { address: from }, destination: { address: to }, travelMode: "DRIVE", routingPreference: "TRAFFIC_AWARE_OPTIMAL",
+    departureTime: new Date(Math.max(at, Date.now() + 2 * MIN)).toISOString() });
+  const call = (headers) => fetch("https://routes.googleapis.com/directions/v2:computeRoutes", { method: "POST", body,
+    headers: { "Content-Type": "application/json", "X-Goog-FieldMask": "routes.duration,routes.staticDuration", ...headers } });
+  let r = null;
+  try {   // the function's own Google identity first (no key needed)
+    const t = await (await fetch("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token", { headers: { "Metadata-Flavor": "Google" } })).json();
+    r = await call({ Authorization: `Bearer ${t.access_token}`, "X-Goog-User-Project": process.env.GCLOUD_PROJECT || "travel-planner-db061" });
+    if (!r.ok) { logger.warn("routes oauth", r.status, (await r.text()).slice(0, 300)); r = null; }
+  } catch (e) { r = null; }
+  if (!r) { r = await call({ "X-Goog-Api-Key": MAPS_KEY, Referer: APP_URL }); if (!r.ok) throw new Error(`Routes ${r.status}: ${(await r.text()).slice(0, 200)}`); }
+  const j = await r.json(), d = j.routes?.[0]?.duration; if (!d) throw new Error("No route");
+  return Math.ceil(parseInt(d) / 60);
+}
+// where they'll be leaving from: the stay they're in that day, else home (first flight of the trip); null for a connection
+async function goOrigin(tripDoc, items, f, dep) {
+  const who = f.who || [], from = codesOf(f.route)[0], date = f.start;
+  const mine = (x) => (x.who || []).some((w) => who.includes(w));
+  const prev = items.filter((x) => x.type === "flight" && x.id !== f.id && mine(x) && x.start && x.start <= date)
+    .map((x) => ({ x, d: checkinInfo(x, 0)?.dep })).filter((p) => p.d && p.d < dep).sort((a, b) => b.d - a.d)[0];
+  if (prev && codesOf(prev.x.route).at(-1) === from && dep - prev.d < 20 * HOUR) return { connection: true };
+  const stay = items.filter((x) => x.type === "stay" && x.status !== "tbc" && mine(x) && x.start < date && date <= x.end).sort((a, b) => b.start.localeCompare(a.start))[0]
+    || items.find((x) => x.type === "stay" && x.status !== "tbc" && mine(x) && x.start === date && date === x.end);
+  if (stay && (stay.address || stay.name)) return { q: stay.address || [stay.name, stay.area].filter(Boolean).join(", "), name: stay.short || stay.name };
+  if (!prev) { const h = (await tripDoc.ref.collection("private").doc("_home").get()).data(); if (h?.address) return { q: h.address, name: "home" }; }
+  return null;
+}
+async function goAlert(tripDoc, items, i, dep, lead, now, tgt, link, route, fl) {
+  const tz = AIRPORT_TZ[route[0]], target = dep - lead * HOUR, key = `go_${tripDoc.id}_${i.id}_${i.start}_${i.dep}`;
+  const dest = `${route[0]} airport`, mapsUrl = (o) => `https://www.google.com/maps/dir/?api=1${o ? "&origin=" + encodeURIComponent(o) : ""}&destination=${encodeURIComponent(dest)}&travelmode=driving`;
+  let go = i.go && i.go.dep === dep ? i.go : null;
+  if (now >= target - 8 * HOUR && now < target) {
+    const age = go ? now - go.checked : Infinity, every = target - now > 3 * HOUR ? HOUR : 15 * MIN;
+    if (age >= every - MIN) {
+      const o = await goOrigin(tripDoc, items, i, dep);
+      if (o?.connection) go = { dep, connection: true, checked: now };
+      else if (o) {
+        try { const mins = await driveMinutes(o.q, dest, target - (go?.mins || 60) * MIN);
+          go = { dep, mins, from: o.name, q: o.q, leave: target - mins * MIN - 10 * MIN, tz: tz || "", checked: now }; }
+        catch (e) { logger.warn("go route", i.id, e.message); }
+      }
+      if (go) await tripDoc.ref.collection("items").doc(i.id).update({ go }).catch((e) => logger.warn("go save", e.message));
+    }
+  }
+  if (go?.connection) return;   // a connecting flight - they're already at the airport
+  if (go?.leave) {
+    if (due(new Date(go.leave), now, 90 * MIN))
+      await sendOnce(key, tgt, { title: `Leave now for ${route[0]} airport`, body: `${go.mins} min drive from ${go.from} with current traffic - you'll be there by ${hm(new Date(target), tz)}, ${lead} h before ${fl || "your flight"} at ${hm(new Date(dep), tz)}.`,
+        url: mapsUrl(go.q), app: link(i.start, "it-" + i.id), tag: `go-${i.id}` });
+  } else if (due(new Date(target), now))
+    await sendOnce(key, tgt, { title: `Time to head to ${route[0]} airport`, body: `${fl} to ${route.at(-1)} departs at ${hm(new Date(dep), tz)} - aim to be there ${lead} hours before.`, url: mapsUrl(), app: link(i.start, "it-" + i.id), tag: `go-${i.id}` });
+}
+
 export const checkinAlerts = onSchedule({ schedule: "every 15 minutes", region: "us-east1", timeoutSeconds: 240, memory: "256MiB" }, async () => {
   const now = Date.now();
   const tokens = (await db.collection("push").get()).docs.map((d) => ({ id: d.id, ...d.data() })).filter((t) => t.token && (t.people || []).length);
@@ -71,11 +127,9 @@ export const checkinAlerts = onSchedule({ schedule: "every 15 minutes", region: 
         const c = checkinInfo(i, now);
         if (c && c.status === "open" && now - c.opens < 12 * HOUR)
           await sendOnce(`ci_${tid}_${i.id}_${i.start}_${i.dep}`, tgt, { title: `Check-in is open: ${fl}`.trim(), body: `${route.join(" → ")} · departs ${when(c.dep, AIRPORT_TZ[route[0]])}. Tap to check in.`, url: c.url, app: link(i.start, "it-" + i.id), tag: `checkin-${i.id}` });
-        // leave for the airport: 3 h before international, 2 h before domestic
+        // leave for the airport: be there 3 h before international, 2 h before domestic; with live traffic from where they're staying
         const dep = c?.dep, lead = isInternational(i) ? 3 : 2;
-        if (dep && due(new Date(dep - lead * HOUR), now))
-          await sendOnce(`go_${tid}_${i.id}_${i.start}_${i.dep}`, tgt, { title: `Time to head to ${route[0]} airport`, body: `${fl} to ${route.at(-1)} departs at ${hm(dep, AIRPORT_TZ[route[0]])} - aim to be there ${lead} hours before.`,
-            url: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(route[0] + " airport")}`, app: link(i.start, "it-" + i.id), tag: `go-${i.id}` });
+        if (dep && dep > now - HOUR && dep - now < 12 * HOUR) await goAlert(tripDoc, items, i, +dep, lead, now, tgt, link, route, fl);
       } else if (i.type === "stay" && i.end) {
         const tz = tzOn(items, who, i.end), out = zonedDate(i.end, timeIn(i.checkout) || "10:00", tz);
         if (due(new Date(out - HOUR), now))

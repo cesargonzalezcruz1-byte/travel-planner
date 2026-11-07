@@ -247,7 +247,7 @@ function renderHome() {
         return `<button type="button" class="tc-warn ${lvl}" data-docwarn="${esc(t.id)}" title="${esc(iss.map((x) => (x.per.name || x.per.code) + ": " + x.st.text).join("\n"))}"><i class="ic16">${I.warn}</i>${lvl === "bad" ? "Document problem" : "Check documents"} · ${who.map(esc).join(", ")}</button>`; })()}
       <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
       <div class="tc-people">${(t.travellers || []).map((p, k) => `<span class="pchip tp" style="--pc:${upc(p.color) || TDEFAULT[k % TDEFAULT.length]}" title="${esc(p.name || p.code)}"><b>${esc(p.code)}</b></span>`).join("")}</div>
-      <div class="tc-ctry"><button type="button" class="cchip ask" data-task="${esc(t.id)}"><i>${I.chat}</i>Ask</button><button type="button" class="cchip map" data-tmap="${esc(t.id)}"><i>${ICON.map}</i>Trip Map</button>${t.countryInfo?.codes?.length ? t.countryInfo.codes.map((c) => `<button type="button" class="cchip" data-cinfo="${esc(t.id)}" data-c="${c}"><i>${I.globe}</i>${esc(countryName(c))}</button>`).join("")
+      <div class="tc-ctry"><button type="button" class="cchip ask" data-task="${esc(t.id)}"><i>${I.chat}</i>Ask</button><button type="button" class="cchip map" data-tmap="${esc(t.id)}"><i>${ICON.map}</i>Trip Map</button><button type="button" class="cchip stat" data-trecap="${esc(t.id)}"><i>${I.stats}</i>Recap</button>${t.countryInfo?.codes?.length ? t.countryInfo.codes.map((c) => `<button type="button" class="cchip" data-cinfo="${esc(t.id)}" data-c="${c}"><i>${I.globe}</i>${esc(countryName(c))}</button>`).join("")
         : isEditor() && t.end >= today ? `<button type="button" class="cchip add" data-cnew="${esc(t.id)}"><i>${I.globe}</i>+ Country Info</button>` : ""}</div>
       ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
     </article>`;
@@ -270,6 +270,7 @@ function renderHome() {
       const cn = e.target.closest("[data-cnew]"); if (cn) return countryInfoFlow(cn.dataset.cnew);
       const tm = e.target.closest("[data-tmap]"); if (tm) return openTripMap(tm.dataset.tmap);
       const ta = e.target.closest("[data-task]"); if (ta) return askTrip(ta.dataset.task);
+      const tr = e.target.closest("[data-trecap]"); if (tr) return showRecap(tr.dataset.trecap);
       if (e.target.closest("[data-settings]")) return; localStorage.setItem("tp.trip", el.dataset.open); routeTo(el.dataset.open); };
     el.onkeydown = (e) => { if (e.key === "Enter") el.click(); };
   });
@@ -538,6 +539,7 @@ const SV = (d, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="curr
 const I = {
   pin: SV('<path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
   chat: SV('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>'),
+  stats: SV('<path d="M3 3v18h18"/><path d="M7 15v3M11 10v8M15 12v6M19 6v12"/>'),
   globe: SV('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'),
   walk: SV('<circle cx="13" cy="4" r="2"/><path d="m9 20 3-6 3 2v6M6 12l3-4 4 1 3 4 3 1"/><path d="M9 8 7 14"/>'),
   route: SV('<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>'),
@@ -573,7 +575,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v119";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v120";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -663,7 +665,7 @@ function header(opts = {}) {
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
         ${isEditor() ? `${mi("settings", I.gear, "Trip Setup")}${mi("people", I.users, "Traveller Profiles")}<hr>
         ${mi("bulk", I.clip, "Attach Documents…")}${mi("offline", I.download || I.archive, "Offline Documents…")}${mi("archive", I.archive, "Archive Documents (Zip)…")}<hr>` : ""}
-        ${mi("ask", I.chat, "Ask the Trip")}${mi("tripmap", ICON.map, "Trip Map")}${mi("country", I.globe, "Country Info")}${mi("album", I.book, "Export Album (Word)")}
+        ${mi("ask", I.chat, "Ask the Trip")}${mi("tripmap", ICON.map, "Trip Map")}${mi("recap", I.stats, "Trip Recap")}${mi("country", I.globe, "Country Info")}${mi("album", I.book, "Export Album (Word)")}
         ${isEditor() ? `<hr>${mi("export", I.download, "Download Backup")}${mi("import", I.upload, "Restore from Backup…")}` : ""}<hr>
         ${mi("signout", I.logout, "Sign Out")}</div></details>
     </div>
@@ -1549,6 +1551,71 @@ function renderOutside(side) {
   root.querySelectorAll("[data-ogo]").forEach((b) => (b.onclick = () => { const d2 = side === "before" ? t.start : t.end;
     if (pane !== null && pane !== undefined) { ui.splitDay[pane] = d2; return render(); }
     ui.slide = side === "before" ? "from-right" : "from-left"; routeTo(ui.tripId, d2, true); }));
+}
+
+// ---------------------------------------------------------------- trip recap: the trip in numbers (also a page in the Word album)
+async function tripRecap(tid) {
+  await loadTripData(tid);
+  const t = store.trip, inTrip = (a, b) => !(b < t.start || a > t.end), ppl = PEOPLE(), today = iso(new Date());
+  const its = store.items.filter((i) => inTrip(i.start, i.end || i.start));
+  const pos = async (q) => { if (!q || !mapsReady()) return null; try { return await geocodeText(q); } catch (e) { return null; } };
+  const fl = its.filter((i) => i.type === "flight"), legs = [];
+  for (const f of fl) { const c = codesOf(f.route);
+    for (let k = 0; k + 1 < c.length; k++) { const a = await pos(c[k] + " airport"), b = await pos(c[k + 1] + " airport");
+      legs.push({ f, from: c[k], to: c[k + 1], km: a && b ? distanceKm(a, b) : null }); } }
+  const sumKm = (ls) => ls.reduce((x, l) => x + (l.km || 0), 0);
+  const longest = legs.filter((l) => l.km).sort((a, b) => b.km - a.km)[0];
+  const stays = its.filter((i) => i.type === "stay");
+  const nightsBy = {}; const nightSet = new Set();
+  for (const s of stays) for (let d = s.start; d < s.end; d = addDays(d, 1)) { if (!inTrip(d, d)) continue; const k = s.status === "tbc" ? "Not booked yet" : stayArea(s) || s.short || s.name;
+    (nightsBy[k] ||= new Set()).add(d); nightSet.add(d); }
+  const places = Object.entries(nightsBy).map(([name, ds]) => ({ name, nights: ds.size, tbc: name === "Not booked yet" })).sort((a, b) => a.tbc - b.tbc || b.nights - a.nights);
+  // by road: Plan Route drives, plus moves between stays on days without a flight (straight line x 1.25 - an estimate)
+  let roadKm = 0; const byDate = {};
+  for (const [k, r] of Object.entries(t.routes || {})) { const d = k.split("_")[0]; const m = (r.legs || []).filter((l) => l.mode === "drive").reduce((a, l) => a + l.m, 0) / 1000; byDate[d] = Math.max(byDate[d] || 0, m); }
+  roadKm += Object.values(byDate).reduce((a, b) => a + b, 0);
+  const ordered = stays.slice().sort((a, b) => a.start.localeCompare(b.start)), moves = new Set();
+  for (const p of ppl) { const mine = ordered.filter((s) => (s.who || []).includes(p));
+    for (let k = 0; k + 1 < mine.length; k++) { const a = mine[k], b = mine[k + 1], key = a.id + ">" + b.id;
+      if (moves.has(key) || fl.some((f) => (f.who || []).includes(p) && f.start <= b.start && b.start <= (f.end || f.start))) continue; moves.add(key);
+      const x = await pos(a.address || a.name), y = await pos(b.address || b.name); if (x && y) roadKm += distanceKm(x, y) * 1.25; } }
+  const acts = store.entries.filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed && e.date && inTrip(e.date, e.endDate || e.date));
+  const posts = (store.journal || []).filter((j) => !j.replyTo);
+  const rated = acts.map((e) => { const rs = posts.filter((j) => j.activityId === e.id && j.rating > 0).map((j) => j.rating);
+    return { name: firstText(e.text), avg: rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : 0, n: rs.length }; }).filter((x) => x.n).sort((a, b) => b.avg - a.avg || b.n - a.n);
+  const voted = Object.values(store.votes || {}).filter((v) => (v.up || []).length).map((v) => ({ name: v.name, n: v.up.length, who: v.up })).sort((a, b) => b.n - a.n);
+  const countries = tripCountries().map(countryName);
+  const people = ppl.map((c) => { const ls = legs.filter((l) => (l.f.who || []).includes(c)), ns = new Set();
+    stays.filter((s) => (s.who || []).includes(c)).forEach((s) => { for (let d = s.start; d < s.end; d = addDays(d, 1)) if (inTrip(d, d)) ns.add(d); });
+    return { code: c, name: NAME(c), flights: new Set(ls.map((l) => l.f.id)).size, km: Math.round(sumKm(ls)), nights: ns.size }; });
+  return {
+    stage: today < t.start ? "planned" : today > t.end ? "done" : "so far",
+    days: days().length, nights: nightSet.size, countries, places,
+    flights: fl.length, flownKm: Math.round(sumKm(legs)), noKm: legs.some((l) => l.km == null),
+    longest: longest && { route: `${longest.from} → ${longest.to}`, km: Math.round(longest.km) },
+    roadKm: Math.round(roadKm), stays: stays.length,
+    activities: acts.length, rated: rated.slice(0, 5), voted: voted.slice(0, 5),
+    journal: { posts: posts.length, photos: posts.reduce((a, j) => a + (j.photos || []).length, 0), replies: (store.journal || []).filter((j) => j.replyTo).length, authors: new Set(posts.map((j) => j.author)).size },
+    people,
+  };
+}
+const nfmt = (n) => Number(n || 0).toLocaleString("en-AU");
+async function showRecap(tid) {
+  toast("Adding it all up…");
+  let R; try { R = await tripRecap(tid); } catch (e) { return toast("Couldn't build the recap: " + (e.message || e)); }
+  const t = store.trip, tile = (v, l) => `<div class="rtile"><b>${v}</b><span>${l}</span></div>`;
+  const stars = (a) => "★".repeat(Math.round(a)) + "☆".repeat(5 - Math.round(a));
+  infoBox(`<div class="recap"><h2>${I.stats}Trip Recap</h2><p class="muted small">${esc(t.title)} · ${fmtDate(t.start)} – ${fmtDate(t.end)}${R.stage === "planned" ? " · as planned" : R.stage === "so far" ? " · so far" : ""}</p>
+    <div class="rtiles">${tile(R.days, "days")}${tile(R.nights, "nights away")}${tile(R.countries.length, R.countries.length === 1 ? "country" : "countries")}${tile(R.places.filter((x) => !x.tbc).length, R.places.filter((x) => !x.tbc).length === 1 ? "place" : "places")}
+      ${tile(R.flights, R.flights === 1 ? "flight" : "flights")}${tile(nfmt(R.flownKm) + (R.noKm ? "+" : ""), "km flown")}${tile("~" + nfmt(R.roadKm), "km by road")}${tile(R.activities, "activities")}</div>
+    ${R.countries.length ? `<p class="small"><b>Countries:</b> ${R.countries.map(esc).join(", ")}</p>` : ""}
+    ${R.longest ? `<p class="small"><b>Longest flight:</b> ${esc(R.longest.route)} · ${nfmt(R.longest.km)} km</p>` : ""}
+    ${R.places.length ? `<section><h3>Nights by Place</h3><ul class="rbars">${R.places.map((x) => `<li${x.tbc ? ' class="muted"' : ""}><span>${esc(x.name)}</span><i style="--w:${Math.round(x.nights / R.places[0].nights * 100)}%"></i><b>${x.nights}</b></li>`).join("")}</ul></section>` : ""}
+    ${R.rated.length ? `<section><h3>Top-Rated Activities</h3><ol>${R.rated.map((x) => `<li>${esc(x.name)} <span class="rstars">${stars(x.avg)}</span> <small class="muted">${x.n} rating${x.n > 1 ? "s" : ""}</small></li>`).join("")}</ol></section>` : ""}
+    ${R.voted.length ? `<section><h3>Family Favourites (Most Votes)</h3><ol>${R.voted.map((x) => `<li>${esc(x.name)} <small class="muted">${x.n} vote${x.n > 1 ? "s" : ""} · ${x.who.map(esc).join(", ")}</small></li>`).join("")}</ol></section>` : ""}
+    <section><h3>Journal</h3><p class="small">${R.journal.posts} post${R.journal.posts === 1 ? "" : "s"} · ${R.journal.photos} photo${R.journal.photos === 1 ? "" : "s"} · ${R.journal.replies} repl${R.journal.replies === 1 ? "y" : "ies"} · ${R.journal.authors} writer${R.journal.authors === 1 ? "" : "s"}</p></section>
+    <section><h3>Each Traveller</h3><table class="rpeople"><tr><th></th><th>Flights</th><th>km flown</th><th>Nights</th></tr>${R.people.map((x) => `<tr><td><span class="dd on" style="--pc:${pcolor(x.code)}">${esc(x.code)}</span></td><td>${x.flights}</td><td>${nfmt(x.km)}</td><td>${x.nights}</td></tr>`).join("")}</table></section>
+    <p class="muted small">Kilometres flown are straight lines between airports; road kilometres are an estimate (Plan Route results plus the moves between stays).</p></div>`);
 }
 
 // ---------------------------------------------------------------- whole-trip map: every stay, flight path and activity, and where we were each day
@@ -3431,6 +3498,7 @@ const actions = {
     modal(`<h2>Export Album</h2><p class="muted small">A Word document with a page per day: where you stayed, what you did and the journal. No costs or confirmation numbers.</p>
       <div class="row2"><label>From<input type="date" name="from" value="${t.start}" min="${t.start}" max="${t.end}" required></label>
       <label>To<input type="date" name="to" value="${t.end}" min="${t.start}" max="${t.end}" required></label></div>
+      <label class="pswitch"><input type="checkbox" name="recap" checked><span>Start with a Trip Recap page (the trip in numbers)</span></label>
       ${(store.journal || []).some((j) => j.photos?.length) ? `<label class="pswitch"><input type="checkbox" name="photos" checked><span>Include the journal photos</span></label>` : ""}`, async (fd) => {
       const from = fd.get("from"), to = fd.get("to");
       if (from > to) { toast("'From' must be before 'To'"); throw Object.assign(new Error(""), { back: true }); }
@@ -3443,7 +3511,8 @@ const actions = {
         for (const ph of want) { toast(`Adding photos… ${++n} of ${want.length}`); try { photos.set(ph.id, new Uint8Array(await data.photoBytes(ph))); } catch (e) { bad++; console.warn("photo", e); } }
         if (bad) toast(`${bad} photo${bad > 1 ? "s" : ""} couldn't be downloaded and were left out`);
       }
-      const doc = buildAlbum(docx, { trip: t, items: store.items, entries: store.entries, journal: store.journal }, { from, to, photos });
+      let recap = null; if (fd.get("recap")) { try { recap = await tripRecap(ui.tripId); } catch (e) { console.warn("recap", e); } }
+      const doc = buildAlbum(docx, { trip: t, items: store.items, entries: store.entries, journal: store.journal }, { from, to, photos, recap });
       const blob = await docx.Packer.toBlob(doc);
       const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
       a.download = `${(t.title || "Trip").replace(/&/g, "and").replace(/[^\w\- ]+/g, "").replace(/\s+/g, " ").trim()} Album ${from}${to !== from ? " to " + to : ""}.docx`; a.click();
@@ -3455,6 +3524,7 @@ const actions = {
   offline: () => offlineForm(),
   ask: () => askTrip(),
   tripmap: () => openTripMap(ui.tripId),
+  recap: () => showRecap(ui.tripId),
   country: () => (store.trip?.countryInfo?.codes?.length ? showCountryInfo({ id: ui.tripId, ...store.trip }) : isEditor() ? countryInfoFlow() : toast("No country info yet")),
   people: () => peopleList(),
   archive: () => archiveDocs(),

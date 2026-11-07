@@ -917,3 +917,15 @@ body.noscroll{overflow:hidden}
 .tmapsheet .tmap-msg:empty{display:none}
 .tmapsheet{overflow:hidden} .tmapsheet .tmap{min-height:0}
 .cchip.ask i{color:var(--accent)}
+/* trip recap */
+.recap h2{display:flex;align-items:center;gap:8px} .recap h2 svg{width:22px;height:22px;color:var(--accent)}
+.rtiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+@media (max-width:480px){ .rtiles{grid-template-columns:repeat(2,1fr)} }
+.rtile{background:var(--soft);border-radius:14px;padding:10px 8px;text-align:center;display:grid;gap:2px}
+.rtile b{font-size:22px;font-weight:800;color:var(--accent);line-height:1.1} .rtile span{font-size:12px;color:var(--muted)}
+.recap section{margin-top:14px} .recap h3{font-size:15px;margin:0 0 6px} .recap ol{margin:0;padding-left:22px} .recap li{margin:3px 0}
+.rbars{list-style:none;padding:0;margin:0;display:grid;gap:5px} .rbars li{display:grid;grid-template-columns:minmax(90px,38%) 1fr auto;gap:8px;align-items:center;font-size:13.5px}
+.rbars i{height:10px;border-radius:5px;background:var(--stay);width:var(--w)} .rbars b{font-size:13px}
+.rstars{color:#E5A50A;letter-spacing:1px}
+.rpeople{border-collapse:collapse;font-size:13.5px} .rpeople th{color:var(--muted);font-weight:700;text-align:left;padding:2px 12px 4px 0} .rpeople td{padding:3px 12px 3px 0}
+.cchip.stat i{color:var(--flight)}

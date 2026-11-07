@@ -67,6 +67,26 @@ export function buildAlbum(docx, { trip, items, entries, journal }, opts = {}) {
   body.push(P(T(joinNames(travellers.map((t) => t.name)), { size: 26, color: C.muted }), { spacing: { before: 120 } }));
   if ((trip.extended || []).length) body.push(P(T("With " + joinNames(trip.extended.map((t) => name(t.code))), { size: 22, color: C.muted, italics: true })));
 
+  // ----- trip recap page (the trip in numbers)
+  const R = opts.recap;
+  if (R) {
+    const nf = (n) => Number(n || 0).toLocaleString("en-AU");
+    body.push(new Paragraph({ heading: HeadingLevel.HEADING_1, pageBreakBefore: true, children: [T("Trip Recap")], border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: C.line, space: 6 } }, spacing: { after: 160 } }));
+    const tiles = [[R.days, "days"], [R.nights, "nights away"], [R.countries.length, R.countries.length === 1 ? "country" : "countries"], [R.places.filter((x) => !x.tbc).length, R.places.filter((x) => !x.tbc).length === 1 ? "place" : "places"],
+      [R.flights, R.flights === 1 ? "flight" : "flights"], [nf(R.flownKm), "km flown"], ["~" + nf(R.roadKm), "km by road"], [R.activities, "activities"]];
+    const cell = ([v, l]) => new TableCell({ borders: noBorders, width: { size: 25, type: WidthType.PERCENTAGE }, margins: { top: 80, bottom: 80, left: 60, right: 60 },
+      children: [P(T(String(v), { size: 44, bold: true, color: C.accent, font: "Georgia" }), { alignment: AlignmentType.CENTER, spacing: { after: 0 } }), P(T(l, { size: 18, color: C.muted }), { alignment: AlignmentType.CENTER })] });
+    body.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: noBorders, rows: [0, 4].map((k) => new TableRow({ children: tiles.slice(k, k + 4).map(cell) })) }));
+    if (R.countries.length) body.push(P([T("Countries: ", { bold: true }), T(R.countries.join(", "))], { spacing: { before: 200, after: 60 } }));
+    if (R.longest) body.push(P([T("Longest flight: ", { bold: true }), T(`${R.longest.route} · ${nf(R.longest.km)} km`)], { spacing: { after: 60 } }));
+    if (R.places.length) { body.push(label("Nights by Place")); R.places.forEach((x) => body.push(bullet([T(x.name, { bold: true }), T(`  ${x.nights} night${x.nights > 1 ? "s" : ""}`, { color: C.muted })]))); }
+    if (R.rated.length) { body.push(label("Top-Rated Activities")); R.rated.forEach((x) => body.push(bullet([T(x.name + "  "), stars(Math.round(x.avg))]))); }
+    if (R.voted.length) { body.push(label("Family Favourites")); R.voted.forEach((x) => body.push(bullet([T(x.name), T(`  ${x.n} vote${x.n > 1 ? "s" : ""}`, { color: C.muted })]))); }
+    body.push(label("Each Traveller"));
+    R.people.forEach((x) => body.push(bullet([T(name(x.code), { bold: true }), T(`  ${x.flights} flight${x.flights === 1 ? "" : "s"} · ${nf(x.km)} km flown · ${x.nights} night${x.nights === 1 ? "" : "s"} away`, { color: C.muted })])));
+    if (R.journal.posts) body.push(P(T(`The journal: ${R.journal.posts} posts, ${R.journal.photos} photos and ${R.journal.replies} replies from ${R.journal.authors} writer${R.journal.authors === 1 ? "" : "s"}.`, { italics: true, color: C.muted }), { spacing: { before: 240 } }));
+  }
+
   days.filter((d) => d >= from && d <= to).forEach((date) => {
     const n = days.indexOf(date) + 1;
     const its = items.filter((i) => i.start <= date && date <= i.end);

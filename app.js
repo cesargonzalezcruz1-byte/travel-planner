@@ -459,7 +459,7 @@ function tripForm(t) {
       <button type="button" class="btn tiny" data-addfam>+ Add Family</button>
       <p class="muted small">Group the people joining into families - each family gets its own balance in Budget (Settle Up). Then mark costs as shared with, or paid by, a family.</p></fieldset>` : ""}
     <p class="muted small">Everyone on a trip has a profile: initials (how they appear in the itinerary), full name (helps the AI match names on bookings), their colour and documents. Tap Profile to change them.</p>
-    ${isEditor() && !isNew ? `<fieldset class="pbox"><legend>Home Address (Editors Only)</legend><input name="homeaddr" value="${esc(store.priv._home?.address || "")}" placeholder="e.g. 12 Smith St, Paddington QLD" autocomplete="street-address">
+    ${isEditor() && !isNew ? `<fieldset class="pbox"><legend>Home Address (Editors Only)</legend><input name="homeaddr" data-was="" value="" placeholder="e.g. 12 Smith St, Paddington QLD" autocomplete="street-address">
       <p class="muted small">Used for the "Leave now for the airport" alert on the first flight, worked out with live traffic. Later flights leave from where you're staying.</p></fieldset>` : ""}
     ${isNew ? "" : `<fieldset class="pbox"><legend>Notifications (This Phone)</legend><div class="pushset">${pushSetupHtml(t)}</div></fieldset>`}
     <fieldset class="pbox"><legend>Colour Theme</legend><div class="themes">
@@ -486,7 +486,8 @@ function tripForm(t) {
       const extCodes = extended.map((p) => p.code);
       const famList = fams.map((f) => ({ ...f, members: f.members.filter((c) => extCodes.includes(c)) })).filter((f) => f.members.length)
         .map((f) => ({ id: f.id, name: f.name.trim() || joinNames(f.members.map((c) => extended.find((p) => p.code === c)?.name || c)), members: f.members }));
-      if (fd.has("homeaddr") && fd.get("homeaddr").trim() !== (store.priv._home?.address || "")) await data.savePrivate("_home", { address: fd.get("homeaddr").trim() });
+      const home = form.querySelector("[name=homeaddr]");
+      if (home && home.value.trim() !== home.dataset.was) await data.saveHomeAddress(t.id, home.value.trim());
       const id = await data.saveTrip({ title: fd.get("title").trim(), start: fd.get("start"), end: fd.get("end"), travellers, extended, families: famList, theme: fd.get("theme") || "ink" }, isNew ? null : t.id);
       if (isNew) { ui.person = travellers[0].code; localStorage.setItem("tp.person", ui.person); routeTo(id); }
     }, isNew ? null : async () => {
@@ -496,6 +497,8 @@ function tripForm(t) {
     });
   const form = [...document.querySelectorAll(".sheet")].pop();
   wirePushSetup(form, t);
+  const homeIn = form.querySelector("[name=homeaddr]");
+  if (homeIn) data.homeAddress(t.id).then((v) => { homeIn.dataset.was = v; if (!homeIn.value) homeIn.value = v; });
   // families for settling up: groups of the people joining (a person is in at most one)
   const fams = (t.families || []).map((f) => ({ ...f, members: [...(f.members || [])] }));
   const drawFams = () => { const box = form.querySelector("#fams"); if (!box) return;
@@ -584,7 +587,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v126";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v127";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),

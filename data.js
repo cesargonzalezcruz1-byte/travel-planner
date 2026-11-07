@@ -534,6 +534,17 @@ export async function savePrivate(id, obj) {
   await fb.fsM.setDoc(fb.fsM.doc(col("private"), id), data);
   return id;
 }
+// home address for the "leave for the airport" timing (editors only; Trip Setup can be opened from the home screen, so the trip id is passed in)
+export async function homeAddress(tid) {
+  if (store.tripId === tid && store.priv._home) return store.priv._home.address || "";
+  if (DEMO) return demo.trips[tid]?.priv?._home?.address || "";
+  try { const d = await fb.fsM.getDoc(fb.fsM.doc(fb.db, "trips", tid, "private", "_home")); return d.exists() ? d.data().address || "" : ""; } catch (e) { return ""; }
+}
+export async function saveHomeAddress(tid, address) {
+  const data = clean({ address, updatedBy: store.email, updatedAt: now() });
+  if (DEMO) { const t = demo.trips[tid]; if (t) { t.priv = t.priv || {}; t.priv._home = data; if (store.tripId === tid) { demoLoad(tid); emit(); } } return; }
+  await fb.fsM.setDoc(fb.fsM.doc(fb.db, "trips", tid, "private", "_home"), data);
+}
 export async function deletePrivate(id) {
   if (DEMO) { delete mem().priv[id]; demoLoad(store.tripId); emit(); return; }
   await fb.fsM.deleteDoc(fb.fsM.doc(col("private"), id));

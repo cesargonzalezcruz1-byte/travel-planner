@@ -929,3 +929,23 @@ body.noscroll{overflow:hidden}
 .rstars{color:#E5A50A;letter-spacing:1px}
 .rpeople{border-collapse:collapse;font-size:13.5px} .rpeople th{color:var(--muted);font-weight:700;text-align:left;padding:2px 12px 4px 0} .rpeople td{padding:3px 12px 3px 0}
 .cchip.stat i{color:var(--flight)}
+/* packing lists */
+.oblock.slim{cursor:default} .oblock .ob-head .obpack{margin-left:auto}
+.obpack{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line2);background:var(--card);color:var(--ink);border-radius:14px;padding:4px 10px;font:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
+.obpack svg{width:16px;height:16px;color:var(--accent)} .obpack b{color:var(--accent)}
+.oblock .ob-head .obpack + .ob-go{margin-left:6px}
+.packbox{display:flex;flex-direction:column;max-height:min(90vh,820px)}
+.packbox .ask-head span{margin-left:auto;margin-right:8px}
+.pbar{height:6px;border-radius:3px;background:var(--soft);overflow:hidden;margin:6px 0 10px} .pbar i{display:block;height:100%;background:#1F8A4C;transition:width .3s}
+.ptabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.ptab{border:1.5px solid var(--line2);background:var(--card);color:var(--ink);border-radius:16px;padding:5px 12px;font:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.ptab small{font-weight:700;color:var(--muted)} .ptab.on{background:var(--pc,var(--accent));border-color:var(--pc,var(--accent));color:#fff} .ptab.on small{color:#fffc}
+.plist{flex:1;overflow:auto;margin:4px 0 8px;min-height:120px}
+.pgroup h4{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:12px 0 4px}
+.pitem{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}
+.pitem label{flex:1;display:flex;gap:10px;align-items:flex-start;cursor:pointer;margin:0;font-weight:600} .pitem label span{display:grid} .pitem input{width:20px;height:20px;margin-top:1px;flex:none;accent-color:#1F8A4C}
+.pitem.done label span{text-decoration:line-through;color:var(--muted)}
+.pdel{border:0;background:none;color:var(--muted);cursor:pointer;font-size:14px;padding:4px}
+.padd{display:flex;gap:6px} .padd input{flex:1;min-width:0} .padd select{width:auto;max-width:42%}
+.ptools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px} .ptools .pswitch{margin:0}
+.psugg h4{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px}

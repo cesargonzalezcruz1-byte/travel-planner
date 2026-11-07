@@ -15,13 +15,13 @@ export const onChange = (fn) => { listeners.add(fn); return () => listeners.dele
 const uid = (p) => p + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const clean = (o) => JSON.parse(JSON.stringify(o));
 const now = () => new Date().toISOString();
-const clearTrip = () => Object.assign(store, { trip: null, items: [], entries: [], priv: {}, files: [], journal: [], journalError: "", votes: {}, votesError: "" });
+const clearTrip = () => Object.assign(store, { trip: null, items: [], entries: [], priv: {}, files: [], journal: [], journalError: "", votes: {}, votesError: "", packing: [], packingError: "" });
 
 // ---------------- demo store (local testing only)
 const demo = { trips: {}, people: {}, vault: {} };   // id -> {trip, items, entries, priv, files}
 function demoLoad(id) {
   const t = demo.trips[id]; if (!t) { clearTrip(); return; }
-  Object.assign(store, { trip: t.trip, items: t.items, entries: t.entries, priv: store.role === "editor" ? t.priv : {}, files: store.role === "editor" ? t.files : [], journal: (t.journal = t.journal || []), votes: (t.votes = t.votes || {}) });
+  Object.assign(store, { trip: t.trip, items: t.items, entries: t.entries, priv: store.role === "editor" ? t.priv : {}, files: store.role === "editor" ? t.files : [], journal: (t.journal = t.journal || []), votes: (t.votes = t.votes || {}), packing: (t.packing = t.packing || []) });
 }
 const demoList = () => { store.trips = Object.entries(demo.trips).map(([id, t]) => ({ id, ...t.trip })); store.tripsLoaded = true; };
 
@@ -125,6 +125,9 @@ function subscribeTrip(id) {
   // journal: the one place the family can write too (needs the journal rule in firestore.rules)
   tripUnsubs.push(fsM.onSnapshot(col("journal"), (s) => { store.journal = s.docs.map((d) => ({ id: d.id, ...d.data() })); store.journalError = ""; emit(); },
     (e) => { console.warn("journal", e); store.journalError = e.code === "permission-denied" ? "The journal isn't switched on yet (Firestore rules need the journal section)." : e.message; emit(); }));
+  // packing lists: everyone can tick and add (needs the packing rule in firestore.rules)
+  tripUnsubs.push(fsM.onSnapshot(col("packing"), (s) => { store.packing = s.docs.map((d) => ({ id: d.id, ...d.data() })); store.packingError = ""; emit(); },
+    (e) => { console.warn("packing", e); store.packingError = e.code === "permission-denied" ? "Packing lists aren't switched on yet (Firestore rules need the packing section)." : e.message; emit(); }));
   // votes on recommended places / ideas: the family can vote too (needs the votes rule in firestore.rules)
   tripUnsubs.push(fsM.onSnapshot(col("votes"), (s) => { store.votes = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); store.votesError = ""; emit(); },
     (e) => { console.warn("votes", e); store.votesError = e.code === "permission-denied" ? "Voting isn't switched on yet (Firestore rules need the votes section)." : e.message; emit(); }));
@@ -156,7 +159,7 @@ export async function saveTrip(meta, id = null) {
 export async function deleteTrip(id) {
   if (DEMO) { delete demo.trips[id]; demoList(); if (store.tripId === id) openTrip(null); emit(); return; }
   const { fsM } = fb;
-  for (const name of ["items", "entries", "private", "files", "journal", "votes"]) {
+  for (const name of ["items", "entries", "private", "files", "journal", "votes", "packing"]) {
     const snap = await fsM.getDocs(fsM.collection(fb.db, "trips", id, name));
     for (const d of snap.docs) {
       if (name === "files" && d.data().path) { try { await fb.stM.deleteObject(fb.stM.ref(fb.storage, d.data().path)); } catch (e) { /* gone */ } }
@@ -351,6 +354,49 @@ export async function saveJournal(post) {
   if (DEMO) { const j = mem().journal = mem().journal || []; const i = j.findIndex((x) => x.id === id); if (i >= 0) j[i] = { id, ...data }; else j.push({ id, ...data }); demoLoad(store.tripId); emit(); return id; }
   await fb.fsM.setDoc(fb.fsM.doc(col("journal"), id), data);
   return id;
+}
+// ---- packing lists: packing/{id} = { text, cat, list: "shared" | traveller code, packer?, done, qty?, order }
+export async function savePack(items) {
+  const list = Array.isArray(items) ? items : [items];
+  if (DEMO) { const pk = (mem().packing ||= []);
+    for (const it of list) { const id = it.id || uid("pk"), i = pk.findIndex((x) => x.id === id), v = { ...it, id, updatedAt: now() }; if (i >= 0) pk[i] = v; else pk.push(v); }
+    demoLoad(store.tripId); emit(); return; }
+  const { fsM } = fb, b = fsM.writeBatch(fb.db);
+  for (const it of list) { const id = it.id || uid("pk"); b.set(fsM.doc(col("packing"), id), clean({ ...it, id: undefined, text: String(it.text || "").slice(0, 200), updatedAt: now() })); }
+  await b.commit();
+}
+export async function deletePack(ids) {
+  ids = [].concat(ids);
+  if (DEMO) { const t = mem(); t.packing = (t.packing || []).filter((x) => !ids.includes(x.id)); demoLoad(store.tripId); emit(); return; }
+  const { fsM } = fb, b = fsM.writeBatch(fb.db); ids.forEach((id) => b.delete(fsM.doc(col("packing"), id))); await b.commit();
+}
+// another trip's packing list (to reuse it as a template)
+export async function packingOf(tripId) {
+  if (DEMO) return (demo.trips[tripId]?.packing || []).map((x) => ({ ...x }));
+  const { fsM } = fb; const s = await fsM.getDocs(fsM.collection(fb.db, "trips", tripId, "packing")); return s.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+export async function packingAI(ctx) {
+  if (DEMO) { await new Promise((r) => setTimeout(r, 500));
+    return { items: [{ text: "Travel adapters (US Type A/B)", cat: "Electronics", scope: "shared", why: "US & Mexico use Type A/B" }, { text: "Swimsuit", cat: "Beach & Swim", scope: "each", why: "Cenotes and beach" },
+      { text: "Reef-safe sunscreen", cat: "Health", scope: "shared", why: "Required in cenotes" }, { text: "Comfortable walking shoes", cat: "Clothes", scope: "each", why: "Theme parks" }, { text: "Passport + ESTA printout", cat: "Documents", scope: "each", why: "" }] }; }
+  const schema = { type: "object", properties: { items: { type: "array", items: { type: "object", properties: {
+      text: { type: "string", description: "Item, short, with quantity if useful, e.g. '5 T-shirts'" },
+      cat: { type: "string", enum: ["Documents", "Clothes", "Toiletries", "Health", "Electronics", "Beach & Swim", "Theme Parks", "Travel Day", "Money", "Other"] },
+      scope: { type: "string", enum: ["shared", "each", "person"], description: "shared = one for the family (someone packs it); each = every traveller packs their own; person = only one traveller" },
+      person: { type: "string", description: "Traveller code when scope is person" }, why: { type: "string", description: "Very short reason tied to this trip (weather, activity, country); empty if obvious" } },
+      required: ["text", "cat", "scope"] } } }, required: ["items"] };
+  const prompt = `Make a practical packing list for this family trip. Tailor it to the places, dates/season and weather, the activities, the countries (plugs, documents) and the flights.
+Avoid generic filler; 35-60 items. Use "each" for personal items everyone needs (clothes, toiletries), "shared" for family items one person packs (adapters, first aid, chargers hub), "person" only when it clearly applies to one traveller.
+${ctx.have.length ? "Already on the lists (don't repeat): " + ctx.have.join("; ") + "\n" : ""}
+TRIP
+${ctx.text}`;
+  let lastErr;
+  for (let i = 0; i < AI_MODELS.length; i++) {
+    try { const m = await getModel(i, schema); const res = await m.generateContent([{ text: prompt }]); return JSON.parse(res.response.text()); }
+    catch (e) { lastErr = e; console.warn("packing AI", AI_MODELS[i], e);
+      if (!/not.?found|404|unsupported|model|429|exhausted|quota|50\d|unavailable|overloaded|deadline|timeout|fetch/i.test(String(e.message || e) + (e.code || ""))) break; }
+  }
+  throw new Error(String(lastErr?.message || lastErr).slice(0, 300));
 }
 // 👍 on a recommended place or idea: votes/{key} = { name, kind, up: [traveller codes] }
 export async function setVote(key, info, code, on) {

@@ -539,6 +539,7 @@ const SV = (d, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="curr
 const I = {
   pin: SV('<path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
   chat: SV('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>'),
+  bag: SV('<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M4 12h16M10 12v2M14 12v2"/>'),
   stats: SV('<path d="M3 3v18h18"/><path d="M7 15v3M11 10v8M15 12v6M19 6v12"/>'),
   globe: SV('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'),
   walk: SV('<circle cx="13" cy="4" r="2"/><path d="m9 20 3-6 3 2v6M6 12l3-4 4 1 3 4 3 1"/><path d="M9 8 7 14"/>'),
@@ -575,7 +576,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v120";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v121";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -665,7 +666,7 @@ function header(opts = {}) {
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
         ${isEditor() ? `${mi("settings", I.gear, "Trip Setup")}${mi("people", I.users, "Traveller Profiles")}<hr>
         ${mi("bulk", I.clip, "Attach Documents…")}${mi("offline", I.download || I.archive, "Offline Documents…")}${mi("archive", I.archive, "Archive Documents (Zip)…")}<hr>` : ""}
-        ${mi("ask", I.chat, "Ask the Trip")}${mi("tripmap", ICON.map, "Trip Map")}${mi("recap", I.stats, "Trip Recap")}${mi("country", I.globe, "Country Info")}${mi("album", I.book, "Export Album (Word)")}
+        ${mi("pack", I.bag, "Packing Lists")}${mi("ask", I.chat, "Ask the Trip")}${mi("tripmap", ICON.map, "Trip Map")}${mi("recap", I.stats, "Trip Recap")}${mi("country", I.globe, "Country Info")}${mi("album", I.book, "Export Album (Word)")}
         ${isEditor() ? `<hr>${mi("export", I.download, "Download Backup")}${mi("import", I.upload, "Restore from Backup…")}` : ""}<hr>
         ${mi("signout", I.logout, "Sign Out")}</div></details>
     </div>
@@ -1519,15 +1520,20 @@ function outside(p, side) {
   return { items, ents };
 }
 const outTitle = (i) => i.type === "flight" ? `${codesOf(i.route).join(" → ")}${i.number ? " · " + i.number : ""}` : i.type === "stay" ? (i.name || i.short || "Stay") : `${i.company || "Car"}${i.pickup ? " · " + i.pickup : ""}`;
+function packBtn() {
+  const pk = (store.packing || []), done = pk.filter((x) => x.done).length;
+  return `<button type="button" class="obpack" data-pack aria-label="Packing lists: ${done} of ${pk.length} packed">${I.bag}<span>Packing</span>${pk.length ? `<b>${done}/${pk.length}</b>` : ""}</button>`;
+}
 function outsideBlock(p, side) {
-  const { items, ents } = outside(p, side); if (!items.length && !ents.length) return "";
+  const { items, ents } = outside(p, side), live = store.trip && store.trip.end >= iso(new Date());
+  if (!items.length && !ents.length) return side === "before" && live ? `<div class="oblock before slim"><span class="ob-head"><b>Before Trip</b><span class="muted small">Get ready</span>${packBtn()}</span></div>` : "";
   const rows = items.map((i) => ({ d: i.start, k: KIND[i.type], t: outTitle(i) })).concat(ents.map((e) => ({ d: e.date, k: "act", t: firstText(e.text) })))
     .sort((a, b) => a.d.localeCompare(b.d));
   const span = rows[0].d === rows.at(-1).d ? fmtDate(rows[0].d) : `${fmtDate(rows[0].d)} – ${fmtDate(rows.at(-1).d)}`;
-  return `<button class="oblock ${side}" data-day="${side}" aria-label="${side === "before" ? "Before" : "After"} Trip: ${rows.length} booking${rows.length > 1 ? "s" : ""}">
-    <span class="ob-head"><b>${side === "before" ? "Before Trip" : "After Trip"}</b><span class="muted small">${span} · not part of this trip's days</span><span class="ob-go">›</span></span>
+  return `<div class="oblock ${side}" role="button" tabindex="0" data-day="${side}" aria-label="${side === "before" ? "Before" : "After"} Trip: ${rows.length} booking${rows.length > 1 ? "s" : ""}">
+    <span class="ob-head"><b>${side === "before" ? "Before Trip" : "After Trip"}</b><span class="muted small">${span} · not part of this trip's days</span>${side === "before" && live ? packBtn() : ""}<span class="ob-go">›</span></span>
     <span class="ob-list">${rows.slice(0, 4).map((r) => `<span class="ob-row"><span class="ob-d">${esc(WD[D(r.d).getDay()].slice(0, 3))} ${esc(fmtDate(r.d))}</span><span class="ob-ic">${ICON[r.k] || ""}</span><span class="ob-t">${esc(r.t)}</span></span>`).join("")}
-    ${rows.length > 4 ? `<span class="ob-more muted small">+ ${rows.length - 4} more</span>` : ""}</span></button>`;
+    ${rows.length > 4 ? `<span class="ob-more muted small">+ ${rows.length - 4} more</span>` : ""}</span></div>`;
 }
 function renderOutside(side) {
   const p = ui.person, t = store.trip, { items, ents } = outside(p, side), pane = ui.pane;
@@ -1551,6 +1557,108 @@ function renderOutside(side) {
   root.querySelectorAll("[data-ogo]").forEach((b) => (b.onclick = () => { const d2 = side === "before" ? t.start : t.end;
     if (pane !== null && pane !== undefined) { ui.splitDay[pane] = d2; return render(); }
     ui.slide = side === "before" ? "from-right" : "from-left"; routeTo(ui.tripId, d2, true); }));
+}
+
+// ---------------------------------------------------------------- packing lists: one shared family list + one per traveller
+const PACK_CATS = ["Documents", "Clothes", "Toiletries", "Health", "Electronics", "Beach & Swim", "Theme Parks", "Travel Day", "Money", "Other"];
+const packUI = { tab: "shared", hide: false };
+function packContext() {
+  const t = store.trip, ppl = PEOPLE(), lines = [];
+  lines.push(`${t.title}: ${t.start} to ${t.end} (${days().length} days). Travellers: ${ppl.map((c) => `${c} (${NAME(c)})`).join(", ")}${(t.extended || []).length ? "; others joining at times: " + t.extended.map((x) => x.name).join(", ") : ""}.`);
+  const stays = store.items.filter((i) => i.type === "stay" && !(i.end < t.start || i.start > t.end)).sort((a, b) => a.start.localeCompare(b.start));
+  lines.push("Places: " + stays.map((s) => `${stayArea(s) || s.name} ${s.start}→${s.end}${/house|villa|airbnb|vrbo/i.test(s.name || "") ? " (house)" : ""}`).join("; "));
+  const fl = store.items.filter((i) => i.type === "flight" && !(i.end < t.start || i.start > t.end));
+  lines.push("Flights: " + fl.map((f) => `${codesOf(f.route).join("-")} ${f.start}${isInternational(f) ? " international" : ""}`).join("; "));
+  if (store.items.some((i) => i.type === "car")) lines.push("Hire cars: yes (driving).");
+  const acts = store.entries.filter((e) => e.kind === "activity" && e.status !== "recommended" && e.date >= t.start && e.date <= t.end).map((e) => firstText(e.text));
+  if (acts.length) lines.push("Activities: " + [...new Set(acts)].slice(0, 40).join("; "));
+  const ci = t.countryInfo; if (ci?.codes?.length) lines.push("Countries: " + ci.codes.map((c) => `${ci.data[c]?.country || c} (plugs ${ci.data[c]?.plugs?.types || "?"}, ${ci.data[c]?.plugs?.voltage || ""}; currency ${ci.data[c]?.currency?.code || ""})`).join("; "));
+  else lines.push("Countries: " + tripCountries().map(countryName).join(", "));
+  const wxl = []; for (const [k, f] of Object.entries(wx.fc || {})) { const ds = Object.entries(f.days || {}).filter(([d]) => d >= t.start && d <= t.end); if (ds.length) wxl.push(`${k}: ` + ds.slice(0, 6).map(([d, v]) => `${d} ${Math.round(v[2])}-${Math.round(v[1])}°C${v[3] != null ? " rain " + v[3] + "%" : ""}`).join(", ")); }
+  lines.push(wxl.length ? "Forecast: " + wxl.join(" | ") : "No forecast yet - use the typical weather for these places and dates.");
+  lines.push("Travelling from: Australia (Brisbane).");
+  return lines.join("\n");
+}
+function packingSheet() {
+  if (!store.trip) return;
+  document.querySelector(".packsheet")?.remove();
+  const box = document.createElement("div"); box.className = "modal packsheet"; document.body.appendChild(box);
+  const close = () => { box.remove(); unsub(); const y = scrollY; render(); scrollTo(0, y); };
+  const tabs = () => ["shared", ...PEOPLE()];
+  const draw = () => {
+    const pk = store.packing || [], tab = tabs().includes(packUI.tab) ? packUI.tab : "shared", mine = pk.filter((x) => x.list === tab);
+    const cnt = (l) => { const a = pk.filter((x) => x.list === l); return `${a.filter((x) => x.done).length}/${a.length}`; };
+    const shown = packUI.hide ? mine.filter((x) => !x.done) : mine;
+    const groups = PACK_CATS.concat([...new Set(shown.map((x) => x.cat))].filter((c) => !PACK_CATS.includes(c))).map((c) => [c, shown.filter((x) => (x.cat || "Other") === c).sort((a, b) => a.done - b.done || (a.order || 0) - (b.order || 0))]).filter(([, a]) => a.length);
+    const all = pk.length, done = pk.filter((x) => x.done).length;
+    box.innerHTML = `<div class="sheet packbox">
+      <div class="ask-head"><h3>${I.bag}Packing</h3><span class="muted small">${done} of ${all} packed</span><button type="button" class="btn tiny" data-px aria-label="Close">✕</button></div>
+      ${all ? `<div class="pbar"><i style="width:${Math.round(done / all * 100)}%"></i></div>` : ""}
+      ${store.packingError ? `<p class="jwarn small">${esc(store.packingError)}</p>` : ""}
+      <div class="ptabs" role="tablist">${tabs().map((l) => `<button type="button" role="tab" class="ptab${l === tab ? " on" : ""}" data-ptab="${esc(l)}" ${l !== "shared" ? `style="--pc:${pcolor(l)}"` : ""}>${l === "shared" ? "Shared" : esc(l)} <small>${cnt(l)}</small></button>`).join("")}</div>
+      <p class="muted small">${tab === "shared" ? "Family items - one person packs each (tap the initials to choose who)." : `${esc(NAME(tab))}'s own things.`}</p>
+      <div class="plist">${groups.map(([c, a]) => `<div class="pgroup"><h4>${esc(c)}</h4>${a.map((x) => `<div class="pitem${x.done ? " done" : ""}">
+          <label><input type="checkbox" data-pdone="${esc(x.id)}" ${x.done ? "checked" : ""}><span>${esc(x.text)}${x.why ? `<small class="muted">${esc(x.why)}</small>` : ""}</span></label>
+          ${tab === "shared" ? `<button type="button" class="dd${x.packer ? " on" : ""}" data-ppacker="${esc(x.id)}" style="--pc:${x.packer ? pcolor(x.packer) : "var(--line2)"}" title="Who packs it">${x.packer ? esc(x.packer) : "?"}</button>` : ""}
+          <button type="button" class="pdel" data-pdel="${esc(x.id)}" aria-label="Remove">✕</button></div>`).join("")}</div>`).join("")
+        || `<p class="muted">Nothing on this list yet. Add items below, let the AI suggest a list for this trip, or copy one from another trip.</p>`}</div>
+      <form class="padd"><input name="t" placeholder="Add an item…" autocomplete="off" aria-label="New item"><select name="c" aria-label="Category">${PACK_CATS.map((c) => `<option>${c}</option>`).join("")}</select><button class="btn small primary">Add</button></form>
+      <div class="ptools"><button type="button" class="btn small" data-pai>✨ Suggest with AI</button><button type="button" class="btn small" data-pcopy>Copy from a trip…</button>
+        <label class="pswitch small"><input type="checkbox" data-phide ${packUI.hide ? "checked" : ""}><span>Hide packed</span></label>
+        ${mine.some((x) => x.done) ? `<button type="button" class="lnk" data-preset>Untick all</button>` : ""}</div></div>`;
+    box.querySelector("[data-px]").onclick = close;
+    box.querySelectorAll("[data-ptab]").forEach((b) => (b.onclick = () => { packUI.tab = b.dataset.ptab; draw(); }));
+    box.querySelectorAll("[data-pdone]").forEach((c) => (c.onchange = () => { const x = pk.find((y) => y.id === c.dataset.pdone); data.savePack({ ...x, done: c.checked }).catch(fail); }));
+    box.querySelectorAll("[data-pdel]").forEach((b) => (b.onclick = () => data.deletePack(b.dataset.pdel).catch(fail)));
+    box.querySelectorAll("[data-ppacker]").forEach((b) => (b.onclick = () => { const x = pk.find((y) => y.id === b.dataset.ppacker), o = ["", ...PEOPLE()], k = o.indexOf(x.packer || "");
+      data.savePack({ ...x, packer: o[(k + 1) % o.length] }).catch(fail); }));
+    box.querySelector("[data-phide]").onchange = (e) => { packUI.hide = e.target.checked; draw(); };
+    box.querySelector("[data-preset]")?.addEventListener("click", () => data.savePack(mine.filter((x) => x.done).map((x) => ({ ...x, done: false }))).catch(fail));
+    box.querySelector(".padd").onsubmit = (e) => { e.preventDefault(); const f = e.target, t = f.t.value.trim(); if (!t) return;
+      data.savePack({ text: t, cat: f.c.value, list: tab, done: false, order: Date.now() }).catch(fail); f.t.value = ""; packUI.lastCat = f.c.value; };
+    if (packUI.lastCat) box.querySelector(".padd select").value = packUI.lastCat;
+    box.querySelector("[data-pai]").onclick = () => packAI();
+    box.querySelector("[data-pcopy]").onclick = () => packCopy();
+  };
+  const fail = (e) => toast(e.code === "permission-denied" ? "Packing lists need the new Firestore rules (packing section)" : "Couldn't save: " + (e.code || e.message));
+  let last = ""; const tick = () => { if (!box.isConnected) return; const sig = JSON.stringify(store.packing || []) + store.packingError; if (sig !== last) { last = sig; const y = box.querySelector(".plist")?.scrollTop || 0, typed = box.querySelector(".padd input")?.value || "", focused = document.activeElement?.name === "t";
+    draw(); const pl = box.querySelector(".plist"); if (pl) pl.scrollTop = y; const inp = box.querySelector(".padd input"); if (inp) { inp.value = typed; if (focused) inp.focus(); } } };
+  const iv = setInterval(tick, 400); const unsub = () => clearInterval(iv);
+  box.onclick = (e) => { if (e.target === box) close(); };
+  tick();
+}
+async function packAI() {
+  toast("Writing a packing list for this trip…");
+  let r; try { r = await data.packingAI({ text: packContext(), have: (store.packing || []).map((x) => `${x.text} (${x.list})`) }); }
+  catch (e) { return infoBox(`<h2>Couldn't Suggest a List</h2><pre class="errbox">${esc(e.message || String(e))}</pre>`); }
+  const its = (r.items || []).filter((x) => x.text);
+  if (!its.length) return toast("Nothing new to suggest");
+  const label = (x) => (x.scope === "each" ? "everyone" : x.scope === "person" && PEOPLE().includes(x.person) ? x.person : "shared");
+  modal(`<h3>Suggested for This Trip</h3><p class="muted small">Untick anything you don't want, then add. "Everyone" items go on each traveller's list.</p>
+    <div class="psugg">${PACK_CATS.map((c) => [c, its.map((x, k) => [x, k]).filter(([x]) => (PACK_CATS.includes(x.cat) ? x.cat : "Other") === c)]).filter(([, a]) => a.length).map(([c, a]) => `<h4>${esc(c)}</h4>${a.map(([x, k]) => `<label class="pcand"><input type="checkbox" name="i" value="${k}" checked><span><b>${esc(x.text)}</b><small class="muted">${esc(label(x))}${x.why ? " · " + esc(x.why) : ""}</small></span></label>`).join("")}`).join("")}</div>`,
+    async (fd) => {
+      const pick = fd.getAll("i").map((k) => its[+k]), out = []; let o = Date.now();
+      for (const x of pick) { const cat = PACK_CATS.includes(x.cat) ? x.cat : "Other";
+        const lists = x.scope === "each" ? PEOPLE() : x.scope === "person" && PEOPLE().includes(x.person) ? [x.person] : ["shared"];
+        lists.forEach((l) => out.push({ text: x.text, cat, list: l, done: false, why: x.why || "", order: o++ })); }
+      await data.savePack(out); toast(`${out.length} items added`);
+    });
+  [...document.querySelectorAll(".modal")].pop().querySelector("button.primary").textContent = "Add to the Lists";
+}
+async function packCopy() {
+  const others = store.trips.filter((t) => t.id !== ui.tripId && t.id !== store.tripId).sort((a, b) => (b.start || "").localeCompare(a.start || ""));
+  if (!others.length) return toast("No other trips to copy from yet");
+  const tid = store.tripId;
+  modal(`<h3>Copy a Packing List</h3><p class="muted small">Copies another trip's lists here, all unticked. Items already on this trip's lists are skipped. Travellers' lists go to the same people if they're on this trip.</p>
+    <label>From<select name="t">${others.map((t) => `<option value="${esc(t.id)}">${esc(t.title || "Trip")} (${fmtDate(t.start)})</option>`).join("")}</select></label>`,
+    async (fd) => {
+      const src = await data.packingOf(fd.get("t")); if (!src.length) throw new Error("That trip has no packing list");
+      const have = new Set((store.packing || []).map((x) => x.list + "|" + x.text.toLowerCase())); let o = Date.now();
+      const out = src.map((x) => ({ text: x.text, cat: x.cat || "Other", list: x.list === "shared" || PEOPLE().includes(x.list) ? x.list : "shared", packer: PEOPLE().includes(x.packer) ? x.packer : "", done: false, order: o++ }))
+        .filter((x) => !have.has(x.list + "|" + x.text.toLowerCase()));
+      if (store.tripId !== tid) throw new Error("Trip changed");
+      await data.savePack(out); toast(`${out.length} items copied`);
+    });
 }
 
 // ---------------------------------------------------------------- trip recap: the trip in numbers (also a page in the Word album)
@@ -1770,9 +1878,12 @@ function wireDays() {
     ev.stopPropagation(); const date = b.dataset.addOn; const others = PEOPLE().filter((o) => o !== ui.person);
     itemForm({ type: "stay", who: [ui.person, ...others.filter((o) => together(ui.person, o, date))], start: date, end: addDays(date, 1), status: "booked" });
   }));
+  root.querySelectorAll("[data-pack]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); packingSheet(); }));
   const pane = ui.pane;
   root.querySelectorAll("[data-day]").forEach((el) => {
-    el.onclick = (ev) => { if (ev.target.closest("[data-add-on]")) return; ev.stopPropagation(); openDay(el.dataset.day, pane); };
+    el.onclick = (ev) => { if (ev.target.closest("[data-add-on]")) return; ev.stopPropagation();
+      if (ev.target.closest("[data-pack]")) return packingSheet();
+      openDay(el.dataset.day, pane); };
     if (el.tagName !== "BUTTON") el.onkeydown = (e) => { if (e.key === "Enter") openDay(el.dataset.day, pane); };
   });
 }
@@ -3525,6 +3636,7 @@ const actions = {
   ask: () => askTrip(),
   tripmap: () => openTripMap(ui.tripId),
   recap: () => showRecap(ui.tripId),
+  pack: () => packingSheet(),
   country: () => (store.trip?.countryInfo?.codes?.length ? showCountryInfo({ id: ui.tripId, ...store.trip }) : isEditor() ? countryInfoFlow() : toast("No country info yet")),
   people: () => peopleList(),
   archive: () => archiveDocs(),

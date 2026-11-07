@@ -41,6 +41,12 @@ service cloud.firestore {
         allow create, update: if (isEditor() || isFamily()) && request.resource.data.text is string && request.resource.data.text.size() <= 200;
       }
 
+      // Pre-trip to-dos: everyone on the trip can add, tick and remove them
+      match /todos/{id} {
+        allow read, delete: if isEditor() || isFamily();
+        allow create, update: if (isEditor() || isFamily()) && request.resource.data.text is string && request.resource.data.text.size() <= 200;
+      }
+
       // Votes on recommended places and ideas: everyone can vote (a list of traveller initials per place)
       match /votes/{id} {
         allow read: if isEditor() || isFamily();

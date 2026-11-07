@@ -134,6 +134,7 @@ ui.focus = new URLSearchParams(location.search).get("focus");
 function applyFocus() {
   if (!ui.focus || !store.ready || !store.role) return;
   const f = ui.focus;
+  if (f === "todos") { if (!store.trip) return; ui.focus = null; clearFocusParam(); return setTimeout(todoSheet, 300); }
   if (f.startsWith("profile-")) { if (!store.people.length) return; ui.focus = null; clearFocusParam(); return personForm(f.slice(8)); }
   const el = document.getElementById(f);
   if (!el) {
@@ -580,7 +581,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v124";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v125";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -670,7 +671,7 @@ function header(opts = {}) {
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
         ${isEditor() ? `${mi("settings", I.gear, "Trip Setup")}${mi("people", I.users, "Traveller Profiles")}<hr>
         ${mi("bulk", I.clip, "Attach Documents…")}${mi("offline", I.download || I.archive, "Offline Documents…")}${mi("archive", I.archive, "Archive Documents (Zip)…")}<hr>` : ""}
-        ${mi("pack", I.bag, "Packing Lists")}${mi("ask", I.chat, "Ask the Trip")}${mi("tripmap", ICON.map, "Trip Map")}${mi("recap", I.stats, "Trip Recap")}${mi("country", I.globe, "Country Info")}${mi("album", I.book, "Export Album (Word)")}
+        ${mi("todo", I.check, "To-dos")}${mi("pack", I.bag, "Packing Lists")}${mi("ask", I.chat, "Ask the Trip")}${mi("tripmap", ICON.map, "Trip Map")}${mi("recap", I.stats, "Trip Recap")}${mi("country", I.globe, "Country Info")}${mi("album", I.book, "Export Album (Word)")}
         ${isEditor() ? `<hr>${mi("export", I.download, "Download Backup")}${mi("import", I.upload, "Restore from Backup…")}` : ""}<hr>
         ${mi("signout", I.logout, "Sign Out")}</div></details>
     </div>
@@ -1558,12 +1559,12 @@ function packBtn() {
 }
 function outsideBlock(p, side) {
   const { items, ents } = outside(p, side), live = store.trip && store.trip.end >= iso(new Date());
-  if (!items.length && !ents.length) return side === "before" && live ? `<div class="oblock before slim"><span class="ob-head"><b>Before Trip</b><span class="muted small">Get ready</span>${packBtn()}</span></div>` : "";
+  if (!items.length && !ents.length) return side === "before" && live ? `<div class="oblock before slim"><span class="ob-head"><b>Before Trip</b><span class="muted small">Get ready</span>${todoBtn()}${packBtn()}</span></div>` : "";
   const rows = items.map((i) => ({ d: i.start, k: KIND[i.type], t: outTitle(i) })).concat(ents.map((e) => ({ d: e.date, k: "act", t: firstText(e.text) })))
     .sort((a, b) => a.d.localeCompare(b.d));
   const span = rows[0].d === rows.at(-1).d ? fmtDate(rows[0].d) : `${fmtDate(rows[0].d)} – ${fmtDate(rows.at(-1).d)}`;
   return `<div class="oblock ${side}" role="button" tabindex="0" data-day="${side}" aria-label="${side === "before" ? "Before" : "After"} Trip: ${rows.length} booking${rows.length > 1 ? "s" : ""}">
-    <span class="ob-head"><b>${side === "before" ? "Before Trip" : "After Trip"}</b><span class="muted small">${span} · not part of this trip's days</span>${side === "before" && live ? packBtn() : ""}<span class="ob-go">›</span></span>
+    <span class="ob-head"><b>${side === "before" ? "Before Trip" : "After Trip"}</b><span class="muted small">${span} · not part of this trip's days</span>${side === "before" && live ? todoBtn() + packBtn() : ""}<span class="ob-go">›</span></span>
     <span class="ob-list">${rows.slice(0, 4).map((r) => `<span class="ob-row"><span class="ob-d">${esc(WD[D(r.d).getDay()].slice(0, 3))} ${esc(fmtDate(r.d))}</span><span class="ob-ic">${ICON[r.k] || ""}</span><span class="ob-t">${esc(r.t)}</span></span>`).join("")}
     ${rows.length > 4 ? `<span class="ob-more muted small">+ ${rows.length - 4} more</span>` : ""}</span></div>`;
 }
@@ -1645,6 +1646,83 @@ function arrivalForm(id) {
   form.querySelectorAll("[data-aread]").forEach((b) => (b.onclick = async () => { const f = store.files.find((x) => x.id === b.dataset.aread);
     try { const blob = (await data.offlineBlob(f.id)) || (await data.fileBlob(f)); await fill(new File([blob], f.name, { type: f.contentType || blob.type }), f.name); } catch (e) { toast("Couldn't open the file"); } }));
   form.querySelector("[data-afile]").onchange = (e) => { const f = e.target.files[0]; if (f) fill(f, f.name); };
+}
+
+// ---------------------------------------------------------------- pre-trip to-dos: due dates, who, reminders at 9 am on the due date
+const todoUI = { hide: true };
+function todoBtn() {
+  const td = store.todos || [], open = td.filter((x) => !x.done), today = iso(new Date()), late = open.filter((x) => x.due && x.due < today).length;
+  return `<button type="button" class="obpack${late ? " late" : ""}" data-todo aria-label="To-dos: ${open.length} left">${I.check}<span>To-dos</span>${td.length ? `<b>${td.length - open.length}/${td.length}</b>` : ""}</button>`;
+}
+function todoContext() {
+  const t = store.trip, lines = [packContext()];
+  const pp = tripPassports(); lines.push("Passports: " + (pp.map((p) => `${p.nationality} (${p.who.join(", ")})`).join("; ") || "Australian (assumed)"));
+  const issues = tripDocIssues(t); if (issues.length) lines.push("Document problems: " + issues.map((x) => `${x.per.name || x.per.code}: ${x.st.text}`).join("; "));
+  const ci = t.countryInfo; if (ci?.codes?.length) lines.push("Entry rules: " + ci.codes.map((c) => `${ci.data[c]?.country || c}: ${(ci.data[c]?.entry || []).map((e) => e.passport + " - " + e.summary).join(" / ")}`).join(" | "));
+  const tbc = store.items.filter((i) => i.status === "tbc"); if (tbc.length) lines.push("Not booked yet: " + tbc.map((i) => `${i.type} ${i.start} ${i.name || i.route || ""}`).join("; "));
+  const planned = store.entries.filter((e) => e.kind === "activity" && e.status !== "recommended" && !e.confirmed); if (planned.length) lines.push("Activities planned but not booked: " + planned.map((e) => `${e.date} ${firstText(e.text)}`).join("; "));
+  const cars = store.items.filter((i) => i.type === "car"); if (cars.length) lines.push("Hire cars in: " + [...new Set(cars.map((c) => c.pickup || c.company))].join(", "));
+  lines.push(`Today is ${iso(new Date())}; the trip starts ${t.start}.`);
+  return lines.join("\n");
+}
+function todoSheet() {
+  if (!store.trip) return;
+  document.querySelector(".todosheet")?.remove();
+  const box = document.createElement("div"); box.className = "modal todosheet"; document.body.appendChild(box);
+  const close = () => { box.remove(); clearInterval(iv); const y = scrollY; render(); scrollTo(0, y); };
+  const fail = (e) => toast(e.code === "permission-denied" ? "To-dos need the new Firestore rules (todos section)" : "Couldn't save: " + (e.code || e.message));
+  const draw = () => {
+    const td = store.todos || [], today = iso(new Date()), soon = addDays(today, 7);
+    const list = td.filter((x) => !(todoUI.hide && x.done)).sort((a, b) => a.done - b.done || (a.due || "9999").localeCompare(b.due || "9999") || (a.order || 0) - (b.order || 0));
+    const left = td.filter((x) => !x.done).length;
+    box.innerHTML = `<div class="sheet packbox">
+      <div class="ask-head"><h3>${I.check}To-dos</h3><span class="muted small">${left} left · trip in ${Math.max(0, dayDiff(today, store.trip.start))} days</span><button type="button" class="btn tiny" data-tx aria-label="Close">✕</button></div>
+      ${td.length ? `<div class="pbar"><i style="width:${Math.round((td.length - left) / td.length * 100)}%"></i></div>` : ""}
+      ${store.todosError ? `<p class="jwarn small">${esc(store.todosError)}</p>` : ""}
+      <div class="plist">${list.map((x) => { const st = x.done ? "" : x.due && x.due < today ? "late" : x.due && x.due <= soon ? "soon" : "";
+        return `<div class="pitem tdo ${x.done ? "done" : ""} ${st}">
+          <label><input type="checkbox" data-tdone="${esc(x.id)}" ${x.done ? "checked" : ""}><span>${esc(x.text)}${x.why ? `<small class="muted">${esc(x.why)}</small>` : ""}</span></label>
+          <input type="date" class="tdue" data-tdue="${esc(x.id)}" value="${esc(x.due || "")}" aria-label="Due date">
+          <button type="button" class="dd${x.who ? " on" : ""}" data-twho="${esc(x.id)}" style="--pc:${x.who ? pcolor(x.who) : "var(--line2)"}" title="Who does it">${x.who ? esc(x.who) : "?"}</button>
+          <button type="button" class="pdel" data-tdel="${esc(x.id)}" aria-label="Remove">✕</button></div>`; }).join("")
+        || `<p class="muted">${td.length ? "All done!" : "Nothing yet. Add things to do before you go, or let the app suggest them from your documents, Country Info and bookings."}</p>`}</div>
+      <form class="padd"><input name="t" placeholder="Add a to-do…" autocomplete="off" aria-label="New to-do"><input type="date" name="d" value="${esc(addDays(store.trip.start, -7) > today ? addDays(store.trip.start, -7) : today)}" aria-label="Due date"><button class="btn small primary">Add</button></form>
+      <div class="ptools"><button type="button" class="btn small" data-tai>✨ Suggest</button>
+        <label class="pswitch small"><input type="checkbox" data-thide ${todoUI.hide ? "checked" : ""}><span>Hide done</span></label></div>
+      <p class="muted small">Reminder at 9 am on the due date, to the phones of the person it's for (or everyone's, if no one is chosen), with Important notifications on.</p></div>`;
+    box.querySelector("[data-tx]").onclick = close;
+    box.querySelectorAll("[data-tdone]").forEach((c) => (c.onchange = () => { const x = td.find((y) => y.id === c.dataset.tdone); data.saveTodo({ ...x, done: c.checked }).catch(fail); }));
+    box.querySelectorAll("[data-tdue]").forEach((c) => (c.onchange = () => { const x = td.find((y) => y.id === c.dataset.tdue); data.saveTodo({ ...x, due: c.value }).catch(fail); }));
+    box.querySelectorAll("[data-tdel]").forEach((b) => (b.onclick = () => data.deleteTodo(b.dataset.tdel).catch(fail)));
+    box.querySelectorAll("[data-twho]").forEach((b) => (b.onclick = () => { const x = td.find((y) => y.id === b.dataset.twho), o = ["", ...ALL_CODES()], k = o.indexOf(x.who || "");
+      data.saveTodo({ ...x, who: o[(k + 1) % o.length] }).catch(fail); }));
+    box.querySelector("[data-thide]").onchange = (e) => { todoUI.hide = e.target.checked; draw(); };
+    box.querySelector(".padd").onsubmit = (e) => { e.preventDefault(); const f = e.target, t = f.t.value.trim(); if (!t) return;
+      data.saveTodo({ text: t, due: f.d.value, who: "", done: false, order: Date.now() }).catch(fail); f.t.value = ""; };
+    box.querySelector("[data-tai]").onclick = () => todoSuggest();
+  };
+  let last = ""; const tick = () => { if (!box.isConnected) return; const sig = JSON.stringify(store.todos || []) + store.todosError;
+    if (sig !== last) { last = sig; const typed = box.querySelector(".padd input")?.value || "", focused = document.activeElement?.name === "t"; draw();
+      const inp = box.querySelector(".padd input"); if (inp) { inp.value = typed; if (focused) inp.focus(); } } };
+  const iv = setInterval(tick, 400);
+  box.onclick = (e) => { if (e.target === box) close(); };
+  tick();
+}
+async function todoSuggest() {
+  const t = store.trip, today = iso(new Date()), have = (store.todos || []).map((x) => x.text);
+  const dueFor = (n) => { const d = addDays(t.start, -Math.max(0, n || 0)); return d < today ? today : d; };
+  // straight from the travel-document warnings
+  const local = tripDocIssues(t).map((x) => ({ text: `${x.st.level === "bad" ? "Renew" : "Check"} ${x.per.name || x.per.code}'s ${docName(x.d.type)}`, due: dueFor(42), who: x.per.code || "", why: x.st.text }))
+    .filter((x) => !have.some((h) => h.toLowerCase() === x.text.toLowerCase()));
+  toast("Looking at your documents, bookings and Country Info…");
+  let ai = []; try { ai = ((await data.todoAI({ text: todoContext(), have: have.concat(local.map((x) => x.text)) })).items || []).filter((x) => x.text); }
+  catch (e) { toast("The AI couldn't suggest more: " + (e.message || e)); }
+  const all = local.concat(ai.map((x) => ({ text: x.text, due: dueFor(x.daysBefore), who: ALL_CODES().includes(x.who) ? x.who : "", why: x.why || "" })));
+  if (!all.length) return toast("Nothing new to suggest");
+  modal(`<h3>Suggested To-dos</h3><p class="muted small">Untick anything you don't need. You can change dates and who later.</p>
+    <div class="psugg">${all.map((x, k) => `<label class="pcand"><input type="checkbox" name="i" value="${k}" checked><span><b>${esc(x.text)}</b><small class="muted">by ${fmtDate(x.due)}${x.who ? " · " + esc(x.who) : ""}${x.why ? " · " + esc(x.why) : ""}</small></span></label>`).join("")}</div>`,
+    async (fd) => { let o = Date.now(); const pick = fd.getAll("i").map((k) => ({ ...all[+k], done: false, order: o++ })); await data.saveTodo(pick); toast(`${pick.length} to-dos added`); });
+  [...document.querySelectorAll(".modal")].pop().querySelector("button.primary").textContent = "Add to the List";
 }
 
 // ---------------------------------------------------------------- packing lists: one shared family list + one per traveller
@@ -1967,10 +2045,12 @@ function wireDays() {
     itemForm({ type: "stay", who: [ui.person, ...others.filter((o) => together(ui.person, o, date))], start: date, end: addDays(date, 1), status: "booked" });
   }));
   root.querySelectorAll("[data-pack]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); packingSheet(); }));
+  root.querySelectorAll("[data-todo]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); todoSheet(); }));
   const pane = ui.pane;
   root.querySelectorAll("[data-day]").forEach((el) => {
     el.onclick = (ev) => { if (ev.target.closest("[data-add-on]")) return; ev.stopPropagation();
       if (ev.target.closest("[data-pack]")) return packingSheet();
+      if (ev.target.closest("[data-todo]")) return todoSheet();
       openDay(el.dataset.day, pane); };
     if (el.tagName !== "BUTTON") el.onkeydown = (e) => { if (e.key === "Enter") openDay(el.dataset.day, pane); };
   });
@@ -3736,6 +3816,7 @@ const actions = {
   tripmap: () => openTripMap(ui.tripId),
   recap: () => showRecap(ui.tripId),
   pack: () => packingSheet(),
+  todo: () => todoSheet(),
   country: () => (store.trip?.countryInfo?.codes?.length ? showCountryInfo({ id: ui.tripId, ...store.trip }) : isEditor() ? countryInfoFlow() : toast("No country info yet")),
   people: () => peopleList(),
   archive: () => archiveDocs(),

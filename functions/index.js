@@ -99,6 +99,17 @@ export const checkinAlerts = onSchedule({ schedule: "every 15 minutes", region: 
         await sendOnce(`soon_${tid}_${e.id}_${e.date}_${t}`, important.filter((x) => follows(x, e.who)), { title: `In 1 hour: ${name}`.slice(0, 120), body: `Starts at ${hm(start, tz)}${e.place ? " · " + e.place : ""}`,
           url: e.place ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.place)}` : undefined, app: link(e.date, "en-" + e.id), tag: `soon-${e.id}` });
     }
+    // ---- Important: pre-trip to-dos, 9 am on the due date (in the time zone of the phone that set it)
+    if (now < new Date((trip.end || "9999-12-31") + "T23:59:59Z").getTime()) {
+      const todos = (await tripDoc.ref.collection("todos").get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+      for (const td of todos) {
+        if (td.done || !td.due) continue;
+        const at = zonedDate(td.due, "09:00", td.tz || "Australia/Brisbane");
+        if (!due(at, now, 3 * HOUR)) continue;
+        const tgt = td.who ? important.filter((x) => follows(x, [td.who])) : important.filter((x) => follows(x, (trip.travellers || []).map((t) => t.code)));
+        await sendOnce(`todo_${tid}_${td.id}_${td.due}`, tgt, { title: `To-do: ${td.text}`.slice(0, 120), body: `Due today${td.who ? " · for " + td.who : ""} · ${trip.title || "your trip"}`, app: link(null, "todos"), tag: `todo-${td.id}` });
+      }
+    }
     // ---- Extras: evening journal prompt at 8 pm wherever the traveller is
     for (const dev of extras) {
       const p = (dev.people || []).find((c) => (trip.travellers || []).some((x) => x.code === c)); if (!p) continue;

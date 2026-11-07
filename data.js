@@ -15,13 +15,13 @@ export const onChange = (fn) => { listeners.add(fn); return () => listeners.dele
 const uid = (p) => p + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const clean = (o) => JSON.parse(JSON.stringify(o));
 const now = () => new Date().toISOString();
-const clearTrip = () => Object.assign(store, { trip: null, items: [], entries: [], priv: {}, files: [], journal: [], journalError: "", votes: {}, votesError: "", packing: [], packingError: "" });
+const clearTrip = () => Object.assign(store, { trip: null, items: [], entries: [], priv: {}, files: [], journal: [], journalError: "", votes: {}, votesError: "", packing: [], packingError: "", todos: [], todosError: "" });
 
 // ---------------- demo store (local testing only)
 const demo = { trips: {}, people: {}, vault: {} };   // id -> {trip, items, entries, priv, files}
 function demoLoad(id) {
   const t = demo.trips[id]; if (!t) { clearTrip(); return; }
-  Object.assign(store, { trip: t.trip, items: t.items, entries: t.entries, priv: store.role === "editor" ? t.priv : {}, files: store.role === "editor" ? t.files : [], journal: (t.journal = t.journal || []), votes: (t.votes = t.votes || {}), packing: (t.packing = t.packing || []) });
+  Object.assign(store, { trip: t.trip, items: t.items, entries: t.entries, priv: store.role === "editor" ? t.priv : {}, files: store.role === "editor" ? t.files : [], journal: (t.journal = t.journal || []), votes: (t.votes = t.votes || {}), packing: (t.packing = t.packing || []), todos: (t.todos = t.todos || []) });
 }
 const demoList = () => { store.trips = Object.entries(demo.trips).map(([id, t]) => ({ id, ...t.trip })); store.tripsLoaded = true; };
 
@@ -128,6 +128,9 @@ function subscribeTrip(id) {
   // packing lists: everyone can tick and add (needs the packing rule in firestore.rules)
   tripUnsubs.push(fsM.onSnapshot(col("packing"), (s) => { store.packing = s.docs.map((d) => ({ id: d.id, ...d.data() })); store.packingError = ""; emit(); },
     (e) => { console.warn("packing", e); store.packingError = e.code === "permission-denied" ? "Packing lists aren't switched on yet (Firestore rules need the packing section)." : e.message; emit(); }));
+  // pre-trip to-dos: everyone can tick and add (needs the todos rule in firestore.rules)
+  tripUnsubs.push(fsM.onSnapshot(col("todos"), (s) => { store.todos = s.docs.map((d) => ({ id: d.id, ...d.data() })); store.todosError = ""; emit(); },
+    (e) => { console.warn("todos", e); store.todosError = e.code === "permission-denied" ? "To-dos aren't switched on yet (Firestore rules need the todos section)." : e.message; emit(); }));
   // votes on recommended places / ideas: the family can vote too (needs the votes rule in firestore.rules)
   tripUnsubs.push(fsM.onSnapshot(col("votes"), (s) => { store.votes = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); store.votesError = ""; emit(); },
     (e) => { console.warn("votes", e); store.votesError = e.code === "permission-denied" ? "Voting isn't switched on yet (Firestore rules need the votes section)." : e.message; emit(); }));
@@ -159,7 +162,7 @@ export async function saveTrip(meta, id = null) {
 export async function deleteTrip(id) {
   if (DEMO) { delete demo.trips[id]; demoList(); if (store.tripId === id) openTrip(null); emit(); return; }
   const { fsM } = fb;
-  for (const name of ["items", "entries", "private", "files", "journal", "votes", "packing"]) {
+  for (const name of ["items", "entries", "private", "files", "journal", "votes", "packing", "todos"]) {
     const snap = await fsM.getDocs(fsM.collection(fb.db, "trips", id, name));
     for (const d of snap.docs) {
       if (name === "files" && d.data().path) { try { await fb.stM.deleteObject(fb.stM.ref(fb.storage, d.data().path)); } catch (e) { /* gone */ } }
@@ -414,6 +417,44 @@ export async function deletePack(ids) {
   ids = [].concat(ids);
   if (DEMO) { const t = mem(); t.packing = (t.packing || []).filter((x) => !ids.includes(x.id)); demoLoad(store.tripId); emit(); return; }
   const { fsM } = fb, b = fsM.writeBatch(fb.db); ids.forEach((id) => b.delete(fsM.doc(col("packing"), id))); await b.commit();
+}
+// ---- pre-trip to-dos: todos/{id} = { text, due: YYYY-MM-DD, who: traveller code | "", done, notes?, tz (for the 9 am reminder) }
+export async function saveTodo(items) {
+  const list = Array.isArray(items) ? items : [items], tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (DEMO) { const td = (mem().todos ||= []);
+    for (const it of list) { const id = it.id || uid("td"), i = td.findIndex((x) => x.id === id), v = { tz, ...it, id, updatedAt: now() }; if (i >= 0) td[i] = v; else td.push(v); }
+    demoLoad(store.tripId); emit(); return; }
+  const { fsM } = fb, b = fsM.writeBatch(fb.db);
+  for (const it of list) { const id = it.id || uid("td"); b.set(fsM.doc(col("todos"), id), clean({ tz, ...it, id: undefined, text: String(it.text || "").slice(0, 200), updatedAt: now() })); }
+  await b.commit();
+}
+export async function deleteTodo(ids) {
+  ids = [].concat(ids);
+  if (DEMO) { const t = mem(); t.todos = (t.todos || []).filter((x) => !ids.includes(x.id)); demoLoad(store.tripId); emit(); return; }
+  const { fsM } = fb, b = fsM.writeBatch(fb.db); ids.forEach((id) => b.delete(fsM.doc(col("todos"), id))); await b.commit();
+}
+export async function todoAI(ctx) {
+  if (DEMO) { await new Promise((r) => setTimeout(r, 500));
+    return { items: [{ text: "Buy eSIMs for the USA and Mexico", daysBefore: 7, who: "", why: "Data on arrival" }, { text: "Book Xcaret Park tickets", daysBefore: 30, who: "", why: "Sells out in January" },
+      { text: "Tell the bank about overseas card use", daysBefore: 7, who: "CGC", why: "" }] }; }
+  const schema = { type: "object", properties: { items: { type: "array", items: { type: "object", properties: {
+      text: { type: "string", description: "The to-do, short and actionable, e.g. 'Apply for Chloe's ESTA'" },
+      daysBefore: { type: "integer", description: "How many days before the trip starts it should be done (0 = the day before / day of)" },
+      who: { type: "string", description: "Traveller code if it's for one person (their document etc.), else ''" },
+      why: { type: "string", description: "Very short reason tied to this trip, or ''" } }, required: ["text", "daysBefore", "who", "why"] } } }, required: ["items"] };
+  const prompt = `Suggest a practical pre-trip to-do list (10-25 items) for this family trip, ordered by when to do them. Focus on things that must be done BEFORE leaving:
+entry documents for each passport (from the country info), renewing documents with problems, bookings still not confirmed, activities that sell out or need booking ahead, travel insurance,
+eSIMs/phone plans, notifying the bank, cash, driving permits for hire cars, airline check-in and seats, home tasks (mail, pets, plants) - only what fits this trip. Don't repeat what's already on the list.
+${ctx.have.length ? "Already on the list: " + ctx.have.join("; ") + "\n" : ""}
+TRIP
+${ctx.text}`;
+  let lastErr;
+  for (let i = 0; i < AI_MODELS.length; i++) {
+    try { const m = await getModel(i, schema); const res = await m.generateContent([{ text: prompt }]); return JSON.parse(res.response.text()); }
+    catch (e) { lastErr = e; console.warn("todo AI", AI_MODELS[i], e);
+      if (!/not.?found|404|unsupported|model|429|exhausted|quota|50\d|unavailable|overloaded|deadline|timeout|fetch/i.test(String(e.message || e) + (e.code || ""))) break; }
+  }
+  throw new Error(String(lastErr?.message || lastErr).slice(0, 300));
 }
 // another trip's packing list (to reuse it as a template)
 export async function packingOf(tripId) {

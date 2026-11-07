@@ -268,6 +268,30 @@ export async function arrivalFromFile(file) {
   throw new Error(String(lastErr?.message || lastErr).slice(0, 300));
 }
 
+// ------------------------------------------------------------------ receipt scanning: a photo of a receipt -> an expense
+export async function receiptAI(file, ctx) {
+  if (DEMO) { await new Promise((r) => setTimeout(r, 400)); return { merchant: "Taquería Honorio", total: "684.00", currency: "MXN", date: ctx.date || "", cat: "food", paidWith: "Visa ending 1234", tip: "60.00", summary: "Tacos, aguas frescas (4 people)", people: "4" }; }
+  const schema = { type: "object", properties: {
+    merchant: { type: "string", description: "Business name, short (e.g. 'Taquería Honorio', 'Walmart')" },
+    total: { type: "string", description: "Final total actually paid including tax and tip, as a plain number like 684.00" },
+    currency: { type: "string", description: "ISO currency code of the total (USD, MXN, AUD...). Use the symbol, the country on the receipt and the hint." },
+    date: { type: "string", description: "Date on the receipt YYYY-MM-DD, or ''" },
+    cat: { type: "string", enum: ["food", "transport", "shopping", "act", "stay", "car", "flight", "other"], description: "food = restaurants, cafes, groceries, drinks; transport = taxi, Uber, fuel, parking, tolls, buses; act = tickets, tours, entry fees; shopping = everything else bought" },
+    paidWith: { type: "string", description: "Card or method if shown, e.g. 'Visa ending 1234', 'Mastercard ending 9876', 'Cash'; '' if not shown" },
+    tip: { type: "string", description: "Tip / propina / gratuity amount if shown, plain number, or ''" },
+    summary: { type: "string", description: "What was bought in a few words" },
+    people: { type: "string", description: "Number of people / covers if shown, or ''" } },
+    required: ["merchant", "total", "currency", "date", "cat", "paidWith", "tip", "summary", "people"] };
+  const parts = [{ inlineData: { mimeType: file.type || "image/jpeg", data: await toBase64(file) } },
+    { text: `Read this receipt (it may be a photo, possibly in Spanish) and extract it into the JSON schema. The family is travelling in ${ctx.countries || "the USA and Mexico"}; around this date they were in ${ctx.where || "?"} (local currency hint: ${ctx.cur || "?"}). Use "" for anything not shown.` }];
+  let lastErr;
+  for (let i = 0; i < AI_MODELS.length; i++) {
+    try { const m = await getModel(i, schema); const res = await m.generateContent(parts); return dropEmpty(JSON.parse(res.response.text())); }
+    catch (e) { lastErr = e; if (!/not.?found|404|unsupported|model|429|exhausted|50\d|unavailable|fetch/i.test(String(e.message || e) + (e.code || ""))) break; }
+  }
+  throw new Error(String(lastErr?.message || lastErr).slice(0, 300));
+}
+
 // ------------------------------------------------------------------ country info (AI-written, kept on the trip)
 const L = (d) => ({ type: "array", items: { type: "string" }, description: d });
 const countrySchema = () => req({
@@ -498,9 +522,9 @@ export async function deleteEntry(id) {
 }
 
 // ------------------------------------------------------------------ files (editors)
-export async function uploadFile(file, { itemId = "", entryId = "", date = "" } = {}) {
+export async function uploadFile(file, { itemId = "", entryId = "", date = "", expenseId = "" } = {}) {
   const id = uid("file");
-  const meta = { name: file.name, size: file.size, contentType: file.type || "application/octet-stream", itemId, entryId, date, uploadedBy: store.email, uploadedAt: now() };
+  const meta = { name: file.name, size: file.size, contentType: file.type || "application/octet-stream", itemId, entryId, date, ...(expenseId ? { expenseId } : {}), uploadedBy: store.email, uploadedAt: now() };
   if (DEMO) { mem().files.push({ id, ...meta, path: "", demoUrl: URL.createObjectURL(file) }); demoLoad(store.tripId); emit(); return; }
   const path = `trips/${store.tripId}/files/${id}/${file.name}`;
   await fb.stM.uploadBytes(fb.stM.ref(fb.storage, path), file, { contentType: meta.contentType });

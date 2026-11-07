@@ -540,6 +540,7 @@ const I = {
   pin: SV('<path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
   chat: SV('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>'),
   bag: SV('<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M4 12h16M10 12v2M14 12v2"/>'),
+  receipt: SV('<path d="M5 3v18l2-1.5L9 21l2-1.5 2 1.5 2-1.5 2 1.5 2-1.5V3l-2 1.5L15 3l-2 1.5L11 3 9 4.5 7 3z"/><path d="M8 9h8M8 13h6"/>'),
   wifi: SV('<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="19.5" r="1"/>'),
   house: SV('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11h14V9"/><path d="M10 20v-6h4v6"/>'),
   copy: SV('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>'),
@@ -579,7 +580,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v123";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v124";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -838,7 +839,7 @@ function renderBudget() {
   const exp = B.rows.filter((r) => r.src === "expense");
   const byDay = {}; exp.forEach((r) => (byDay[r.date] = byDay[r.date] || []).push(r));
   const expHtml = Object.keys(byDay).sort().reverse().map((d) => `<h4 class="bd-date">${d ? `${WD[D(d).getDay()]} ${longDate(d)}` : "No date"}<span>${money(byDay[d].reduce((a, r) => a + (r.home || 0), 0), cur, 2)}</span></h4>
-      ${byDay[d].map((r) => `<button class="bl-row c-${r.cat}" data-exp="${r.id}"><span class="dot"></span><span class="bl-name">${esc(r.name)}${r.paidWith || famOf(r) ? `<small>${[r.paidWith, famOf(r) && (r.share === "split" ? `shared with ${famName(famOf(r))}` : r.share === "theirs" ? `${famName(famOf(r))}'s` : `paid by ${famName(famOf(r))}`)].filter(Boolean).map(esc).join(" · ")}</small>` : ""}</span><span class="bl-amt">${money(r.m.amt, r.m.cur, 2)}${r.m.cur !== cur && r.home !== null ? `<small>${money(r.home, cur, 2)}</small>` : ""}</span></button>`).join("")}`).join("");
+      ${byDay[d].map((r) => `<button class="bl-row c-${r.cat}" data-exp="${r.id}"><span class="dot"></span><span class="bl-name">${store.files.some((f) => f.expenseId === r.id) ? `<i class="rcpt" title="Receipt saved">${I.receipt}</i>` : ""}${esc(r.name)}${r.paidWith || famOf(r) ? `<small>${[r.paidWith, famOf(r) && (r.share === "split" ? `shared with ${famName(famOf(r))}` : r.share === "theirs" ? `${famName(famOf(r))}'s` : `paid by ${famName(famOf(r))}`)].filter(Boolean).map(esc).join(" · ")}</small>` : ""}</span><span class="bl-amt">${money(r.m.amt, r.m.cur, 2)}${r.m.cur !== cur && r.home !== null ? `<small>${money(r.home, cur, 2)}</small>` : ""}</span></button>`).join("")}`).join("");
   const bk = B.rows.filter((r) => r.src !== "expense").sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const sideOf = (r) => { const t = store.trip; if (!r.date || !t?.start) return ""; const last = r.end && r.end > r.date && r.src === "item" ? addDays(r.end, -1) : (r.end || r.date);
     return last < t.start ? "before" : r.date > t.end ? "after" : ""; };
@@ -859,7 +860,7 @@ function renderBudget() {
           ${B.toBook ? `<span>${B.toBook} still to book</span>` : ""}
           ${B.unknownRate.length ? `<span class="warn">Add an exchange rate for ${B.unknownRate.join(", ")}</span>` : ""}
         </div>
-        <div class="bd-acts"><button class="btn primary" data-add-exp>+ Add Expense</button><button class="btn" data-bsettings>Budget Settings</button></div>
+        <div class="bd-acts"><button class="btn primary" data-add-exp>+ Add Expense</button><label class="btn" data-scan-wrap>${I.receipt}Scan Receipt<input type="file" accept="image/*,application/pdf" hidden data-scan-exp=""></label><button class="btn" data-bsettings>Budget Settings</button></div>
       </section>
       ${settleHtml(B)}
       <section class="charts"><h3>Charts</h3>${donutChart(B)}${dailyChart(B)}${cumulativeChart(B)}</section>
@@ -874,6 +875,7 @@ function renderBudget() {
 function wireBudget() {
   root.querySelectorAll("[data-add-exp]").forEach((b) => (b.onclick = () => expenseForm({ date: b.dataset.addExp || (ui.day || defaultExpenseDate()) })));
   root.querySelectorAll("[data-exp]").forEach((b) => (b.onclick = () => expenseForm({ id: b.dataset.exp, ...store.priv[b.dataset.exp] })));
+  root.querySelectorAll("[data-scan-exp]").forEach((inp) => (inp.onchange = () => { const f = inp.files[0]; inp.value = ""; if (f) scanReceipt(f, inp.dataset.scanExp || ui.day || defaultExpenseDate()); }));
   root.querySelectorAll("[data-bk]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.bk))));
   root.querySelectorAll("[data-bact]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.bact))));
   root.querySelectorAll("[data-bsettings]").forEach((b) => (b.onclick = budgetForm));
@@ -1037,8 +1039,11 @@ function setPay(form, name, v) {
 function wirePay(form) {
   form.querySelectorAll("[data-pay]").forEach((sel) => (sel.onchange = () => { const o = sel.closest("label").nextElementSibling; o.hidden = sel.value !== "__other"; if (!o.hidden) o.querySelector("input").focus(); }));
 }
+let lastShare = null;   // the sharing choice of the last expense, used for the next new one
 function expenseForm(x) {
   const S = budgetSettings(), isNew = !x.id;
+  if (isNew && lastShare && !x.share) x = { ...lastShare, ...x };
+  const rfile = x.receiptFile, saved = x.id ? store.files.filter((f) => f.expenseId === x.id) : [];
   const curs = [...new Set([S.home, ...Object.keys(S.rates), ...CURRENCIES])];
   modal(`<h3>${isNew ? "Add Expense" : "Edit Expense"}</h3>
     <label>What For<input name="text" value="${esc(x.text || "")}" placeholder="e.g. Dinner at Hartwood" required></label>
@@ -1048,13 +1053,35 @@ function expenseForm(x) {
       <label>Date<input type="date" name="date" value="${x.date || defaultExpenseDate()}"></label></div>
     ${payField(x.paidWith)}
     ${shareFields(x, (k) => "s_" + k)}
-    ${whoBoxes(x.who || PEOPLE())}`,
+    ${whoBoxes(x.who || PEOPLE())}
+    ${rfile ? `<p class="rcpt-note">${I.receipt}<span>Receipt photo will be saved with this expense${x.scanNote ? ` · <span class="muted">${esc(x.scanNote)}</span>` : ""}</span></p>` : ""}
+    ${saved.length ? `<p class="rcpt-note">${I.receipt}<span>${saved.map((f) => `<button type="button" class="lnk" data-rview="${esc(f.id)}">View receipt</button>`).join(" · ")}</span></p>` : ""}`,
     async (fd) => {
       const amount = parseFloat(fd.get("amount")); if (!(amount >= 0)) throw new Error("Enter an amount");
       const sh = { share: fd.get("s_share") || "ours", fam: fd.get("s_fam") || "", paidBy: fd.get("s_paidBy") || "us", theirPct: fd.get("s_theirPct") || "" };
-      await data.savePrivate(x.id || null, { kind: "expense", text: fd.get("text").trim(), amount, currency: fd.get("currency"), cat: fd.get("cat"), date: fd.get("date"), paidWith: readPay(fd), who: fd.getAll("who"), ...sh });
-    }, isNew ? null : () => data.deletePrivate(x.id));
-  wirePay(document.querySelector(".sheet")); wireShare([...document.querySelectorAll(".sheet")].pop());
+      const eid = await data.savePrivate(x.id || null, { kind: "expense", text: fd.get("text").trim(), amount, currency: fd.get("currency"), cat: fd.get("cat"), date: fd.get("date"), paidWith: readPay(fd), who: fd.getAll("who"), ...sh });
+      if (isNew) lastShare = sh;
+      if (rfile) { try { await data.uploadFile(rfile, { expenseId: eid }); } catch (e) { toast("The expense is saved, but the receipt photo couldn't be: " + (e.code || e.message)); } }
+    }, isNew ? null : async () => { await data.deletePrivate(x.id); for (const f of saved) await data.deleteFile(f).catch(() => {}); });
+  const form = [...document.querySelectorAll(".sheet")].pop();
+  wirePay(form); wireShare(form);
+  form.querySelectorAll("[data-rview]").forEach((b) => (b.onclick = () => openFile(store.files.find((f) => f.id === b.dataset.rview))));
+}
+// photograph a receipt -> the AI fills in the expense form (you check it, then save)
+async function scanReceipt(file, date) {
+  toast("Reading the receipt…");
+  const t = store.trip, stay = store.items.find((i) => i.type === "stay" && i.start <= date && date < i.end);
+  const ci = t.countryInfo, curs = ci?.codes?.map((c) => ci.data[c]?.currency?.code).filter(Boolean).join(", ");
+  let r; try { r = await data.receiptAI(file, { date, countries: tripCountries().map(countryName).join(", "), where: stay ? stayArea(stay) || stay.name : "", cur: curs || "" }); }
+  catch (e) { toast("Couldn't read the receipt: " + (e.message || e)); return expenseForm({ date, receiptFile: file }); }
+  const amount = parseFloat(String(r.total || "").replace(/[^\d.]/g, ""));
+  const cur = /^[A-Z]{3}$/.test(r.currency || "") ? r.currency : undefined;
+  const pay = (() => { const m = String(r.paidWith || "").match(/(\d{4})\s*$/); const known = payMethods();
+    return (m && known.find((k) => k.endsWith(m[1]))) || r.paidWith || ""; })();
+  const note = [r.summary, r.tip && `tip ${r.tip}`, r.people && !/people|persons|pax/i.test(r.summary || "") && `${r.people} people`].filter(Boolean).join(" · ");
+  expenseForm({ date: r.date && r.date >= addDays(t.start, -30) && r.date <= addDays(t.end, 30) ? r.date : date, text: r.merchant || "Receipt", amount: amount >= 0 ? amount : "", currency: cur,
+    cat: BCATS.some(([k]) => k === r.cat) ? r.cat : "other", paidWith: pay, receiptFile: file, scanNote: note });
+  toast("Check the details, then save");
 }
 function budgetForm() {
   const S = budgetSettings();
@@ -2195,7 +2222,7 @@ function renderDay() {
       return `<section class="bd-day"><h3>Spending</h3>${ex.length ? ex.map((x) => { const m = { amt: +x.amount || 0, cur: x.currency || S.home }, h = toHome(m, S);
         return `<button class="bl-row c-${x.cat || "other"}" data-exp="${x.id}"><span class="dot"></span><span class="bl-name">${esc(x.text || "Expense")}${x.paidWith ? `<small>${esc(x.paidWith)}</small>` : ""}</span><span class="bl-amt">${money(m.amt, m.cur, 2)}${m.cur !== S.home && h !== null ? `<small>${money(h, S.home, 2)}</small>` : ""}</span></button>`; }).join("")
         + `<p class="bd-daytot">Day total <b>${money(ex.reduce((a, x) => a + (toHome({ amt: +x.amount || 0, cur: x.currency || S.home }, S) || 0), 0), S.home, 2)}</b></p>` : `<p class="muted">Nothing spent yet.</p>`}
-        <button class="btn small" data-add-exp="${date}">+ Add Expense</button></section>`; })() : ""}
+        <button class="btn small" data-add-exp="${date}">+ Add Expense</button><label class="btn small" data-scan-wrap>${I.receipt}Scan Receipt<input type="file" accept="image/*,application/pdf" hidden data-scan-exp="${date}"></label></section>`; })() : ""}
     ${isEditor() ? `<section><h3>Documents</h3>
       ${dayFiles.length ? `<div class="files">${dayFiles.map((f) => `<div class="frow">${fileLink(f)}<button class="btn tiny" data-del-file="${f.id}">Remove</button></div>`).join("")}</div>` : `<p class="muted">No documents for this day.</p>`}
       <label class="btn small">Upload for This Day<input type="file" hidden data-attach-day="${date}" multiple></label></section>` : ""}

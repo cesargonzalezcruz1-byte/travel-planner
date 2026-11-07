@@ -540,6 +540,7 @@ const I = {
   pin: SV('<path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
   chat: SV('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>'),
   bag: SV('<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M4 12h16M10 12v2M14 12v2"/>'),
+  wifi: SV('<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="19.5" r="1"/>'),
   house: SV('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11h14V9"/><path d="M10 20v-6h4v6"/>'),
   copy: SV('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>'),
   stats: SV('<path d="M3 3v18h18"/><path d="M7 15v3M11 10v8M15 12v6M19 6v12"/>'),
@@ -578,7 +579,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v122";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v123";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1498,7 +1499,7 @@ function renderNow() {
     : `<section class="ncard"><h3>Nothing else planned today</h3><p class="muted">Free time! Check the Recommended places on the day screen.</p></section>`}
     ${steps.length > 1 || (steps.length && next && nextDate !== date) ? `<section class="ncard"><h3>${phase === "before" ? "Day 1 · " + fmtDate(date) : "Today"}</h3><ul class="nlist">${steps.map((s) => line(s, date)).join("")}</ul></section>` : ""}
     ${stay ? `<section class="ncard k-stay tonight"><h3>Tonight</h3><div class="nmain"><span class="nbig">${ICON.stay}</span><div><div class="ntitle">${esc(stay.name || stay.short)}</div>
-        <div class="nsub">${esc(stay.address || areaOf(stay) || "")}</div></div></div>${stepActions({ item: stay, k: "stay", where: stay.address || stay.name }, date)}${isEditor() ? `<button class="arrbtn${store.priv[stay.id]?.arrival ? " has" : ""}" data-arrival="${stay.id}"><i class="ic16">${I.house}</i>Arrival${store.priv[stay.id]?.arrival ? " · Wi-Fi, door code, host" : " +"}</button>` : ""}</section>` : ""}
+        <div class="nsub">${esc(stay.address || areaOf(stay) || "")}</div></div></div>${stepActions({ item: stay, k: "stay", where: stay.address || stay.name }, date)}${isEditor() ? `<button class="arrbtn${store.priv[stay.id]?.arrival ? " has" : ""}" data-arrival="${stay.id}"><i class="ic16">${I.house}</i>Arrival${store.priv[stay.id]?.arrival ? " · Wi-Fi, door code, host" : " +"}</button>` : stay.wifi ? `<button class="arrbtn has" data-wifi="${stay.id}"><i class="ic16">${I.wifi}</i>Wi-Fi</button>` : ""}</section>` : ""}
     ${tmSteps.length ? `<section class="ncard"><h3>Tomorrow · ${esc(WD[D(tomorrow).getDay()])} ${fmtDate(tomorrow)}</h3><ul class="nlist">${tmSteps.map((s) => line(s, tomorrow)).join("")}</ul></section>` : ""}
     ${(() => { const fl = upcomingFlights(p).filter((f) => f !== next?.item).slice(0, 6); return fl.length ? `<section class="ncard"><h3>Upcoming Check-ins</h3>${pushCard()}
         ${fl.map((f) => checkinHtml(f, true)).join("")}</section>` : ""; })()}
@@ -1507,6 +1508,7 @@ function renderNow() {
   </div>`;
   wireHeader(); wireDays(); wireCheckins();
   root.querySelectorAll("[data-arrival]").forEach((b) => (b.onclick = () => arrivalSheet(b.dataset.arrival)));
+  root.querySelectorAll("[data-wifi]").forEach((b) => (b.onclick = () => wifiSheet(b.dataset.wifi)));
   root.querySelectorAll(".now [data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.()));
   root.querySelectorAll(".now [data-file]").forEach((b) => (b.onclick = () => openFile(store.files.find((x) => x.id === b.dataset.file))));
 }
@@ -1574,11 +1576,18 @@ function arrivalSheet(id) {
     : k === "hostEmail" ? `<a href="mailto:${esc(v)}">${esc(v)}</a>` : esc(v).replace(/ · /g, "<br>");
   infoBox(`<div class="arrival"><h2>${I.house}${esc(it.short || it.name || "Stay")}</h2><p class="muted small">${fmtDate(it.start)} – ${fmtDate(it.end)}${it.checkin ? ` · check-in ${esc(it.checkin)}` : ""}</p>
     <dl>${ARR_FIELDS.filter(([k]) => a[k]).map(([k, l, copy]) => `<dt>${l}</dt><dd><span class="${copy ? "acode" : ""}">${val(k, a[k])}</span>${copy ? `<button type="button" class="lb-copy" data-acopy="${esc(a[k])}" aria-label="Copy ${l}">${I.copy}</button>` : ""}</dd>`).join("")}</dl>
-    <p class="muted small">Private - only Cesar and Debora see this. Kept on the phone, so it opens offline once the app has loaded the trip.</p>
+    <p class="muted small">Private - only Cesar and Debora see this${it.wifi ? " (the Wi-Fi is shared with the family)" : ""}. Kept on the phone, so it opens offline once the app has loaded the trip.</p>
     <button type="button" class="btn small" data-aedit>Edit</button></div>`);
   const m = [...document.querySelectorAll(".modal")].pop();
   m.querySelectorAll("[data-acopy]").forEach((b) => (b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.acopy); toast("Copied"); } catch (e) { toast("Couldn't copy"); } }));
   m.querySelector("[data-aedit]").onclick = () => { m.remove(); arrivalForm(id); };
+}
+function wifiSheet(id) {
+  const it = store.items.find((x) => x.id === id), w = it?.wifi; if (!w) return;
+  infoBox(`<div class="arrival"><h2>${I.wifi}Wi-Fi · ${esc(it.short || it.name || "Stay")}</h2>
+    <dl>${w.name ? `<dt>Network</dt><dd><span class="acode">${esc(w.name)}</span><button type="button" class="lb-copy" data-acopy="${esc(w.name)}" aria-label="Copy network">${I.copy}</button></dd>` : ""}
+      ${w.pass ? `<dt>Password</dt><dd><span class="acode">${esc(w.pass)}</span><button type="button" class="lb-copy" data-acopy="${esc(w.pass)}" aria-label="Copy password">${I.copy}</button></dd>` : ""}</dl></div>`);
+  [...document.querySelectorAll(".modal")].pop().querySelectorAll("[data-acopy]").forEach((b) => (b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.acopy); toast("Copied"); } catch (e) { toast("Couldn't copy"); } }));
 }
 function arrivalForm(id) {
   const it = store.items.find((x) => x.id === id), had = store.priv[id] || {}, a = { ...(had.arrival || {}) };
@@ -1588,10 +1597,15 @@ function arrivalForm(id) {
     <p class="muted small">Everything you need on arrival in one place. Let the AI read the confirmation or the host's message, then check it.</p>
     <div class="afill">${files.map((f) => `<button type="button" class="btn tiny" data-aread="${esc(f.id)}">✨ Read ${esc(f.name.length > 28 ? f.name.slice(0, 26) + "…" : f.name)}</button>`).join("")}
       <label class="btn tiny">✨ Read a file or screenshot…<input type="file" hidden accept="application/pdf,image/*" data-afile></label></div>
-    ${ARR_FIELDS.map(([k, l]) => long.includes(k) ? `<label>${l}<textarea name="${k}" rows="2">${esc(a[k] || "")}</textarea></label>` : `<label>${l}<input name="${k}" value="${esc(a[k] || "")}" ${k === "hostPhone" ? 'inputmode="tel"' : ""}></label>`).join("")}`,
+    ${ARR_FIELDS.map(([k, l]) => long.includes(k) ? `<label>${l}<textarea name="${k}" rows="2">${esc(a[k] || "")}</textarea></label>` : `<label>${l}<input name="${k}" value="${esc(a[k] || "")}" ${k === "hostPhone" ? 'inputmode="tel"' : ""}></label>`).join("")}
+    <label class="pswitch"><input type="checkbox" name="shareWifi" ${it.wifi ? "checked" : ""}><span>Share the Wi-Fi with the family (only the network and password - codes and host details stay private)</span></label>`,
     async (fd) => {
       const out = {}; ARR_FIELDS.forEach(([k]) => { const v = String(fd.get(k) || "").trim(); if (v) out[k] = v; });
       await data.savePrivate(id, { ...had, arrival: Object.keys(out).length ? out : null });
+      const cur = store.items.find((x) => x.id === id) || it, { wifi, ...rest } = cur;
+      if (fd.get("shareWifi") && (out.wifiName || out.wifiPass)) { const w = { name: out.wifiName || "", pass: out.wifiPass || "" };
+        if (JSON.stringify(w) !== JSON.stringify(wifi || {})) await data.saveItem({ ...rest, wifi: w }); }
+      else if (wifi) await data.saveItem(rest);
     }, had.arrival ? () => data.savePrivate(id, { ...had, arrival: null }) : null);
   const form = [...document.querySelectorAll(".sheet")].pop();
   const fill = async (blob, name) => {
@@ -1967,6 +1981,7 @@ function entryLi(e) {
 // buttons on booking cards and activity rows (day view and the Before / After Trip screens)
 function wireCards() {
   root.querySelectorAll("[data-arrival]").forEach((b) => (b.onclick = () => arrivalSheet(b.dataset.arrival)));
+  root.querySelectorAll("[data-wifi]").forEach((b) => (b.onclick = () => wifiSheet(b.dataset.wifi)));
   root.querySelectorAll("[data-edit-item]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.editItem))));
   root.querySelectorAll("[data-edit-entry]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.editEntry))));
   root.querySelectorAll("[data-confirm]").forEach((cb) => (cb.onchange = () => { const e = store.entries.find((x) => x.id === cb.dataset.confirm); data.saveEntry({ ...e, confirmed: cb.checked }); }));
@@ -2001,7 +2016,7 @@ function itemCard(i, date) {
     ${i.note ? `<div class="inote">${fmt(i.note)}</div>` : ""}
     ${pvHtml}
     ${i.type === "flight" && i.start === date ? checkinHtml(i) : ""}
-    <div class="ilinks">${mapLinks}${files.map(fileLink).join("")}${i.type === "stay" && isEditor() ? `<button class="arrbtn${store.priv[i.id]?.arrival ? " has" : ""}" data-arrival="${i.id}"><i class="ic16">${I.house}</i>Arrival${store.priv[i.id]?.arrival ? "" : " +"}</button>` : ""}</div>
+    <div class="ilinks">${mapLinks}${files.map(fileLink).join("")}${i.type === "stay" && isEditor() ? `<button class="arrbtn${store.priv[i.id]?.arrival ? " has" : ""}" data-arrival="${i.id}"><i class="ic16">${I.house}</i>Arrival${store.priv[i.id]?.arrival ? "" : " +"}</button>` : i.type === "stay" && i.wifi ? `<button class="arrbtn has" data-wifi="${i.id}"><i class="ic16">${I.wifi}</i>Wi-Fi</button>` : ""}</div>
     ${isEditor() ? `<div class="iacts"><button class="btn small" data-edit-item="${i.id}">Edit</button>
        <button class="btn small danger" data-del-item="${i.id}"><i class="ic16">${I.trash}</i>Delete</button>
        <label class="btn small"><i class="ic16">${I.clip}</i>Attach File<input type="file" hidden data-attach-item="${i.id}" multiple></label></div>` : ""}
@@ -2660,10 +2675,13 @@ function aiLabel(x) {
   const what = x.type === "flight" ? `Flight ${x.route || ""} ${x.number || ""}` : x.type === "stay" ? `Stay ${x.short || x.name || ""}` : x.type === "car" ? `Car ${x.company || ""}` : `Activity ${x.text || x.name || ""}`;
   return `${what.trim()} · ${d}`;
 }
+// arrival details (Wi-Fi, codes, host): keep what's there, fill the gaps from a newly read document
+const arrOk = (a) => (a && Object.values(a).some((v) => v) ? a : null);
+const mergeArr = (have, got) => { const out = { ...(have || {}) }; for (const [k, v] of Object.entries(got || {})) if (v && !out[k]) out[k] = v; return arrOk(out); };
 const AI_FIELDS = { flight: ["route", "airline", "number", "dep", "arr"], stay: ["name", "short", "address", "area", "checkin", "checkout"], car: ["company", "vehicle", "pickup", "dropoff", "pickupTime", "dropoffTime", "address"] };
 async function createFromAI(x) {
   const who = (x.who || []).filter((c) => PEOPLE().includes(c)); const people = who.length ? who : PEOPLE();
-  const priv = Object.fromEntries(Object.entries(x.private || {}).filter(([, v]) => v));
+  const priv = Object.fromEntries(Object.entries(x.private || {}).filter(([k, v]) => v && (k !== "arrival" || (x.type === "stay" && arrOk(v)))));
   if (x.type === "activity") {
     const id = await data.saveEntry({ kind: "activity", status: "planned", confirmed: true, date: x.start, endDate: x.end || x.start, who: people,
       text: [x.time, x.text || x.name].filter(Boolean).join(" ") || "Activity", place: x.place || x.name || "", ...(x.note ? { note: x.note } : {}) });
@@ -2741,7 +2759,7 @@ function bulkAttach() {
     <p class="bstatus muted small"></p><div class="blist"></div>`, async () => {
     const go = rows.filter((r) => r.target && r.state !== "dup" && !(r.out && r.target === "new" && !r.outOk) && !(r.changes?.length && r.target === r.chgTarget && !r.chg) && !(r.target === "new" && !r.who?.length));
     if (!go.length) { toast("Nothing to attach"); throw Object.assign(new Error(""), { back: true }); }
-    let n = 0, updated = 0; const made = [];   // bookings created in this upload (a second file for the same booking joins it)
+    let n = 0, updated = 0, arrivals = 0; const made = [];   // bookings created in this upload (a second file for the same booking joins it)
     const docs = go.filter((r) => r.target.startsWith("doc:")), vaults = {}; let nd = 0;
     if (docs.length) {
       if (!unlocked()) { setStatus("Confirm it's you to add travel documents to the profiles…"); await unlock(); }
@@ -2773,11 +2791,13 @@ function bulkAttach() {
           await data.saveItem({ ...it, ...patch, note: [it.note, note].filter(Boolean).join("\n") }); Object.assign(it, patch); updated++; }
       }
       setStatus(`Uploading ${++n} of ${go.length}: ${r.file.name}`);
-      if (kind === "item") await data.uploadFile(r.file, { itemId: id });
+      if (kind === "item") { await data.uploadFile(r.file, { itemId: id });
+        const it = store.items.find((x) => x.id === id), got = arrOk(r.ai?.private?.arrival);
+        if (it?.type === "stay" && got) { const had = store.priv[id] || {}; await data.savePrivate(id, { ...had, arrival: mergeArr(had.arrival, got) }); arrivals++; } }
       else { const e = store.entries.find((x) => x.id === id); await data.uploadFile(r.file, { entryId: id, date: e?.date || "" }); if (e && !e.confirmed) await data.saveEntry({ ...e, confirmed: true }); }
     }
     const nb = go.length - nd;
-    toast([nb ? `${nb} document${nb > 1 ? "s" : ""} attached` : "", nd ? `${nd} travel document${nd > 1 ? "s" : ""} added to profiles` : "", made.length ? `${made.length} new booking${made.length > 1 ? "s" : ""} created - check them` : "", updated ? `${updated} booking${updated > 1 ? "s" : ""} updated with new times` : ""].filter(Boolean).join(", "));
+    toast([nb ? `${nb} document${nb > 1 ? "s" : ""} attached` : "", nd ? `${nd} travel document${nd > 1 ? "s" : ""} added to profiles` : "", made.length ? `${made.length} new booking${made.length > 1 ? "s" : ""} created - check them` : "", updated ? `${updated} booking${updated > 1 ? "s" : ""} updated with new times` : "", arrivals ? `arrival details added to ${arrivals} stay${arrivals > 1 ? "s" : ""}` : ""].filter(Boolean).join(", "));
   });
   const m = [...document.querySelectorAll(".modal")].pop(), list = m.querySelector(".blist"), btn = m.querySelector("button.primary");
   const setStatus = (t) => (m.querySelector(".bstatus").textContent = t);
@@ -2821,7 +2841,8 @@ function bulkAttach() {
     rows = rows.concat(fresh); fresh.forEach((r) => (r.state = isDup(r) ? "dup" : r.state)); draw();
     const readable = (r) => /pdf|image/.test(r.file.type || (/\.pdf$/i.test(r.file.name) ? "pdf" : ""));
     fresh.forEach((r) => { if (r.sure && r.target.startsWith("item:") && r.state !== "dup") { const id = r.target.slice(5);
-      if (store.files.some((f) => f.itemId === id) || rows.some((o) => o !== r && o.target === r.target)) r.verify = true; } });
+      const st = store.items.find((x) => x.id === id);
+      if (store.files.some((f) => f.itemId === id) || rows.some((o) => o !== r && o.target === r.target) || (st?.type === "stay" && !store.priv[id]?.arrival)) r.verify = true; } });
     const toRead = fresh.filter((r) => (!r.sure || r.verify) && r.state !== "dup" && readable(r));
     let k = 0;
     for (const r of toRead) {
@@ -3556,6 +3577,7 @@ function itemForm(item) {
       if (out.end < out.start) throw new Error("'To' is before 'From'");
       let priv = {}; for (const [k, v] of fd.entries()) if (k.startsWith("priv.") && v) priv[k.slice(5)] = v;
       delete priv.paidWithOther; const pw = readPay(fd, "priv.paidWith"); if (pw) priv.paidWith = pw; else delete priv.paidWith;
+      const arr = mergeArr(pv.arrival, form.__arrival); if (arr && (fd.get("type") || item.type) === "stay") priv.arrival = arr;
       let skipOverlap = false;
       if (isNew) {
         const dup = findDuplicate(out, priv);
@@ -3593,6 +3615,7 @@ function itemForm(item) {
   };
   if (sel) sel.onchange = () => switchType(sel.value, item);
   wireExtract(form, () => (sel ? sel.value : item.type), (r) => {
+    if (arrOk(r.private?.arrival)) { form.__arrival = r.private.arrival; toast("Arrival details found too - saved with the stay"); }
     let t = sel ? sel.value : item.type;
     if (sel && r.type && ["flight", "stay", "car"].includes(r.type) && r.type !== t) { t = r.type; sel.value = t; switchType(t, {}); }
     FIELDS[t].forEach(([k]) => setVal(form, k, r[k]));
@@ -3601,6 +3624,7 @@ function itemForm(item) {
     const p = r.private || {};
     for (const [k, v] of Object.entries(p)) {
       if (!v) continue;
+      if (k === "arrival" || typeof v === "object") continue;   // arrival details are kept separately (the stay's Arrival card)
       if (k === "paidWith") { setPay(form, "priv.paidWith", v); continue; }
       if (!form.querySelector(`[name="priv.${k}"]`)) form.querySelector(".privbox").insertAdjacentHTML("beforeend", `<label>${esc(label(k))}<input name="priv.${k}"></label>`);
       setVal(form, "priv." + k, v);

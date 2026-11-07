@@ -600,6 +600,10 @@ const EXTRACT_SCHEMA = req({
     dueAtHotel: S("Amount still to pay at the property, with currency"),
     cancel: S("Cancellation rule in one line, with the deadline date"), phone: S("Phone number of the hotel / airline / rental company itself (not the booking website's customer service line, unless no other number is given)"),
     notes: S("Other useful private details: room type, guests, booking site, taxes, deposit"),
+    arrival: req({ wifiName: S("Stays: Wi-Fi network name"), wifiPass: S("Stays: Wi-Fi password"), doorCode: S("Stays: door / gate / keypad / lockbox code and where it is"),
+      checkin: S("Stays: how to check in / get the keys, short"), checkout: S("Stays: check-out instructions, short"), parking: S("Stays: parking details"),
+      houseRules: S("Stays: house rules, short, separated by ' · '"), hostName: S("Stays: host or property contact name"), hostPhone: S("Stays: host or property phone, international format"),
+      hostEmail: S("Stays: host or property email"), notes: S("Stays: anything else useful on arrival, short") }),
   }),
   journeys: { type: "array", description: "Flights only: ONE entry per separate journey on different days, e.g. the outbound AND the return flight of a return ticket. Connections on the way to one destination (e.g. LAX-IAH-TQO the same day) are ONE journey. Empty for other bookings.",
     items: req({ route: S("Airport codes joined with '-', e.g. BNE-AKL"), airline: S("Airline name"), number: S("Flight number(s), e.g. NZ148"),
@@ -634,7 +638,7 @@ export async function extractFromFile(file, hint, ctx) {
     return { type: hint === "activity" ? "activity" : "stay", who: ctx.travellers.map((t) => t.code), start: "2027-01-14", end: "2027-01-15",
              name: "Demo Hotel Orlando", short: "Demo Hotel", address: "1 Demo Way, Orlando, FL", checkin: "15:00", checkout: "11:00",
              text: "Demo activity from " + file.name, place: "Epic Universe", note: "Filled from " + file.name,
-             private: { confirmation: "DEMO123", cost: "AU$100.00", cancel: "Free cancellation until 1 day before" } };
+             private: { confirmation: "DEMO123", cost: "AU$100.00", cancel: "Free cancellation until 1 day before", ...(/airbnb|house|casa/i.test(file.name) ? { arrival: { wifiName: "Casa-Demo", wifiPass: "playa2026", doorCode: "4821 lockbox by the gate", hostName: "Ana", hostPhone: "+52 984 123 4567" } } : {}) } };
   }
   const people = ctx.travellers.map((t) => `${t.code} = ${t.fullName || t.name}`).concat((ctx.extended || []).map((t) => `${t.code} = ${t.name}`)).join("; ");
   const prompt = `Read this travel booking confirmation for a family trip (${ctx.start} to ${ctx.end}) and extract it into the JSON schema.

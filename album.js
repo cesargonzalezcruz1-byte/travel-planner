@@ -21,7 +21,7 @@ export function areaOf(i) {
   if (raw.length < 2) return "";
   const parts = raw.map((x, k) => ({ k, digits: /\d/.test(x), t: x.replace(/\b\d[\d-]*\b/g, " ").replace(/\s+/g, " ").trim().replace(/\s+[A-Z]{2,3}$/, "") }));
   const cand = parts.filter((p) => p.t && !(p.k === 0 && /^\d/.test(raw[0])) && !/^[A-Z]{2,3}$/.test(p.t) && !COUNTRY.test(p.t) && !REGION.test(p.t) && !STREET.test(p.t));
-  const withCode = cand.filter((p) => p.digits);   // "Queenstown 9371", "75001 Paris": the part with the postcode is usually the town
+  const withCode = cand.filter((p) => p.digits && p.k > 0);   // "Queenstown 9371": the part with the postcode is usually the town (not the street number in the first part)
   return (withCode.at(-1) || cand.at(-1))?.t || "";
 }
 

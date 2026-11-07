@@ -90,7 +90,7 @@ async function goAlert(tripDoc, items, i, dep, lead, now, tgt, link, route, fl) 
       if (o?.connection) go = { dep, connection: true, checked: now };
       else if (o) {
         try { const mins = await driveMinutes(o.q, dest, target - (go?.mins || 60) * MIN);
-          go = { dep, mins, from: o.name, q: o.q, leave: target - mins * MIN - 10 * MIN, tz: tz || "", checked: now }; }
+          go = { dep, mins, from: o.name, q: o.name === "home" ? "" : o.q, leave: target - mins * MIN - 10 * MIN, tz: tz || "", checked: now }; }
         catch (e) { logger.warn("go route", i.id, e.message); }
       }
       if (go) await tripDoc.ref.collection("items").doc(i.id).update({ go }).catch((e) => logger.warn("go save", e.message));

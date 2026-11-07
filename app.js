@@ -447,6 +447,7 @@ function sosStays() {
     .filter((i) => { const k = (i.address || i.name).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 const sosQ = (i) => i.address || [i.name, i.area].filter(Boolean).join(", ");
+const sosNeeds = (i) => { const e = store.trip?.essentials?.[i.id]; return !e || e.q !== sosQ(i) || !!e.err; };   // not looked up, address changed, or failed last time
 // look up what's missing (editors): nearest hospital, pharmacy, supermarket and consulates for each stay, saved with the trip
 async function sosFind(tid, stays, note) {
   const ess = { ...(store.trip.essentials || {}) };
@@ -458,8 +459,9 @@ async function sosFind(tid, stays, note) {
       const r = await nearbyEssentials(sosQ(i)), here = ctryOfAddr(i.address) || ctryOfAddr(r.addr), cons = [];
       for (const n of nats) { if (n.code && n.code === here) continue;
         const c = await nearestConsulate(n.country, r).catch(() => null); cons.push({ country: n.country, who: n.who, place: c }); }
-      ess[i.id] = { q: sosQ(i), at: new Date().toISOString(), ctry: here, hospital: r.hospital, pharmacy: r.pharmacy, supermarket: r.supermarket, cons };
-    } catch (e) { console.warn("sos", i.id, e); ess[i.id] = { q: sosQ(i), at: new Date().toISOString(), err: String(e.message || e).slice(0, 200) }; }
+      ess[i.id] = { q: sosQ(i), at: new Date().toISOString(), ctry: here, hospital: r.hospital, pharmacy: r.pharmacy, supermarket: r.supermarket, cons, err: null };   // err: null clears an earlier failure (the trip doc is merged)
+    } catch (e) { console.warn("sos", i.id, e); if (/load Google Maps|rejected the key/i.test(e.message || "")) throw e;   // offline or no Maps: save nothing
+      ess[i.id] = { q: sosQ(i), at: new Date().toISOString(), err: String(e.message || e).slice(0, 200) }; }
   }
   await data.saveTrip({ essentials: JSON.parse(JSON.stringify(ess)) }, tid);
   store.trip.essentials = ess;
@@ -479,7 +481,7 @@ async function emergencySheet(tid = ui.tripId) {
     const t = store.trip, ess = t.essentials || {}, stays = sosStays(), today = iso(new Date());
     const now = stays.find((i) => i.start <= today && today < i.end);
     const order = now ? [now, ...stays.filter((i) => i !== now)] : stays;
-    const missing = stays.filter((i) => !ess[i.id] || ess[i.id].q !== sosQ(i));
+    const missing = stays.filter(sosNeeds);
     const ci = t.countryInfo || {}, codes = (ci.codes || []).filter((c) => ci.data?.[c]?.emergency);
     const nats = tripPassports(), aus = !nats.length || nats.some((p) => /austral/i.test(p.nationality));
     m.innerHTML = `<div class="sheet sossheet"><div class="sos-h"><span class="sos-badge">${I.warn}</span><div><h3>Emergency</h3><small class="muted">${esc(t.title || "")}</small></div><button type="button" class="btn tiny" data-x aria-label="Close">✕</button></div>
@@ -508,7 +510,7 @@ async function emergencySheet(tid = ui.tripId) {
   m.addEventListener("click", async (e) => {
     if (e.target === m || e.target.closest("[data-x]")) return m.remove();
     if (e.target.closest("[data-sos-ci]")) { m.remove(); return countryInfoFlow(tid); }
-    if (e.target.closest("[data-sos-find]")) return run(sosStays().filter((i) => !store.trip.essentials?.[i.id] || store.trip.essentials[i.id].q !== sosQ(i)));
+    if (e.target.closest("[data-sos-find]")) return run(sosStays().filter(sosNeeds));
     if (e.target.closest("[data-sos-refresh]")) return run(sosStays());
     if (e.target.closest("[data-sos-health]")) {
       try { if (!unlocked()) await unlock(); } catch (err) { return toast("Not unlocked"); }
@@ -523,7 +525,7 @@ async function emergencySheet(tid = ui.tripId) {
   });
   m.addEventListener("change", (e) => { const k = e.target.closest("[data-sos-keep]"); if (k) { sosKeep(tid, k.checked ? health : null); toast(k.checked ? "Saved on this phone" : "Removed from this phone"); } });
   draw();
-  if (isEditor() && sosStays().some((i) => !store.trip.essentials?.[i.id]) && mapsReady()) run(sosStays().filter((i) => !store.trip.essentials?.[i.id]));
+  if (isEditor() && navigator.onLine !== false && sosStays().some(sosNeeds) && mapsReady()) run(sosStays().filter(sosNeeds));
 }
 
 // Google Maps suggestions under a text field while typing (addresses, or any place with opts.any, biased near opts.near = an address)
@@ -811,7 +813,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v131";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v132";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1337,16 +1339,6 @@ function budgetForm() {
       await data.savePrivate("_budget", { home: fd.get("home"), rates, total: +fd.get("total") || 0, cats, methods, ratesDate: form?.dataset.ratesDate || store.priv._budget?.ratesDate || "" });
     });
   const form = [...document.querySelectorAll(".sheet")].pop();
-  form.addEventListener("change", (e) => {
-    const sel = e.target.closest("[data-pick]"); if (!sel || !sel.value) return;
-    const per = store.people.find((x) => x.id === sel.value), kind = sel.dataset.pick; sel.value = "";
-    if (!per) return;
-    if ([...form.querySelectorAll(".prow")].some((r) => r.dataset.pid === per.id || r.querySelector(".pcode").value.trim().toUpperCase() === per.code)) return toast(`${per.name} is already on this trip`);
-    const used2 = [...form.querySelectorAll('.prow[data-kind="t"]')].map((r) => r.dataset.color);
-    const color = kind === "t" ? upc(per.color) || nextColor() : "";
-    if (kind === "t" && used2.includes(color)) toast(`${per.name}'s colour is already used on this trip - change one of them`);
-    form.querySelector(kind === "t" ? "#trav" : "#ext").insertAdjacentHTML("beforeend", row({ code: per.code, name: per.name, fullName: per.fullName, color, pid: per.id }, kind));
-  });
   form.addEventListener("click", (e) => {
     if (e.target.closest("[data-rm-pm]")) e.target.closest(".pmrow").remove();
     if (e.target.closest("[data-add-pm]")) { form.querySelector("#pmlist").insertAdjacentHTML("beforeend", `<div class="pmrow"><input name="pm" placeholder="e.g. Cash"><button type="button" class="btn tiny danger" data-rm-pm aria-label="Remove">✕</button></div>`); form.querySelector("#pmlist .pmrow:last-child input").focus(); }
@@ -3459,7 +3451,7 @@ async function planRoute(p, date, acts, mode) {
     const gap = (h2 * 60 + m2) - (h1 * 60 + m1);
     if (travel / 60 > gap - 15) warn.push(`Tight: ${fmtDur(travel)} of travel between ${firstText(a.e.text)} (${timeOf(a.e)}) and ${firstText(b.e.text)} (${timeOf(b.e)})`); }
   const res = { at: new Date().toISOString(), mode, optimised: !!first.order, fixed: timed.length > 0, sig: "",
-    from: start, to: end, stops: seq.map((x) => ({ id: x.e.id, name: firstText(x.e.text), match: x.at.name || "", time: timeOf(x.e), lat: x.at.lat, lng: x.at.lng })),
+    from: start || null, to: end || null, stops: seq.map((x) => ({ id: x.e.id, name: firstText(x.e.text), match: x.at.name || "", time: timeOf(x.e), lat: x.at.lat, lng: x.at.lng })),
     legs: legs.map((l) => ({ mode: l.mode, sec: l.sec, m: l.m })), skipped, warn };
   const fresh = store.entries.filter((e) => acts.some((a) => a.id === e.id));   // after saving places / skips
   res.sig = actSig(acts.map((a) => fresh.find((e) => e.id === a.id) || a));

@@ -247,6 +247,27 @@ export async function extractDocFromFile(file) {
   throw lastErr;
 }
 
+// ------------------------------------------------------------------ stay arrival card (Wi-Fi, door code, parking, rules, host) read from a confirmation
+export async function arrivalFromFile(file) {
+  if (DEMO) { await new Promise((r) => setTimeout(r, 400)); return { wifiName: "Casa-Demo", wifiPass: "playa2026", doorCode: "4821 (lockbox by the gate)", parking: "2 spaces in the driveway",
+    checkin: "Self check-in from 3 pm", houseRules: "No parties · Quiet hours 10 pm – 8 am", hostName: "Ana", hostPhone: "+52 984 123 4567" }; }
+  const S2 = (d) => ({ type: "string", description: d });
+  const schema = { type: "object", properties: {
+    wifiName: S2("Wi-Fi network name"), wifiPass: S2("Wi-Fi password"), doorCode: S2("Door, gate, keypad or lockbox code and where it is"),
+    checkin: S2("How to check in / get the keys, short"), checkout: S2("Check-out instructions, short"), parking: S2("Parking details"),
+    houseRules: S2("House rules, short, separated by ' · '"), hostName: S2("Host or property contact name"), hostPhone: S2("Host or property phone in international format"),
+    hostEmail: S2("Host or property email"), address: S2("Full address of the stay"), notes: S2("Anything else useful on arrival (bins, A/C, pool, gate remote), short") },
+    required: ["wifiName", "wifiPass", "doorCode", "checkin", "parking", "houseRules", "hostName", "hostPhone"] };
+  const parts = [{ inlineData: { mimeType: file.type || "application/pdf", data: await toBase64(file) } },
+    { text: "From this accommodation confirmation or host message, extract the arrival details into the JSON schema. Use \"\" for anything not shown - never invent codes or passwords." }];
+  let lastErr;
+  for (let i = 0; i < AI_MODELS.length; i++) {
+    try { const m = await getModel(i, schema); const res = await m.generateContent(parts); return dropEmpty(JSON.parse(res.response.text())); }
+    catch (e) { lastErr = e; if (!/not.?found|404|unsupported|model|429|exhausted|50\d|unavailable|fetch/i.test(String(e.message || e) + (e.code || ""))) break; }
+  }
+  throw new Error(String(lastErr?.message || lastErr).slice(0, 300));
+}
+
 // ------------------------------------------------------------------ country info (AI-written, kept on the trip)
 const L = (d) => ({ type: "array", items: { type: "string" }, description: d });
 const countrySchema = () => req({

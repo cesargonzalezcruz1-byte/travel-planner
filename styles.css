@@ -949,3 +949,12 @@ body.noscroll{overflow:hidden}
 .padd{display:flex;gap:6px} .padd input{flex:1;min-width:0} .padd select{width:auto;max-width:42%}
 .ptools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px} .ptools .pswitch{margin:0}
 .psugg h4{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px}
+/* stay arrival card */
+.arrbtn{display:inline-flex;align-items:center;gap:6px;border:1.5px dashed var(--stay);background:var(--card);color:var(--stay);border-radius:14px;padding:5px 11px;font:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.arrbtn.has{border-style:solid;background:color-mix(in srgb,var(--stay) 12%,var(--card))}
+.ncard .arrbtn{margin-top:10px}
+.arrival h2{display:flex;align-items:center;gap:8px} .arrival h2 svg{width:22px;height:22px;color:var(--stay)}
+.arrival dl{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;margin:12px 0} .arrival dt{font-weight:800;color:var(--muted);font-size:13px}
+.arrival dd{margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap} .arrival .acode{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:17px;font-weight:700;letter-spacing:.5px}
+.lb-copy{border:1.5px solid var(--line2);background:var(--card);border-radius:10px;padding:4px 6px;cursor:pointer;color:var(--ink);display:inline-flex} .lb-copy svg{width:15px;height:15px}
+.afill{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px} .sheet .filled{background:color-mix(in srgb,#1F8A4C 10%,var(--card))}

@@ -540,6 +540,8 @@ const I = {
   pin: SV('<path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
   chat: SV('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>'),
   bag: SV('<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M4 12h16M10 12v2M14 12v2"/>'),
+  house: SV('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11h14V9"/><path d="M10 20v-6h4v6"/>'),
+  copy: SV('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>'),
   stats: SV('<path d="M3 3v18h18"/><path d="M7 15v3M11 10v8M15 12v6M19 6v12"/>'),
   globe: SV('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'),
   walk: SV('<circle cx="13" cy="4" r="2"/><path d="m9 20 3-6 3 2v6M6 12l3-4 4 1 3 4 3 1"/><path d="M9 8 7 14"/>'),
@@ -576,7 +578,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v121";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v122";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1496,7 +1498,7 @@ function renderNow() {
     : `<section class="ncard"><h3>Nothing else planned today</h3><p class="muted">Free time! Check the Recommended places on the day screen.</p></section>`}
     ${steps.length > 1 || (steps.length && next && nextDate !== date) ? `<section class="ncard"><h3>${phase === "before" ? "Day 1 · " + fmtDate(date) : "Today"}</h3><ul class="nlist">${steps.map((s) => line(s, date)).join("")}</ul></section>` : ""}
     ${stay ? `<section class="ncard k-stay tonight"><h3>Tonight</h3><div class="nmain"><span class="nbig">${ICON.stay}</span><div><div class="ntitle">${esc(stay.name || stay.short)}</div>
-        <div class="nsub">${esc(stay.address || areaOf(stay) || "")}</div></div></div>${stepActions({ item: stay, k: "stay", where: stay.address || stay.name }, date)}</section>` : ""}
+        <div class="nsub">${esc(stay.address || areaOf(stay) || "")}</div></div></div>${stepActions({ item: stay, k: "stay", where: stay.address || stay.name }, date)}${isEditor() ? `<button class="arrbtn${store.priv[stay.id]?.arrival ? " has" : ""}" data-arrival="${stay.id}"><i class="ic16">${I.house}</i>Arrival${store.priv[stay.id]?.arrival ? " · Wi-Fi, door code, host" : " +"}</button>` : ""}</section>` : ""}
     ${tmSteps.length ? `<section class="ncard"><h3>Tomorrow · ${esc(WD[D(tomorrow).getDay()])} ${fmtDate(tomorrow)}</h3><ul class="nlist">${tmSteps.map((s) => line(s, tomorrow)).join("")}</ul></section>` : ""}
     ${(() => { const fl = upcomingFlights(p).filter((f) => f !== next?.item).slice(0, 6); return fl.length ? `<section class="ncard"><h3>Upcoming Check-ins</h3>${pushCard()}
         ${fl.map((f) => checkinHtml(f, true)).join("")}</section>` : ""; })()}
@@ -1504,6 +1506,7 @@ function renderNow() {
     ${phase !== "before" ? outsideBlock(p, "before") : ""}${outsideBlock(p, "after")}
   </div>`;
   wireHeader(); wireDays(); wireCheckins();
+  root.querySelectorAll("[data-arrival]").forEach((b) => (b.onclick = () => arrivalSheet(b.dataset.arrival)));
   root.querySelectorAll(".now [data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.()));
   root.querySelectorAll(".now [data-file]").forEach((b) => (b.onclick = () => openFile(store.files.find((x) => x.id === b.dataset.file))));
 }
@@ -1557,6 +1560,50 @@ function renderOutside(side) {
   root.querySelectorAll("[data-ogo]").forEach((b) => (b.onclick = () => { const d2 = side === "before" ? t.start : t.end;
     if (pane !== null && pane !== undefined) { ui.splitDay[pane] = d2; return render(); }
     ui.slide = side === "before" ? "from-right" : "from-left"; routeTo(ui.tripId, d2, true); }));
+}
+
+// ---------------------------------------------------------------- stay arrival card: Wi-Fi, door code, parking, check-in, rules, host (private, offline)
+const ARR_FIELDS = [["wifiName", "Wi-Fi network"], ["wifiPass", "Wi-Fi password", 1], ["doorCode", "Door / lockbox code", 1], ["checkin", "Check-in"], ["checkout", "Check-out"],
+  ["parking", "Parking"], ["houseRules", "House rules"], ["hostName", "Host"], ["hostPhone", "Host phone"], ["hostEmail", "Host email"], ["notes", "Good to know"]];
+function arrivalSheet(id) {
+  const it = store.items.find((x) => x.id === id); if (!it) return;
+  const a = store.priv[id]?.arrival;
+  if (!a) return arrivalForm(id);
+  const digits = (p) => String(p || "").replace(/[^\d+]/g, "");
+  const val = (k, v) => k === "hostPhone" ? `<a href="tel:${esc(digits(v))}">${esc(v)}</a> · <a href="https://wa.me/${esc(digits(v).replace("+", ""))}" target="_blank" rel="noopener">WhatsApp</a>`
+    : k === "hostEmail" ? `<a href="mailto:${esc(v)}">${esc(v)}</a>` : esc(v).replace(/ · /g, "<br>");
+  infoBox(`<div class="arrival"><h2>${I.house}${esc(it.short || it.name || "Stay")}</h2><p class="muted small">${fmtDate(it.start)} – ${fmtDate(it.end)}${it.checkin ? ` · check-in ${esc(it.checkin)}` : ""}</p>
+    <dl>${ARR_FIELDS.filter(([k]) => a[k]).map(([k, l, copy]) => `<dt>${l}</dt><dd><span class="${copy ? "acode" : ""}">${val(k, a[k])}</span>${copy ? `<button type="button" class="lb-copy" data-acopy="${esc(a[k])}" aria-label="Copy ${l}">${I.copy}</button>` : ""}</dd>`).join("")}</dl>
+    <p class="muted small">Private - only Cesar and Debora see this. Kept on the phone, so it opens offline once the app has loaded the trip.</p>
+    <button type="button" class="btn small" data-aedit>Edit</button></div>`);
+  const m = [...document.querySelectorAll(".modal")].pop();
+  m.querySelectorAll("[data-acopy]").forEach((b) => (b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.acopy); toast("Copied"); } catch (e) { toast("Couldn't copy"); } }));
+  m.querySelector("[data-aedit]").onclick = () => { m.remove(); arrivalForm(id); };
+}
+function arrivalForm(id) {
+  const it = store.items.find((x) => x.id === id), had = store.priv[id] || {}, a = { ...(had.arrival || {}) };
+  const files = store.files.filter((f) => f.itemId === id);
+  const long = ["checkin", "checkout", "houseRules", "notes"];
+  modal(`<h3>${I.house}Arrival · ${esc(it.short || it.name || "Stay")}</h3>
+    <p class="muted small">Everything you need on arrival in one place. Let the AI read the confirmation or the host's message, then check it.</p>
+    <div class="afill">${files.map((f) => `<button type="button" class="btn tiny" data-aread="${esc(f.id)}">✨ Read ${esc(f.name.length > 28 ? f.name.slice(0, 26) + "…" : f.name)}</button>`).join("")}
+      <label class="btn tiny">✨ Read a file or screenshot…<input type="file" hidden accept="application/pdf,image/*" data-afile></label></div>
+    ${ARR_FIELDS.map(([k, l]) => long.includes(k) ? `<label>${l}<textarea name="${k}" rows="2">${esc(a[k] || "")}</textarea></label>` : `<label>${l}<input name="${k}" value="${esc(a[k] || "")}" ${k === "hostPhone" ? 'inputmode="tel"' : ""}></label>`).join("")}`,
+    async (fd) => {
+      const out = {}; ARR_FIELDS.forEach(([k]) => { const v = String(fd.get(k) || "").trim(); if (v) out[k] = v; });
+      await data.savePrivate(id, { ...had, arrival: Object.keys(out).length ? out : null });
+    }, had.arrival ? () => data.savePrivate(id, { ...had, arrival: null }) : null);
+  const form = [...document.querySelectorAll(".sheet")].pop();
+  const fill = async (blob, name) => {
+    toast(`Reading ${name}…`);
+    try { const x = await data.arrivalFromFile(blob); let n = 0;
+      ARR_FIELDS.forEach(([k]) => { const el = form.querySelector(`[name="${k}"]`); if (x[k] && el && !el.value.trim()) { el.value = x[k]; el.classList.add("filled"); n++; } });
+      toast(n ? `Filled ${n} field${n > 1 ? "s" : ""} - check them` : "Nothing new found in that file"); }
+    catch (e) { toast("Couldn't read it: " + (e.message || e)); }
+  };
+  form.querySelectorAll("[data-aread]").forEach((b) => (b.onclick = async () => { const f = store.files.find((x) => x.id === b.dataset.aread);
+    try { const blob = (await data.offlineBlob(f.id)) || (await data.fileBlob(f)); await fill(new File([blob], f.name, { type: f.contentType || blob.type }), f.name); } catch (e) { toast("Couldn't open the file"); } }));
+  form.querySelector("[data-afile]").onchange = (e) => { const f = e.target.files[0]; if (f) fill(f, f.name); };
 }
 
 // ---------------------------------------------------------------- packing lists: one shared family list + one per traveller
@@ -1919,6 +1966,7 @@ function entryLi(e) {
       ${efiles.length ? `<div class="efiles">${efiles.map(fileLink).join("")}</div>` : ""}</li>`; }
 // buttons on booking cards and activity rows (day view and the Before / After Trip screens)
 function wireCards() {
+  root.querySelectorAll("[data-arrival]").forEach((b) => (b.onclick = () => arrivalSheet(b.dataset.arrival)));
   root.querySelectorAll("[data-edit-item]").forEach((b) => (b.onclick = () => itemForm(store.items.find((i) => i.id === b.dataset.editItem))));
   root.querySelectorAll("[data-edit-entry]").forEach((b) => (b.onclick = () => entryForm(store.entries.find((e) => e.id === b.dataset.editEntry))));
   root.querySelectorAll("[data-confirm]").forEach((cb) => (cb.onchange = () => { const e = store.entries.find((x) => x.id === cb.dataset.confirm); data.saveEntry({ ...e, confirmed: cb.checked }); }));
@@ -1953,7 +2001,7 @@ function itemCard(i, date) {
     ${i.note ? `<div class="inote">${fmt(i.note)}</div>` : ""}
     ${pvHtml}
     ${i.type === "flight" && i.start === date ? checkinHtml(i) : ""}
-    <div class="ilinks">${mapLinks}${files.map(fileLink).join("")}</div>
+    <div class="ilinks">${mapLinks}${files.map(fileLink).join("")}${i.type === "stay" && isEditor() ? `<button class="arrbtn${store.priv[i.id]?.arrival ? " has" : ""}" data-arrival="${i.id}"><i class="ic16">${I.house}</i>Arrival${store.priv[i.id]?.arrival ? "" : " +"}</button>` : ""}</div>
     ${isEditor() ? `<div class="iacts"><button class="btn small" data-edit-item="${i.id}">Edit</button>
        <button class="btn small danger" data-del-item="${i.id}"><i class="ic16">${I.trash}</i>Delete</button>
        <label class="btn small"><i class="ic16">${I.clip}</i>Attach File<input type="file" hidden data-attach-item="${i.id}" multiple></label></div>` : ""}
@@ -3489,7 +3537,7 @@ function itemForm(item) {
   const isNew = !item.id; const pv = (item.id && store.priv[item.id]) || {};
   const typeSel = isNew ? `<label>Type<select name="type">${["flight", "stay", "car"].map((t) => `<option value="${t}" ${t === item.type ? "selected" : ""}>${cap(t)}</option>`).join("")}</select></label>` : "";
   const fieldsFor = (type, src = item) => FIELDS[type].map(([k, l]) => `<label>${l}<input name="${k}" value="${esc(src[k] || "")}"></label>`).join("");
-  const privKeys = [...new Set([...PRIV_KEYS, ...Object.keys(pv)])].filter((k) => !["share", "fam", "paidBy", "theirPct", "updatedBy", "updatedAt", "kind"].includes(k));
+  const privKeys = [...new Set([...PRIV_KEYS, ...Object.keys(pv)])].filter((k) => !["share", "fam", "paidBy", "theirPct", "arrival", "updatedBy", "updatedAt", "kind"].includes(k));
   const statusSel = (st) => `<label>Status<select name="status"><option value="booked" ${st !== "tbc" ? "selected" : ""}>Booked</option><option value="tbc" ${st === "tbc" ? "selected" : ""}>TBC</option></select></label>`;
   modal(`<h3>${isNew ? "Add Booking" : "Edit " + cap(item.type)}</h3>${PDF_BTN}${typeSel}
     ${whoBoxes(item.who || [ui.person])}

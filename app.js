@@ -1,5 +1,5 @@
 import * as data from "./data.js";
-import { drawDayMap, drawTripMap, mapsReady, searchPlaces, findPlace, geocodeText, computeRoute, distanceKm, addressSuggest, addressDone } from "./map.js";
+import { drawDayMap, drawTripMap, mapsReady, searchPlaces, findPlace, geocodeText, computeRoute, distanceKm, addressSuggest, addressDone, nearbyEssentials, nearestConsulate } from "./map.js";
 import { buildAlbum, areaOf } from "./album.js";
 import { AIRPORT_TZ, TZ_COUNTRY, checkinUrl, checkinInfo, timeIn, isInternational } from "./checkin-core.js";
 // Preview another date: add ?today=2027-01-14 to the address to see the app as it will look on that day
@@ -248,7 +248,7 @@ function renderHome() {
         return `<button type="button" class="tc-warn ${lvl}" data-docwarn="${esc(t.id)}" title="${esc(iss.map((x) => (x.per.name || x.per.code) + ": " + x.st.text).join("\n"))}"><i class="ic16">${I.warn}</i>${lvl === "bad" ? "Document problem" : "Check documents"} · ${who.map(esc).join(", ")}</button>`; })()}
       <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
       <div class="tc-people">${(t.travellers || []).map((p, k) => `<span class="pchip tp" style="--pc:${upc(p.color) || TDEFAULT[k % TDEFAULT.length]}" title="${esc(p.name || p.code)}"><b>${esc(p.code)}</b></span>`).join("")}</div>
-      <div class="tc-ctry"><button type="button" class="cchip ask" data-task="${esc(t.id)}"><i>${I.chat}</i>Ask</button><button type="button" class="cchip map" data-tmap="${esc(t.id)}"><i>${ICON.map}</i>Trip Map</button><button type="button" class="cchip stat" data-trecap="${esc(t.id)}"><i>${I.stats}</i>Recap</button>${t.countryInfo?.codes?.length ? t.countryInfo.codes.map((c) => `<button type="button" class="cchip" data-cinfo="${esc(t.id)}" data-c="${c}"><i>${I.globe}</i>${esc(countryName(c))}</button>`).join("")
+      <div class="tc-ctry"><button type="button" class="cchip ask" data-task="${esc(t.id)}"><i>${I.chat}</i>Ask</button><button type="button" class="cchip map" data-tmap="${esc(t.id)}"><i>${ICON.map}</i>Trip Map</button><button type="button" class="cchip stat" data-trecap="${esc(t.id)}"><i>${I.stats}</i>Recap</button><button type="button" class="cchip sos" data-tsos="${esc(t.id)}"><i>${I.warn}</i>Emergency</button>${t.countryInfo?.codes?.length ? t.countryInfo.codes.map((c) => `<button type="button" class="cchip" data-cinfo="${esc(t.id)}" data-c="${c}"><i>${I.globe}</i>${esc(countryName(c))}</button>`).join("")
         : isEditor() && t.end >= today ? `<button type="button" class="cchip add" data-cnew="${esc(t.id)}"><i>${I.globe}</i>+ Country Info</button>` : ""}</div>
       ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
     </article>`;
@@ -272,6 +272,7 @@ function renderHome() {
       const tm = e.target.closest("[data-tmap]"); if (tm) return openTripMap(tm.dataset.tmap);
       const ta = e.target.closest("[data-task]"); if (ta) return askTrip(ta.dataset.task);
       const tr = e.target.closest("[data-trecap]"); if (tr) return showRecap(tr.dataset.trecap);
+      const ts = e.target.closest("[data-tsos]"); if (ts) return emergencySheet(ts.dataset.tsos);
       if (e.target.closest("[data-settings]")) return; localStorage.setItem("tp.trip", el.dataset.open); routeTo(el.dataset.open); };
     el.onkeydown = (e) => { if (e.key === "Enter") el.click(); };
   });
@@ -431,6 +432,97 @@ function showCountryInfo(t, code) {
   const m = [...document.querySelectorAll(".modal")].pop();
   m.querySelectorAll("[data-ctab]").forEach((b) => (b.onclick = () => { m.remove(); showCountryInfo(t, b.dataset.ctab); }));
   m.querySelector("[data-cupdate]")?.addEventListener("click", () => { m.remove(); countryInfoFlow(t.id); });
+}
+
+// ---------------------------------------------------------------- Emergency card: numbers, consulates, health details and what's near each stay
+const DEMONYM = { Australia: "Australian", Mexico: "Mexican", "New Zealand": "New Zealand", "United States": "US", Canada: "Canadian", "United Kingdom": "British", Spain: "Spanish", Ireland: "Irish", Colombia: "Colombian", Brazil: "Brazilian", Argentina: "Argentine", Chile: "Chilean", Peru: "Peruvian", France: "French", Germany: "German", Italy: "Italian", Japan: "Japanese", China: "Chinese", India: "Indian" };
+const AU_CONSULAR = { name: "Australian Government 24/7 Consular Emergency Centre", phone: "+61 2 6261 3305", local: "1300 555 135 (from within Australia)" };
+const sosLocal = (tid) => { try { return JSON.parse(localStorage.getItem("tp.sos." + tid) || "null"); } catch (e) { return null; } };
+const sosKeep = (tid, v) => { try { v ? localStorage.setItem("tp.sos." + tid, JSON.stringify(v)) : localStorage.removeItem("tp.sos." + tid); } catch (e) { /* private mode */ } };
+const ctryOfAddr = (a) => { const last = String(a || "").split(",").map((x) => x.replace(/\d+/g, "").trim()).filter(Boolean).at(-1) || ""; return COUNTRY_CODES[last.toLowerCase()] || ""; };
+function sosStays() {
+  const t = store.trip, inT = (i) => !(i.end < t.start || i.start > t.end), seen = new Set();
+  return store.items.filter((i) => i.type === "stay" && i.status !== "tbc" && inT(i) && (i.address || i.name)).sort((a, b) => a.start.localeCompare(b.start))
+    .filter((i) => { const k = (i.address || i.name).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+const sosQ = (i) => i.address || [i.name, i.area].filter(Boolean).join(", ");
+// look up what's missing (editors): nearest hospital, pharmacy, supermarket and consulates for each stay, saved with the trip
+async function sosFind(tid, stays, note) {
+  const ess = { ...(store.trip.essentials || {}) };
+  let nats = tripPassports().map((p) => ({ country: p.nationality, code: COUNTRY_CODES[p.nationality.toLowerCase()] || "", who: p.who }));
+  if (!nats.length) nats = [{ country: "Australia", code: "AU", who: [] }];
+  for (const [k, i] of stays.entries()) {
+    note(`Looking around ${i.short || i.name} (${k + 1} of ${stays.length})…`);
+    try {
+      const r = await nearbyEssentials(sosQ(i)), here = ctryOfAddr(i.address) || ctryOfAddr(r.addr), cons = [];
+      for (const n of nats) { if (n.code && n.code === here) continue;
+        const c = await nearestConsulate(n.country, r).catch(() => null); cons.push({ country: n.country, who: n.who, place: c }); }
+      ess[i.id] = { q: sosQ(i), at: new Date().toISOString(), ctry: here, hospital: r.hospital, pharmacy: r.pharmacy, supermarket: r.supermarket, cons };
+    } catch (e) { console.warn("sos", i.id, e); ess[i.id] = { q: sosQ(i), at: new Date().toISOString(), err: String(e.message || e).slice(0, 200) }; }
+  }
+  await data.saveTrip({ essentials: JSON.parse(JSON.stringify(ess)) }, tid);
+  store.trip.essentials = ess;
+}
+async function emergencySheet(tid = ui.tripId) {
+  try { await loadTripData(tid); } catch (e) { return toast(e.message); }
+  const m = document.createElement("div"); m.className = "modal"; document.body.appendChild(m);
+  let health = sosLocal(tid), busy = "";
+  const tel = (n) => `<a class="btn tiny" href="tel:${esc(String(n).replace(/[^\d+]/g, ""))}"><i class="ic16">${I.phone}</i>${esc(n)}</a>`;
+  const telText = (v) => esc(v).replace(/(\+?\d[\d\s()-]{5,}\d|\b\d{3}\b)/g, (n) => `<a href="tel:${n.replace(/[^\d+]/g, "")}">${n}</a>`);
+  const dir = (p) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([p.name, p.address].filter(Boolean).join(", "))}`;
+  const place = (lbl, icon, p, extra = "") => p ? `<div class="sosp"><span class="sosi">${icon}</span><div class="sosm"><small>${lbl}${p.h24 ? ` · <b class="h24">Open 24 h</b>` : ""}${extra}</small><b>${esc(p.name)}</b>
+      <small>${p.km != null ? `${p.km < 1 ? Math.round(p.km * 1000) + " m" : p.km + " km"} away · ` : ""}${esc(p.address)}</small>
+      <span class="sosacts">${p.phone ? tel(p.phone) : ""}<a class="btn tiny" target="_blank" rel="noopener" href="${dir(p)}"><i class="ic16">${ICON.map}</i>Directions</a></span></div></div>`
+    : `<div class="sosp none"><span class="sosi">${icon}</span><div class="sosm"><small>${lbl}</small><span class="muted small">None found nearby</span></div></div>`;
+  const draw = () => {
+    const t = store.trip, ess = t.essentials || {}, stays = sosStays(), today = iso(new Date());
+    const now = stays.find((i) => i.start <= today && today < i.end);
+    const order = now ? [now, ...stays.filter((i) => i !== now)] : stays;
+    const missing = stays.filter((i) => !ess[i.id] || ess[i.id].q !== sosQ(i));
+    const ci = t.countryInfo || {}, codes = (ci.codes || []).filter((c) => ci.data?.[c]?.emergency);
+    const nats = tripPassports(), aus = !nats.length || nats.some((p) => /austral/i.test(p.nationality));
+    m.innerHTML = `<div class="sheet sossheet"><div class="sos-h"><span class="sos-badge">${I.warn}</span><div><h3>Emergency</h3><small class="muted">${esc(t.title || "")}</small></div><button type="button" class="btn tiny" data-x aria-label="Close">✕</button></div>
+      <section><h4>Emergency Numbers</h4>${codes.length ? codes.map((c) => { const e = ci.data[c].emergency;
+        return `<div class="sosnum"><b>${esc(countryName(c))}</b><span class="sosacts">${e.general ? tel(e.general) : ""}${e.ambulance && e.ambulance !== e.general ? `<span class="small muted">Ambulance</span>${tel(e.ambulance)}` : ""}${e.police && e.police !== e.general ? `<span class="small muted">Police</span>${tel(e.police)}` : ""}</span>${e.other ? `<small class="muted">${telText(e.other)}</small>` : ""}</div>`; }).join("")
+        : `<p class="muted small">Add Country Info for this trip to see each country's emergency numbers here.${isEditor() ? ` <button type="button" class="btn tiny" data-sos-ci>+ Country Info</button>` : ""}</p>`}
+        ${aus ? `<div class="sosnum"><b>${AU_CONSULAR.name}</b><span class="sosacts">${tel(AU_CONSULAR.phone)}</span><small class="muted">Lost passport, arrest, serious illness or injury, a missing family member. Also ${esc(AU_CONSULAR.local)}.</small></div>` : ""}</section>
+      ${isEditor() || health ? `<section><h4>Health &amp; Insurance</h4>${health ? (health.people.length ? "" : `<p class="muted small">No profiles on this trip yet.</p>`) + health.people.map((h) => `<div class="soshl"><b>${esc(h.name)}</b><dl>
+          ${[["Blood type", h.blood], ["Allergies", h.allergies], ["Conditions", h.conditions], ["Medications", h.medications]].filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("") || `<dt>Health</dt><dd class="muted">Nothing noted in the profile</dd>`}
+          ${h.em ? `<dt>Emergency contact</dt><dd>${telText(h.em)}</dd>` : ""}
+          ${h.ins.map((x) => `<dt>Insurance</dt><dd>${telText(x)}</dd>`).join("")}</dl></div>`).join("")
+          + `<label class="pswitch"><span><b>Keep on this phone</b><small>So it's here without signal or signing in. Only on this phone.</small></span><input type="checkbox" data-sos-keep ${sosLocal(tid) ? "checked" : ""}><i></i></label>`
+        : `<p class="muted small">Blood type, allergies, medications, emergency contacts and travel insurance from the profiles.</p><button type="button" class="btn small" data-sos-health>Show (confirm it's you)</button>`}</section>` : ""}
+      <section><h4>Near Each Stay</h4>${busy ? `<p class="small sosbusy">${esc(busy)}</p>` : ""}
+        ${!stays.length ? `<p class="muted small">No stays with an address yet.</p>` : order.map((i) => { const e = ess[i.id];
+          return `<div class="sosstay${i === now ? " now" : ""}"><div class="soss-h"><b>${esc(i.short || i.name)}</b><small class="muted">${i === now ? "Staying now · " : ""}${shortDate(i.start)} – ${shortDate(i.end)}</small></div>
+            ${!e || e.q !== sosQ(i) ? `<p class="muted small">${isEditor() ? "Not looked up yet." : "Not looked up yet - Cesar or Debora can do it from this screen."}</p>` : e.err ? `<p class="muted small">Couldn't look this one up (${esc(e.err)}).</p>`
+            : place("Hospital", "🏥", e.hospital) + place("Pharmacy", "💊", e.pharmacy) + place("Supermarket", "🛒", e.supermarket)
+              + (e.cons || []).map((c) => place(`${DEMONYM[c.country] || c.country} embassy / consulate${c.who?.length ? " · for " + c.who.join(", ") : ""}`, "🏛️", c.place)).join("")}</div>`; }).join("")}
+        ${isEditor() && stays.length ? `<div class="row wrap">${missing.length ? `<button type="button" class="btn small primary" data-sos-find ${busy ? "disabled" : ""}>Find Nearby Places (${missing.length} stay${missing.length > 1 ? "s" : ""})</button>` : `<button type="button" class="btn small" data-sos-refresh ${busy ? "disabled" : ""}>↻ Look Again</button>`}</div>` : ""}
+        <p class="muted small">From Google Maps, saved with the trip so it's on everyone's phone, also offline once the app has opened the trip. Check opening hours before you go.</p></section></div>`;
+  };
+  const run = async (list) => { busy = "Starting…"; draw();
+    try { await sosFind(tid, list, (n) => { busy = n; draw(); }); toast("Nearby places saved"); } catch (e) { toast("Couldn't look up: " + (e.message || e)); }
+    busy = ""; draw(); };
+  m.addEventListener("click", async (e) => {
+    if (e.target === m || e.target.closest("[data-x]")) return m.remove();
+    if (e.target.closest("[data-sos-ci]")) { m.remove(); return countryInfoFlow(tid); }
+    if (e.target.closest("[data-sos-find]")) return run(sosStays().filter((i) => !store.trip.essentials?.[i.id] || store.trip.essentials[i.id].q !== sosQ(i)));
+    if (e.target.closest("[data-sos-refresh]")) return run(sosStays());
+    if (e.target.closest("[data-sos-health]")) {
+      try { if (!unlocked()) await unlock(); } catch (err) { return toast("Not unlocked"); }
+      const people = [];
+      for (const x of (store.trip.travellers || []).concat(store.trip.extended || [])) { const per = personFor(x); if (!per?.id) continue;
+        let v = {}; try { v = secure.vault[per.id] || await data.getVault(per.id); secure.vault[per.id] = v; } catch (err) { console.warn("vault", err); }
+        const ins = (per.docs || []).filter((d) => d.type === "insurance" && !(d.expiry && d.expiry < store.trip.start)).map((d) => [d.country, (v.docNumbers || {})[d.id] ? "Policy " + v.docNumbers[d.id] : "", d.notes, d.expiry ? "until " + fmtDate(d.expiry) : ""].filter(Boolean).join(" · "));
+        people.push({ name: per.name || x.code, blood: v.blood || "", allergies: v.allergies || "", conditions: v.conditions || "", medications: v.medications || "",
+          em: [v.emName, v.emRelation ? `(${v.emRelation})` : "", v.emPhone].filter(Boolean).join(" "), ins }); }
+      health = { people }; return draw();
+    }
+  });
+  m.addEventListener("change", (e) => { const k = e.target.closest("[data-sos-keep]"); if (k) { sosKeep(tid, k.checked ? health : null); toast(k.checked ? "Saved on this phone" : "Removed from this phone"); } });
+  draw();
+  if (isEditor() && sosStays().some((i) => !store.trip.essentials?.[i.id]) && mapsReady()) run(sosStays().filter((i) => !store.trip.essentials?.[i.id]));
 }
 
 // ---------------------------------------------------------------- trip setup window
@@ -600,7 +692,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v128";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v129";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -690,7 +782,7 @@ function header(opts = {}) {
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
         ${isEditor() ? `${mi("settings", I.gear, "Trip Setup")}${mi("people", I.users, "Traveller Profiles")}<hr>
         ${mi("bulk", I.clip, "Attach Documents…")}${mi("offline", I.download || I.archive, "Offline Documents…")}${mi("archive", I.archive, "Archive Documents (Zip)…")}<hr>` : ""}
-        ${mi("todo", I.check, "To-dos")}${mi("pack", I.bag, "Packing Lists")}${mi("ask", I.chat, "Ask the Trip")}${mi("tripmap", ICON.map, "Trip Map")}${mi("recap", I.stats, "Trip Recap")}${mi("country", I.globe, "Country Info")}${mi("album", I.book, "Export Album (Word)")}
+        ${mi("todo", I.check, "To-dos")}${mi("pack", I.bag, "Packing Lists")}${mi("ask", I.chat, "Ask the Trip")}${mi("tripmap", ICON.map, "Trip Map")}${mi("recap", I.stats, "Trip Recap")}${mi("country", I.globe, "Country Info")}${mi("sos", I.warn, "Emergency &amp; Nearby")}${mi("album", I.book, "Export Album (Word)")}
         ${isEditor() ? `<hr>${mi("export", I.download, "Download Backup")}${mi("import", I.upload, "Restore from Backup…")}` : ""}<hr>
         ${mi("signout", I.logout, "Sign Out")}</div></details>
     </div>
@@ -3841,6 +3933,7 @@ const actions = {
   ask: () => askTrip(),
   tripmap: () => openTripMap(ui.tripId),
   recap: () => showRecap(ui.tripId),
+  sos: () => emergencySheet(),
   pack: () => packingSheet(),
   todo: () => todoSheet(),
   country: () => (store.trip?.countryInfo?.codes?.length ? showCountryInfo({ id: ui.tripId, ...store.trip }) : isEditor() ? countryInfoFlow() : toast("No country info yet")),

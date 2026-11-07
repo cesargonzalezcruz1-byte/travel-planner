@@ -93,6 +93,35 @@ export async function searchPlaces(textQuery, near) {
     type: p.primaryTypeDisplayName || "", url: p.googleMapsURI || "", lat: p.location?.lat?.() ?? null, lng: p.location?.lng?.() ?? null }));
 }
 
+// ---- Emergency card: the nearest hospital, pharmacy and supermarket to a stay, and the nearest embassy / consulate of a country
+const ESS_FIELDS = ["id", "displayName", "formattedAddress", "location", "nationalPhoneNumber", "internationalPhoneNumber", "googleMapsURI", "regularOpeningHours", "types"];
+const essOut = (p, at) => { const lat = p.location?.lat?.(), lng = p.location?.lng?.();
+  return { id: p.id, name: p.displayName || "", address: p.formattedAddress || "", phone: p.internationalPhoneNumber || p.nationalPhoneNumber || "", url: p.googleMapsURI || "",
+    lat, lng, km: lat != null ? Math.round(km(at, { lat, lng }) * 10) / 10 : null, h24: !!(p.regularOpeningHours?.periods || []).some((x) => !x.close && x.open?.day === 0 && x.open?.hour === 0) }; };
+export async function nearbyEssentials(address) {
+  if (authFailed) throw new Error("Google Maps rejected the key");
+  await load(); const at = await geocodeText(address); if (!at) throw new Error("Couldn't find " + address);
+  const { Place, SearchByTextRankPreference } = await google.maps.importLibrary("places");
+  const one = async (textQuery, includedType, test) => { try {
+      const { places } = await Place.searchByText({ textQuery, includedType, useStrictTypeFiltering: true, fields: ESS_FIELDS, maxResultCount: 8, language: "en",
+        locationBias: { center: { lat: at.lat, lng: at.lng }, radius: 20000 }, ...(SearchByTextRankPreference ? { rankPreference: SearchByTextRankPreference.DISTANCE } : {}) });
+      const list = (places || []).map((p) => essOut(p, at)).filter((x) => x.km != null && (!test || test(x))).sort((a, b) => a.km - b.km);
+      return list[0] || null; } catch (e) { console.warn("nearby", textQuery, e); return null; } };
+  const [hospital, pharmacy, supermarket] = await Promise.all([
+    one("hospital emergency department", "hospital", (x) => /hospital|medical cent|centro m[eé]dico|cl[ií]nica|sanatorio|health/i.test(x.name)),
+    one("pharmacy", "pharmacy"), one("supermarket", "supermarket")]);
+  return { lat: at.lat, lng: at.lng, addr: at.addr, hospital, pharmacy, supermarket };
+}
+const fold = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+export async function nearestConsulate(country, at) {
+  if (authFailed) throw new Error("Google Maps rejected the key");
+  await load(); const { Place } = await google.maps.importLibrary("places");
+  const root = fold(country).slice(0, 5);
+  const { places } = await Place.searchByText({ textQuery: `embassy or consulate of ${country}`, includedType: "embassy", fields: ESS_FIELDS, maxResultCount: 10, language: "en",
+    locationBias: { center: { lat: at.lat, lng: at.lng }, radius: 50000 } });
+  return (places || []).map((p) => essOut(p, at)).filter((x) => x.km != null && fold(x.name).includes(root) && !/honorary.*closed/i.test(x.name)).sort((a, b) => a.km - b.km)[0] || null;
+}
+
 // Address suggestions while typing (Places Autocomplete; one session token per field so it's billed as one lookup)
 let acToken = null;
 export async function addressSuggest(input) {

@@ -978,3 +978,16 @@ body.noscroll{overflow:hidden}
 .acwrap{position:relative} .aclist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--card);border:1px solid var(--line,#ddd);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);overflow:hidden}
 .aclist button{display:flex;flex-direction:column;align-items:flex-start;width:100%;text-align:left;padding:9px 12px;border:0;background:none;color:var(--ink);font:inherit;cursor:pointer;border-top:1px solid var(--line,#eee)}
 .aclist button:first-child{border-top:0} .aclist button:hover{background:color-mix(in srgb,var(--ink) 5%,var(--card))} .aclist small{color:var(--muted);font-size:12px}
+/* emergency card */
+.cchip.sos i{color:#C2410C}
+.sossheet section{margin-top:14px} .sossheet h4{margin:0 0 8px;font-size:15px}
+.sos-h{display:flex;align-items:center;gap:10px} .sos-h > div{flex:1} .sos-h h3{margin:0}
+.sos-badge{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#C2410C;color:#fff} .sos-badge svg{width:22px;height:22px}
+.sosnum{display:grid;gap:4px;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,#C2410C 7%,var(--card));margin-bottom:8px}
+.sosacts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.sosstay{border:1px solid var(--line2,#ddd);border-radius:14px;padding:10px 12px;margin-bottom:10px} .sosstay.now{border-color:#C2410C;box-shadow:0 0 0 1px #C2410C inset}
+.soss-h{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.sosp{display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line,#eee)} .sosp:first-of-type{border-top:0}
+.sosi{font-size:20px;line-height:1.2} .sosm{display:grid;gap:2px;min-width:0} .sosm small{color:var(--muted);font-size:12px} .sosm .sosacts{margin-top:4px}
+.h24{color:#15803D} .sosbusy{color:var(--accent);font-weight:700}
+.soshl{padding:8px 12px;border-radius:12px;background:var(--soft);margin-bottom:8px} .soshl dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:6px 0 0;font-size:13.5px} .soshl dt{color:var(--muted)} .soshl dd{margin:0}

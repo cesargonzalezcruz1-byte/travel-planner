@@ -18,6 +18,8 @@ export const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/12.19.0";
 // AI that reads booking PDFs (Firebase AI Logic, Agent Platform Gemini API). First model that works is used.
 export const AI_MODELS = ["gemini-3.6-flash", "gemini-3-flash", "gemini-2.5-flash"];
 export const AI_LOCATION = "global";
+// AI that draws a portrait avatar from a photo (Gemini image models, "Nano Banana"). First model that works is used.
+export const AI_IMAGE_MODELS = ["gemini-3.1-flash-image", "gemini-nano-banana-2.1", "gemini-3.1-flash-lite-image"];
 // Embedded day map (Google Maps JavaScript API + Geocoding API). Browser key restricted to the site. Empty = map hidden.
 export const MAPS_API_KEY = "AIzaSyCXZELvt-h-Di79tJGlsXMXvFXSNDcZlWo";
 export const MAP_ID = "";   // optional Map ID from Google Cloud (Map Management); blank uses Google's demo map style

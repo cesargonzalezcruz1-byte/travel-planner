@@ -816,7 +816,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.1";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.2";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -959,10 +959,9 @@ function drawTabs(show) {
 }
 
 // ---- avatars: a photo or a picture chosen in the Traveller Profile, framed in the person's colour (initials when none is set)
-const AV_EMOJI = ["🦊", "🐼", "🐨", "🦁", "🐯", "🐸", "🐙", "🦄", "🐬", "🦉", "🐢", "🦋", "🌵", "🌴", "⛵", "🎸", "⚽", "🎨", "🚀", "🌮"];
 const allPeople = () => (store.trip?.travellers || []).concat(store.trip?.extended || []);
 function avatarOf(code) {
-  const x = allPeople().find((t) => t.code === code), per = x?.pid && store.people.find((p) => p.id === x.pid);
+  const x = allPeople().find((t) => t.code === code), per = x && personFor(x);
   return (per && per.avatar) || x?.avatar || "";
 }
 function shortInit(code) {   // "C", or "Ch" when two travellers share a first letter
@@ -980,20 +979,37 @@ const initIn = (x, list) => { const nm = x.name || x.code || "?", f = nm.slice(0
 const avObj = (x, c, list) => { const a = (personFor(x) || {}).avatar || x.avatar || ""; return `<span class="av${a ? " has" : ""}" style="--pc:${c}" title="${esc(x.name || x.code || "")}">${avInner(a, initIn(x, list), c)}</span>`; };
 const dotsFor = (codes) => (codes.length ? `<span class="idots" role="img" aria-label="${esc(codes.map(NAME).join(", "))}">${codes.map((o) => `<i class="tdot" style="--pc:${pcolor(o)}"></i>`).join("")}</span>` : "");
 // who is who: each traveller's colour dot with their preferred name (shown at the top of the plan views)
-const whoKey = () => (ALL_CODES().length > 1 ? `<div class="whokey" aria-label="Who is who">${ALL_CODES().map((c) => `<span><i class="tdot" style="--pc:${pcolor(c)}"></i>${esc(NAME(c))}</span>`).join("")}</div>` : "");
+const whoKey = () => (ALL_CODES().length > 1 ? `<div class="whokey" role="img" aria-label="Who is who: ${esc(ALL_CODES().map(NAME).join(", "))}">${ALL_CODES().map((c) => avHtml(c)).join("")}</div>` : "");
 const avHtml = (code, cls = "") => { const c = pcolor(code), a = avatarOf(code); return `<span class="av ${cls}${a ? " has" : ""}" style="--pc:${c}" title="${esc(NAME(code))}">${avInner(a, shortInit(code), c)}</span>`; };
 // a small square photo for the avatar (kept with the profile and copied to the trips, so the family login sees it too)
-function avatarFromFile(file) {
+function avatarFromFile(file, S = 128) {
   return new Promise((res, rej) => { const img = new Image(), url = URL.createObjectURL(file);
-    img.onload = () => { const S = 128, cv = document.createElement("canvas"); cv.width = cv.height = S; const s = Math.min(img.width, img.height);
+    img.onload = () => { const cv = document.createElement("canvas"); cv.width = cv.height = S; const s = Math.min(img.width, img.height);
       cv.getContext("2d").drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, S, S); URL.revokeObjectURL(url); res(cv.toDataURL("image/jpeg", 0.8)); };
     img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("Couldn't read that photo")); }; img.src = url; });
+}
+// the AI portrait comes on plain white: make the white around the person see-through (from the top and sides inwards), so the person's colour shows behind
+function cutWhite(dataUrl, S = 144) {
+  return new Promise((res, rej) => { const img = new Image();
+    img.onload = () => { const cv = document.createElement("canvas"); cv.width = cv.height = S; const g = cv.getContext("2d"), s = Math.min(img.width, img.height);
+      g.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, S, S);
+      const im = g.getImageData(0, 0, S, S), d = im.data, seen = new Uint8Array(S * S), q = [];
+      const white = (k) => { const r = d[k * 4], gg = d[k * 4 + 1], b = d[k * 4 + 2]; return Math.min(r, gg, b) > 232 && Math.max(r, gg, b) - Math.min(r, gg, b) < 16; };
+      const push = (x, y) => { if (x < 0 || y < 0 || x >= S || y >= S) return; const k = y * S + x; if (seen[k]) return; seen[k] = 1; if (white(k)) q.push(k); };
+      for (let i = 0; i < S; i++) { push(i, 0); push(0, i); push(S - 1, i); }
+      let n = 0; while (q.length) { const k = q.pop(), x = k % S, y = (k - x) / S; d[k * 4 + 3] = 0; n++; push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1); }
+      if (n < S * S * 0.04) return res(cv.toDataURL("image/jpeg", 0.85));   // no white background came back: keep the picture as it is
+      for (let k = 0; k < S * S; k++) if (d[k * 4 + 3] && seen[k] === 0) { const x = k % S, y = (k - x) / S;   // soften the edge a little
+        const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => { const X = x + a, Y = y + b; return X >= 0 && Y >= 0 && X < S && Y < S && d[(Y * S + X) * 4 + 3] === 0; }).length;
+        if (nb) d[k * 4 + 3] = nb > 1 ? 120 : 190; }
+      g.putImageData(im, 0, 0); res(cv.toDataURL("image/png")); };
+    img.onerror = () => rej(new Error("Couldn't read the portrait")); img.src = dataUrl; });
 }
 async function syncPersonAvatar(per) {
   const a = per.avatar || null;
   for (const t of store.trips) {
     let changed = false;
-    const fix = (list) => (list || []).map((x) => (x.pid === per.id && (x.avatar || null) !== a ? (changed = true, { ...x, avatar: a }) : x));
+    const fix = (list) => (list || []).map((x) => ((x.pid === per.id || (!x.pid && x.code === per.code && (x.name || "") === (per.name || ""))) && (x.avatar || null) !== a ? (changed = true, { ...x, avatar: a, pid: per.id }) : x));
     const travellers = fix(t.travellers), extended = fix(t.extended);
     if (changed) await data.saveTrip({ travellers, extended }, t.id).catch((e) => console.warn("avatar sync", t.id, e));
   }
@@ -1548,7 +1564,7 @@ function renderOverview() {
     <div class="ov">${whoKey()}${outsideBlock(p, "before")}<div class="ov-card">
       <div class="ov-head"><span class="l">DAY</span><span class="k-flight">FLIGHT</span><span class="k-stay" style="grid-column:3 / span 2">STAY</span><span class="k-car" style="grid-column:5 / span 2">CAR</span></div>
       <div class="ov-grid" style="--n:${N}">${cells.join("")}<svg class="ov-svg" aria-hidden="true"></svg></div>
-      ${legend}</div>${outsideBlock(p, "after")}</div>`;
+      </div>${outsideBlock(p, "after")}</div>`;
   const svgEl = root.querySelector(".ov-svg"); if (svgEl) { svgEl._shapes = shapes; svgEl._pane = ui.pane; } drawOverviewShapes(svgEl);
   wireHeader(); wireDays();
   root.querySelectorAll("[data-swap]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); const k = b.dataset.swap; ui.swap[k] = (ui.swap[k] || 0) + 1;
@@ -2830,8 +2846,8 @@ function personForm(pid, opts = {}) {
     <label>Full Name (as on Passport)<input name="fullName" value="${esc(per.fullName || "")}"></label>
     <div><p class="rlabel">Colour (used on every trip)</p><div class="swrow pfsw" role="radiogroup" aria-label="Colour">${TCOLORS.map(([n, h]) => `<button type="button" class="swbtn${h === color ? " on" : ""}" style="--c:${h}" data-psw="${h}" role="radio" aria-checked="${h === color}" aria-label="${n}" title="${n}"></button>`).join("")}</div></div>
     <div><p class="rlabel">Photo or Avatar (framed in their colour)</p>
-      <div class="avpick"><span data-avprev>${avPrev()}</span><div class="avbtns"><button type="button" class="btn tiny" data-avphoto>Choose Photo…</button><button type="button" class="btn tiny" data-avnone>Use Initial</button><input type="file" accept="image/*" hidden data-avfile></div></div>
-      <div class="averow" role="group" aria-label="Pick a picture">${AV_EMOJI.map((e) => `<button type="button" class="avemo" data-avemo="${e}" aria-label="Use ${e}">${e}</button>`).join("")}</div></div>
+      <div class="avpick"><span data-avprev>${avPrev()}</span><div class="avbtns"><button type="button" class="btn tiny" data-avai>✨ Portrait from Photo…</button><button type="button" class="btn tiny" data-avphoto>Use Photo As Is…</button><button type="button" class="btn tiny" data-avnone>Use Initial</button><input type="file" accept="image/*" hidden data-avfile></div></div>
+      <p class="muted small" data-avnote>Portrait from Photo: AI redraws the photo as a simple portrait and the person's colour becomes its background.</p></div>
     <fieldset class="pbox"><legend>Travel Documents</legend><div class="dlist">${docsHtml()}</div>
       <button type="button" class="btn tiny" data-dadd>+ Add Document</button></fieldset>
     <fieldset class="pbox"><legend>Private Details</legend><div class="vbox">${vaultHtml()}</div></fieldset>`,
@@ -2850,11 +2866,20 @@ function personForm(pid, opts = {}) {
     }, per.id ? async () => { await unlock(); await data.deletePerson(per); } : null);
   const m = [...document.querySelectorAll(".modal")].pop(), form = m.querySelector("form");
   const redraw = () => { per = store.people.find((x) => x.id === per.id) || per; m.querySelector(".dlist").innerHTML = docsHtml(); refreshDocBtns(); };
-  const avDraw = () => { m.querySelector("[data-avprev]").innerHTML = avPrev(); m.querySelectorAll("[data-avemo]").forEach((b) => b.classList.toggle("on", avatarVal === "e:" + b.dataset.avemo)); };
-  m.querySelector("[data-avphoto]").onclick = () => m.querySelector("[data-avfile]").click();
-  m.querySelector("[data-avfile]").onchange = async (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; try { avatarVal = await avatarFromFile(f); avDraw(); } catch (x) { toast(x.message); } };
+  const avDraw = () => { m.querySelector("[data-avprev]").innerHTML = avPrev(); };
+  let avMode = "photo";
+  m.querySelector("[data-avphoto]").onclick = () => { avMode = "photo"; m.querySelector("[data-avfile]").click(); };
+  m.querySelector("[data-avai]").onclick = () => { avMode = "ai"; m.querySelector("[data-avfile]").click(); };
+  m.querySelector("[data-avfile]").onchange = async (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    const note = m.querySelector("[data-avnote]"), btn = m.querySelector("[data-avai]");
+    try {
+      if (avMode === "photo") { avatarVal = await avatarFromFile(f); return avDraw(); }
+      btn.disabled = true; note.textContent = "Drawing the portrait… this takes 10-20 seconds.";
+      const drawn = await data.avatarAI(await avatarFromFile(f, 640));
+      avatarVal = await cutWhite(drawn); avDraw(); note.textContent = "Done. Not quite right? Tap Portrait from Photo again for another go, or try a clearer photo.";
+    } catch (x) { console.error(x); note.textContent = "Couldn't draw the portrait: " + (x.message || x); }
+    btn.disabled = false; };
   m.querySelector("[data-avnone]").onclick = () => { avatarVal = ""; avDraw(); };
-  m.querySelectorAll("[data-avemo]").forEach((b) => (b.onclick = () => { avatarVal = "e:" + b.dataset.avemo; avDraw(); }));
   avDraw();
   const ensure = async () => {   // a new person is saved before adding documents
     if (per.id) return true;

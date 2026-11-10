@@ -1,7 +1,7 @@
 // Data layer: Firebase (Auth + Firestore + Storage) or an in-memory demo store for local testing.
 // Data model: trips/{tripId} (title, start, end, travellers, extended) with subcollections
 //   items (flights/stays/cars), entries (activities/comments), private (editors only), files (editors only).
-import { firebaseConfig, FAMILY_EMAIL, EDITORS, FIREBASE_SDK, AI_MODELS, AI_LOCATION, APP_CHECK_SITE_KEY } from "./firebase-config.js";
+import { firebaseConfig, FAMILY_EMAIL, EDITORS, FIREBASE_SDK, AI_MODELS, AI_IMAGE_MODELS, AI_LOCATION, APP_CHECK_SITE_KEY } from "./firebase-config.js";
 
 const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
 export const DEMO = isLocal && new URLSearchParams(location.search).has("demo");
@@ -693,6 +693,33 @@ async function getModel(tryIndex = 0, schema = EXTRACT_SCHEMA) {
   const ai = aiM.getAI(fb.app, { backend: new Backend(AI_LOCATION) });
   return aiM.getGenerativeModel(ai, { model: AI_MODELS[tryIndex],
     generationConfig: { responseMimeType: "application/json", responseJsonSchema: schema, temperature: 0 } });
+}
+// A portrait avatar drawn by AI from a photo (a data URL in, a data URL out). The picture comes back on plain white; the app then cuts the white away.
+export async function avatarAI(photoDataUrl) {
+  if (DEMO) { await new Promise((r) => setTimeout(r, 500));   // demo: a simple drawn head on white, so the rest of the flow can be tried
+    const cv = document.createElement("canvas"); cv.width = cv.height = 256; const g = cv.getContext("2d");
+    g.fillStyle = "#fff"; g.fillRect(0, 0, 256, 256); g.fillStyle = "#3A2A22"; g.beginPath(); g.arc(128, 100, 62, 0, 7); g.fill();
+    g.fillStyle = "#E8B894"; g.beginPath(); g.arc(128, 112, 52, 0, 7); g.fill(); g.fillStyle = "#2B3A55"; g.beginPath(); g.ellipse(128, 262, 96, 84, 0, 0, 7); g.fill();
+    return cv.toDataURL("image/png"); }
+  const aiM = await import(`${FIREBASE_SDK}/firebase-ai.js`);
+  const Backend = aiM.AgentPlatformBackend || aiM.VertexAIBackend;
+  const ai = aiM.getAI(fb.app, { backend: new Backend(AI_LOCATION) });
+  const [head, b64] = String(photoDataUrl).split(","), mimeType = (head.match(/data:([^;]+)/) || [])[1] || "image/jpeg";
+  const prompt = "Redraw the person in this photo as a clean, modern portrait avatar for an app profile: head and shoulders, facing the viewer, centred, filling most of the frame. "
+    + "Keep a natural likeness - the same hair, skin tone, age, glasses and facial hair if any - with a calm, friendly expression. "
+    + "Style: tasteful flat illustration with simple shapes and soft shading, like a professional profile illustration. Not a cartoon, not childish, no emoji look, no exaggerated features. "
+    + "No text, no border, no frame, no shadow on the background. The background must be perfectly plain pure white (#FFFFFF) and nothing else. Square image.";
+  let lastErr = null;
+  for (const model of AI_IMAGE_MODELS) {
+    try {
+      const m = aiM.getGenerativeModel(ai, { model, generationConfig: { responseModalities: [aiM.ResponseModality?.IMAGE || "IMAGE"] } });
+      const res = await m.generateContent([prompt, { inlineData: { mimeType, data: b64 } }]);
+      const part = res.response.inlineDataParts?.()?.[0]?.inlineData;
+      if (!part?.data) throw new Error("The AI didn't return a picture (it may have declined this photo)");
+      return `data:${part.mimeType || "image/png"};base64,${part.data}`;
+    } catch (e) { lastErr = e; console.warn("avatar AI", model, e); if (!/not found|404|unsupported|not supported|invalid.*model|permission|unavailable|deprecated/i.test(e.message || "")) break; }
+  }
+  throw lastErr || new Error("No image model available");
 }
 const dropEmpty = (o) => { for (const k of Object.keys(o)) { const v = o[k];
   if (v && typeof v === "object" && !Array.isArray(v)) dropEmpty(v); else if (v === "" || v === null) delete o[k]; } return o; };

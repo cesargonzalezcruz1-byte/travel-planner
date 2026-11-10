@@ -58,12 +58,12 @@ function mainNames() {
 }
 let tokenRe = null, tokenKey = "";
 function fmt(text) {
-  const names = mainNames(); const codes = ALL_CODES(); const key = names.join("|") + "#" + codes.join("|");
+  const names = mainNames(); const codes = ALL_CODES().concat(ALL_CODES().map((c) => NAME(c)).filter((n) => n && n.length > 1)); const key = names.join("|") + "#" + codes.join("|");
   if (!tokenRe || key !== tokenKey) {
     tokenKey = key;
     const nameAlt = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
     tokenRe = new RegExp(
-      `(?<init>${codes.length ? `\\b(?:${codes.map((c) => c.replace(/[^A-Za-z0-9]/g, "")).join("|")})\\b|` : ""}^All(?=:))|(?<tbc>\\bTBC\\b)|(?<main>\\b[A-Z]{3}(?:-[A-Z]{3})+\\b${nameAlt ? "|" + nameAlt : ""})` +
+      `(?<init>${codes.length ? `\\b(?:${codes.map((c) => c.replace(/[^A-Za-zÀ-ÿ0-9]/g, "")).filter(Boolean).join("|")})\\b|` : ""}^All(?=:))|(?<tbc>\\bTBC\\b)|(?<main>\\b[A-Z]{3}(?:-[A-Z]{3})+\\b${nameAlt ? "|" + nameAlt : ""})` +
       `|(?<label>\\b(?:Check-In|Check-Out|Pick-Up|Drop-Off)\\b|\\b(?:Vehicle|Location|Flight|Driver):|(?<![A-Za-z])[DA]:)`, "gm");
   }
   let out = "", pos = 0;
@@ -76,7 +76,7 @@ function fmt(text) {
   return out + esc(String(text ?? "").slice(pos));
 }
 const lines = (...l) => l.filter(Boolean).join("\n");
-const whoLabel = (who) => (PEOPLE().every((p) => who.includes(p)) ? "All" : who.join("/"));
+const whoLabel = (who) => (PEOPLE().every((p) => who.includes(p)) ? "All" : who.map((w) => NAME(w) || w).join(" & "));
 
 // ---- who sleeps where (drives the "together" ticks)
 function nightKey(p, date) {
@@ -250,7 +250,7 @@ function renderHome() {
         const lvl = iss[0].st.level, who = [...new Set(iss.map((x) => x.per.code))];
         return `<button type="button" class="tc-warn ${lvl}" data-docwarn="${esc(t.id)}" title="${esc(iss.map((x) => (x.per.name || x.per.code) + ": " + x.st.text).join("\n"))}"><i class="ic16">${I.warn}</i>${lvl === "bad" ? "Document problem" : "Check documents"} · ${who.map(esc).join(", ")}</button>`; })()}
       <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
-      <div class="tc-people">${(t.travellers || []).map((p, k) => `<span class="pchip tp" style="--pc:${upc(p.color) || TDEFAULT[k % TDEFAULT.length]}" title="${esc(p.name || p.code)}"><b>${esc(p.code)}</b></span>`).join("")}</div>
+      <div class="tc-people">${(t.travellers || []).map((p, k) => avObj(p, upc(p.color) || TDEFAULT[k % TDEFAULT.length], (t.travellers || []).concat(t.extended || []))).join("")}</div>
       <div class="tc-ctry"><button type="button" class="cchip ask" data-task="${esc(t.id)}"><i>${I.chat}</i>Ask</button><button type="button" class="cchip map" data-tmap="${esc(t.id)}"><i>${ICON.map}</i>Trip Map</button><button type="button" class="cchip stat" data-trecap="${esc(t.id)}"><i>${I.stats}</i>Recap</button>${t.start <= today ? `<button type="button" class="cchip reelc" data-treel="${esc(t.id)}"><i>${I.camera}</i>Reel</button>` : ""}<button type="button" class="cchip sos" data-tsos="${esc(t.id)}"><i>${I.warn}</i>Emergency</button>${t.countryInfo?.codes?.length ? t.countryInfo.codes.map((c) => `<button type="button" class="cchip" data-cinfo="${esc(t.id)}" data-c="${c}"><i>${I.globe}</i>${esc(countryName(c))}</button>`).join("")
         : isEditor() && t.end >= today ? `<button type="button" class="cchip add" data-cnew="${esc(t.id)}"><i>${I.globe}</i>+ Country Info</button>` : ""}</div>
       ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
@@ -503,7 +503,7 @@ async function emergencySheet(tid = ui.tripId) {
           return `<div class="sosstay${i === now ? " now" : ""}"><div class="soss-h"><b>${esc(i.short || i.name)}</b><small class="muted">${i === now ? "Staying now · " : ""}${shortDate(i.start)} – ${shortDate(i.end)}</small></div>
             ${!e || e.q !== sosQ(i) ? `<p class="muted small">${isEditor() ? "Not looked up yet." : "Not looked up yet - Cesar or Debora can do it from this screen."}</p>` : e.err ? `<p class="muted small">Couldn't look this one up (${esc(e.err)}).</p>`
             : place("Hospital", "🏥", e.hospital) + place("Pharmacy", "💊", e.pharmacy) + place("Supermarket", "🛒", e.supermarket)
-              + (e.cons || []).map((c) => place(`${DEMONYM[c.country] || c.country} embassy / consulate${c.who?.length ? " · for " + c.who.join(", ") : ""}`, "🏛️", c.place)).join("")}</div>`; }).join("")}
+              + (e.cons || []).map((c) => place(`${DEMONYM[c.country] || c.country} embassy / consulate${c.who?.length ? " · for " + c.who.map((w) => NAME(w) || w).join(", ") : ""}`, "🏛️", c.place)).join("")}</div>`; }).join("")}
         ${isEditor() && stays.length ? `<div class="row wrap">${missing.length ? `<button type="button" class="btn small primary" data-sos-find ${busy ? "disabled" : ""}>Find Nearby Places (${missing.length} stay${missing.length > 1 ? "s" : ""})</button>` : `<button type="button" class="btn small" data-sos-refresh ${busy ? "disabled" : ""}>↻ Look Again</button>`}</div>` : ""}
         <p class="muted small">From Google Maps, saved with the trip so it's on everyone's phone, also offline once the app has opened the trip. Check opening hours before you go.</p></section></div>`;
   };
@@ -670,7 +670,7 @@ function tripForm(t) {
   const row = (p, kind) => { const per = personFor(p), st = per ? personStatus(per) : null;
     const v = { code: per?.code || p.code || "", name: per?.name || p.name || "", full: per?.fullName || p.fullName || "", color: (per && upc(per.color)) || upc(p.color) || "" };
     return `<div class="prow pcard" data-kind="${kind}" data-pid="${esc(per?.id || p.pid || "")}" data-code="${esc(v.code)}" data-name="${esc(v.name)}" data-full="${esc(v.full)}" data-color="${kind === "t" ? v.color : ""}" style="--pc:${kind === "t" && v.color ? v.color : "var(--muted)"}">
-      <span class="pchip tp"><b>${esc(v.code)}</b></span><span class="pn2"><b>${esc(v.name)}</b>${v.full ? `<small>${esc(v.full)}</small>` : ""}</span>
+      ${avObj({ ...p, name: v.name, code: v.code }, kind === "t" && v.color ? v.color : EXTRA_C[0], (t?.travellers || []).concat(t?.extended || []))}<span class="pn2"><b>${esc(v.name)}</b>${v.full ? `<small>${esc(v.full)}</small>` : ""}</span>
       <button type="button" class="btn tiny pdocs${st ? " " + st.level : ""}" data-docs title="${esc(st?.text || "Profile, passport, visas and other documents")}"><i class="ic16">${I.file}</i>Profile${per?.docs?.length ? ` · ${per.docs.length} doc${per.docs.length > 1 ? "s" : ""}` : ""}${st && st.level !== "ok" ? ` <span class="dwarn">!</span>` : ""}</button>
       <button type="button" class="btn tiny danger" data-rm title="Remove from this trip" aria-label="Remove ${esc(v.name)} from this trip">✕</button></div>`; };
   const savedPick = (kind) => `<select class="savedpick" data-pick="${kind}" aria-label="Add someone who has a profile"><option value="">${kind === "t" ? "+ Add Traveller" : "+ Add Person"}</option>${[...store.people].sort((a, b) => (a.name || "").localeCompare(b.name || "")).map((x) => `<option value="${esc(x.id)}">${esc(x.name || x.code)} (${esc(x.code)})</option>`).join("")}</select>`;
@@ -735,7 +735,7 @@ function tripForm(t) {
     box.innerHTML = !ext.length ? `<p class="muted small">Add the people joining above first.</p>` : fams.map((f, k) => `<div class="famrow">
       <input class="famname" data-famname="${k}" value="${esc(f.name || "")}" placeholder="${esc(joinNames(f.members.map((c) => ext.find((p) => p.code === c)?.name || c)) || "Family name")}" aria-label="Family name">
       <span class="ddots">${ext.map((p) => { const other = fams.some((g, j) => j !== k && g.members.includes(p.code)), on = f.members.includes(p.code);
-        return `<button type="button" class="dd${on ? " on" : ""}" data-fammem="${k}" data-c="${esc(p.code)}" ${other ? "disabled" : ""} style="--pc:${pcolor(p.code)}" aria-pressed="${on}" title="${esc(p.name)}${other ? " (in another family)" : ""}">${esc(p.code)}</button>`; }).join("")}</span>
+        return `<button type="button" class="dd${on ? " on" : ""}" data-fammem="${k}" data-c="${esc(p.code)}" ${other ? "disabled" : ""} style="--pc:${pcolor(p.code)}" aria-pressed="${on}" title="${esc(p.name)}${other ? " (in another family)" : ""}">${ddIn(p.code)}</button>`; }).join("")}</span>
       <button type="button" class="btn tiny danger" data-famrm="${k}" aria-label="Remove family">✕</button></div>`).join(""); };
   form.querySelector("[data-addfam]")?.addEventListener("click", () => { fams.push({ id: "f" + Date.now().toString(36), name: "", members: [] }); drawFams(); });
   form.querySelector("#fams")?.addEventListener("click", (e) => { const m = e.target.closest("[data-fammem]"), x = e.target.closest("[data-famrm]");
@@ -816,7 +816,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.0";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.1";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -848,7 +848,7 @@ const minus1 = (t) => { const [h, m] = t.split(":").map(Number); const x = Math.
 const cleanTime = (t) => String(t || "").replace(/\s*\(.*\)\s*$/, "").trim();
 const codesOf = (route) => String(route || "").split(/[-–>]+/).map((c) => c.trim()).filter(Boolean);
 // the same filled initials pills as on the day screen, for whoever is travelling with p
-const pillsFor = (codes) => codes.length ? `<span class="tpills">${codes.map((o) => `<span class="tpill" style="--pc:${pcolor(o)}" title="${esc(NAME(o))}">${esc(o)}</span>`).join("")}</span>` : "";
+const pillsFor = (codes) => codes.length ? `<span class="tpills" role="img" aria-label="With ${esc(codes.map(NAME).join(", "))}">${codes.map((o) => avHtml(o)).join("")}</span>` : "";
 const withPills = (p, date) => pillsFor(PEOPLE().filter((o) => o !== p && together(p, o, date)));
 const withText = (p, date) => { const w = PEOPLE().filter((o) => o !== p && together(p, o, date)).map(NAME); return w.length ? "With " + w.join(" & ") : ""; };
 
@@ -973,6 +973,14 @@ function shortInit(code) {   // "C", or "Ch" when two travellers share a first l
 function avInner(a, label, c) {
   return a && a.startsWith("data:") ? `<img src="${esc(a)}" alt="">` : a && a.startsWith("e:") ? `<span class="av-e">${esc(a.slice(2))}</span>` : `<span class="av-i" style="color:${inkOn(c)}">${esc(label)}</span>`;
 }
+const ddIn = (code) => avInner(avatarOf(code), shortInit(code), pcolor(code));   // what a traveller toggle shows
+// a traveller row that isn't the open trip's (home cards, Trip Setup rows, profiles): x = { code, name, color, avatar, pid }
+const initIn = (x, list) => { const nm = x.name || x.code || "?", f = nm.slice(0, 1).toUpperCase();   // "C", or "Ce" when someone else in the list starts with the same letter
+  return (list || []).some((t) => t !== x && t.code !== x.code && (t.name || t.code || "").slice(0, 1).toUpperCase() === f) ? f + nm.slice(1, 2).toLowerCase() : f; };
+const avObj = (x, c, list) => { const a = (personFor(x) || {}).avatar || x.avatar || ""; return `<span class="av${a ? " has" : ""}" style="--pc:${c}" title="${esc(x.name || x.code || "")}">${avInner(a, initIn(x, list), c)}</span>`; };
+const dotsFor = (codes) => (codes.length ? `<span class="idots" role="img" aria-label="${esc(codes.map(NAME).join(", "))}">${codes.map((o) => `<i class="tdot" style="--pc:${pcolor(o)}"></i>`).join("")}</span>` : "");
+// who is who: each traveller's colour dot with their preferred name (shown at the top of the plan views)
+const whoKey = () => (ALL_CODES().length > 1 ? `<div class="whokey" aria-label="Who is who">${ALL_CODES().map((c) => `<span><i class="tdot" style="--pc:${pcolor(c)}"></i>${esc(NAME(c))}</span>`).join("")}</div>` : "");
 const avHtml = (code, cls = "") => { const c = pcolor(code), a = avatarOf(code); return `<span class="av ${cls}${a ? " has" : ""}" style="--pc:${c}" title="${esc(NAME(code))}">${avInner(a, shortInit(code), c)}</span>`; };
 // a small square photo for the avatar (kept with the profile and copied to the trips, so the family login sees it too)
 function avatarFromFile(file) {
@@ -1101,7 +1109,7 @@ function settleHtml(B) {
   return `<section class="settle"><h3>Settle Up</h3>
     ${settleData(B).map(({ f, bal, lines, noRate }) => { const st = Math.abs(bal) < 0.5 ? "even" : bal > 0 ? "in" : "out";
       return `<div class="scard ${st}">
-        <div class="s-top"><span class="s-who">${(f.members || []).map((c) => `<span class="dd on" style="--pc:${pcolor(c)}">${esc(c)}</span>`).join("")}</span>
+        <div class="s-top"><span class="s-who">${(f.members || []).map((c) => avHtml(c)).join("")}</span>
           <span class="s-bal">${st === "even" ? `<b>${esc(f.name)}</b> - all settled` : st === "in" ? `<b>${esc(f.name)}</b> owe${f.members.length === 1 ? "s" : ""} you <b class="amt">${money(bal, cur, 2)}</b>` : `You owe <b>${esc(f.name)}</b> <b class="amt">${money(-bal, cur, 2)}</b>`}</span></div>
         ${lines.length ? `<details class="s-lines"><summary>${lines.filter((l) => l.r).length} cost${lines.filter((l) => l.r).length === 1 ? "" : "s"}${lines.some((l) => l.pay) ? ` · ${lines.filter((l) => l.pay).length} payment${lines.filter((l) => l.pay).length === 1 ? "" : "s"}` : ""}</summary>
           <ul>${lines.map((l) => l.r ? `<li><button class="lnk" data-${l.r.src === "item" ? "bk" : l.r.src === "entry" ? "bact" : "exp"}="${esc(l.r.id)}">${esc(firstText(l.r.name))}</button><small class="muted">${l.r.date ? shortDate(l.r.date) + " · " : ""}${esc(l.what)}</small><span class="${l.amt > 0 ? "pos" : "neg"}">${l.amt > 0 ? "+" : "−"}${money(Math.abs(l.amt), cur, 2)}</span></li>`
@@ -1537,7 +1545,7 @@ function renderOverview() {
   clashNow = 0;
   const legend = others.length ? `<div class="ov-legend"><span class="muted">Traveling together with:</span>${others.map((o) => `<span><i style="background:${pcolor(o)}"></i>${esc(NAME(o))}</span>`).join("")}</div>` : "";
   root.innerHTML = `${header({ views: true })}
-    <div class="ov">${outsideBlock(p, "before")}<div class="ov-card">
+    <div class="ov">${whoKey()}${outsideBlock(p, "before")}<div class="ov-card">
       <div class="ov-head"><span class="l">DAY</span><span class="k-flight">FLIGHT</span><span class="k-stay" style="grid-column:3 / span 2">STAY</span><span class="k-car" style="grid-column:5 / span 2">CAR</span></div>
       <div class="ov-grid" style="--n:${N}">${cells.join("")}<svg class="ov-svg" aria-hidden="true"></svg></div>
       ${legend}</div>${outsideBlock(p, "after")}</div>`;
@@ -2037,7 +2045,7 @@ function todoSheet() {
         return `<div class="pitem tdo ${x.done ? "done" : ""} ${st}">
           <label><input type="checkbox" data-tdone="${esc(x.id)}" ${x.done ? "checked" : ""}><span>${esc(x.text)}${x.why ? `<small class="muted">${esc(x.why)}</small>` : ""}</span></label>
           <input type="date" class="tdue" data-tdue="${esc(x.id)}" value="${esc(x.due || "")}" aria-label="Due date">
-          <button type="button" class="dd${x.who ? " on" : ""}" data-twho="${esc(x.id)}" style="--pc:${x.who ? pcolor(x.who) : "var(--line2)"}" title="Who does it">${x.who ? esc(x.who) : "?"}</button>
+          <button type="button" class="dd${x.who ? " on" : ""}" data-twho="${esc(x.id)}" style="--pc:${x.who ? pcolor(x.who) : "var(--line2)"}" title="Who does it">${x.who ? ddIn(x.who) : "?"}</button>
           <button type="button" class="pdel" data-tdel="${esc(x.id)}" aria-label="Remove">✕</button></div>`; }).join("")
         || `<p class="muted">${td.length ? "All done!" : "Nothing yet. Add things to do before you go, or let the app suggest them from your documents, Country Info and bookings."}</p>`}</div>
       <form class="padd"><input name="t" placeholder="Add a to-do…" autocomplete="off" aria-label="New to-do"><input type="date" name="d" value="${esc(addDays(store.trip.start, -7) > today ? addDays(store.trip.start, -7) : today)}" aria-label="Due date"><button class="btn small primary">Add</button></form>
@@ -2074,7 +2082,7 @@ async function todoSuggest() {
   const all = local.concat(ai.map((x) => ({ text: x.text, due: dueFor(x.daysBefore), who: ALL_CODES().includes(x.who) ? x.who : "", why: x.why || "" })));
   if (!all.length) return toast("Nothing new to suggest");
   modal(`<h3>Suggested To-dos</h3><p class="muted small">Untick anything you don't need. You can change dates and who later.</p>
-    <div class="psugg">${all.map((x, k) => `<label class="pcand"><input type="checkbox" name="i" value="${k}" checked><span><b>${esc(x.text)}</b><small class="muted">by ${fmtDate(x.due)}${x.who ? " · " + esc(x.who) : ""}${x.why ? " · " + esc(x.why) : ""}</small></span></label>`).join("")}</div>`,
+    <div class="psugg">${all.map((x, k) => `<label class="pcand"><input type="checkbox" name="i" value="${k}" checked><span><b>${esc(x.text)}</b><small class="muted">by ${fmtDate(x.due)}${x.who ? " · " + esc(NAME(x.who) || x.who) : ""}${x.why ? " · " + esc(x.why) : ""}</small></span></label>`).join("")}</div>`,
     async (fd) => { let o = Date.now(); const pick = fd.getAll("i").map((k) => ({ ...all[+k], done: false, order: o++ })); await data.saveTodo(pick); toast(`${pick.length} to-dos added`); });
   [...document.querySelectorAll(".modal")].pop().querySelector("button.primary").textContent = "Add to the List";
 }
@@ -2115,11 +2123,11 @@ function packingSheet() {
       <div class="ask-head"><h3>${I.bag}Packing</h3><span class="muted small">${done} of ${all} packed</span><button type="button" class="btn tiny" data-px aria-label="Close">✕</button></div>
       ${all ? `<div class="pbar"><i style="width:${Math.round(done / all * 100)}%"></i></div>` : ""}
       ${store.packingError ? `<p class="jwarn small">${esc(store.packingError)}</p>` : ""}
-      <div class="ptabs" role="tablist">${tabs().map((l) => `<button type="button" role="tab" class="ptab${l === tab ? " on" : ""}" data-ptab="${esc(l)}" ${l !== "shared" ? `style="--pc:${pcolor(l)}"` : ""}>${l === "shared" ? "Shared" : esc(l)} <small>${cnt(l)}</small></button>`).join("")}</div>
-      <p class="muted small">${tab === "shared" ? "Family items - one person packs each (tap the initials to choose who)." : `${esc(NAME(tab))}'s own things.`}</p>
+      <div class="ptabs" role="tablist">${tabs().map((l) => `<button type="button" role="tab" class="ptab${l === tab ? " on" : ""}" data-ptab="${esc(l)}" ${l !== "shared" ? `style="--pc:${pcolor(l)}"` : ""}>${l === "shared" ? "Shared" : avHtml(l) + esc(NAME(l))} <small>${cnt(l)}</small></button>`).join("")}</div>
+      <p class="muted small">${tab === "shared" ? "Family items - one person packs each (tap the circle to choose who)." : `${esc(NAME(tab))}'s own things.`}</p>
       <div class="plist">${groups.map(([c, a]) => `<div class="pgroup"><h4>${esc(c)}</h4>${a.map((x) => `<div class="pitem${x.done ? " done" : ""}">
           <label><input type="checkbox" data-pdone="${esc(x.id)}" ${x.done ? "checked" : ""}><span>${esc(x.text)}${x.why ? `<small class="muted">${esc(x.why)}</small>` : ""}</span></label>
-          ${tab === "shared" ? `<button type="button" class="dd${x.packer ? " on" : ""}" data-ppacker="${esc(x.id)}" style="--pc:${x.packer ? pcolor(x.packer) : "var(--line2)"}" title="Who packs it">${x.packer ? esc(x.packer) : "?"}</button>` : ""}
+          ${tab === "shared" ? `<button type="button" class="dd${x.packer ? " on" : ""}" data-ppacker="${esc(x.id)}" style="--pc:${x.packer ? pcolor(x.packer) : "var(--line2)"}" title="Who packs it">${x.packer ? ddIn(x.packer) : "?"}</button>` : ""}
           <button type="button" class="pdel" data-pdel="${esc(x.id)}" aria-label="Remove">✕</button></div>`).join("")}</div>`).join("")
         || `<p class="muted">Nothing on this list yet. Add items below, let the AI suggest a list for this trip, or copy one from another trip.</p>`}</div>
       <form class="padd"><input name="t" placeholder="Add an item…" autocomplete="off" aria-label="New item"><select name="c" aria-label="Category">${PACK_CATS.map((c) => `<option>${c}</option>`).join("")}</select><button class="btn small primary">Add</button></form>
@@ -2242,7 +2250,7 @@ async function showRecap(tid) {
     ${R.rated.length ? `<section><h3>Top-Rated Activities</h3><ol>${R.rated.map((x) => `<li>${esc(x.name)} <span class="rstars">${stars(x.avg)}</span> <small class="muted">${x.n} rating${x.n > 1 ? "s" : ""}</small></li>`).join("")}</ol></section>` : ""}
     ${R.voted.length ? `<section><h3>Family Favourites (Most Votes)</h3><ol>${R.voted.map((x) => `<li>${esc(x.name)} <small class="muted">${x.n} vote${x.n > 1 ? "s" : ""} · ${x.who.map(esc).join(", ")}</small></li>`).join("")}</ol></section>` : ""}
     <section><h3>Journal</h3><p class="small">${R.journal.posts} post${R.journal.posts === 1 ? "" : "s"} · ${R.journal.photos} photo${R.journal.photos === 1 ? "" : "s"} · ${R.journal.replies} repl${R.journal.replies === 1 ? "y" : "ies"} · ${R.journal.authors} writer${R.journal.authors === 1 ? "" : "s"}</p></section>
-    <section><h3>Each Traveller</h3><table class="rpeople"><tr><th></th><th>Flights</th><th>km flown</th><th>Nights</th></tr>${R.people.map((x) => `<tr><td><span class="dd on" style="--pc:${pcolor(x.code)}">${esc(x.code)}</span></td><td>${x.flights}</td><td>${nfmt(x.km)}</td><td>${x.nights}</td></tr>`).join("")}</table></section>
+    <section><h3>Each Traveller</h3><table class="rpeople"><tr><th></th><th>Flights</th><th>km flown</th><th>Nights</th></tr>${R.people.map((x) => `<tr><td><span class="rp-who">${avHtml(x.code)}${esc(NAME(x.code))}</span></td><td>${x.flights}</td><td>${nfmt(x.km)}</td><td>${x.nights}</td></tr>`).join("")}</table></section>
     <p class="muted small">Kilometres flown are straight lines between airports; road kilometres are an estimate (Plan Route results plus the moves between stays).</p></div>`);
 }
 
@@ -2284,7 +2292,7 @@ async function openTripMap(tid) {
   clearInterval(tripMapPlay); tripMapPlay = null; tripMapCtl = null;
   const box = document.createElement("div"); box.className = "tmapsheet"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Trip map");
   box.innerHTML = `<div class="tms-bar"><b>${esc(t.title || "Trip")} · Map</b>
-      <span class="ddots">${everyone.map((c) => `<button type="button" class="dd on" data-mp="${esc(c)}" style="--pc:${pcolor(c)}" aria-pressed="true" title="${esc(NAME(c))}">${esc(c)}</button>`).join("")}</span>
+      <span class="ddots">${everyone.map((c) => `<button type="button" class="dd on" data-mp="${esc(c)}" style="--pc:${pcolor(c)}" aria-pressed="true" title="${esc(NAME(c))}">${ddIn(c)}</button>`).join("")}</span>
       <button class="lb-btn" data-mclose aria-label="Close">✕</button></div>
     <div class="tmap">
       <div class="tmap-canvas">${mapsReady() ? "" : `<p class="muted">The trip map needs the Google Maps key.</p>`}</div>
@@ -2339,7 +2347,7 @@ function renderTimeline() {
       ${comments.map((c) => `<p class="dcom">${ICON.chat}<span>${fmt(c.text)}</span></p>`).join("")}
     </section>`;
   }).join("");
-  root.innerHTML = `${header({ views: true })}<div class="tl">${outsideBlock(p, "before")}${cards}${outsideBlock(p, "after")}</div>`;
+  root.innerHTML = `${header({ views: true })}<div class="tl">${whoKey()}${outsideBlock(p, "before")}${cards}${outsideBlock(p, "after")}</div>`;
   wireHeader(); wireDays();
   const back = sessionStorage.getItem("tp.wscroll");
   if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
@@ -2370,7 +2378,7 @@ function renderJourney() {
       return `<li class="jrow station${i.status === "tbc" ? " tbc" : ""}">
         <span class="jnode k-stay">${ICON.stay}</span>
         <div class="jn-body">
-          <button class="jcard${i.start <= today && today < i.end ? " today" : ""}" data-day="${i.start}"><span class="jl-top"><b>${esc(i.name)}${i.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>${pillsFor((i.who || []).filter((o) => o !== p && PEOPLE().includes(o)))}</span>
+          <button class="jcard${i.start <= today && today < i.end ? " today" : ""}" data-day="${i.start}"><span class="jl-top"><b>${esc(i.name)}${i.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>${dotsFor((i.who || []).filter((o) => o !== p && PEOPLE().includes(o)))}</span>
             <small>${shortDate(i.start)} – ${shortDate(i.end)} · ${N} night${N === 1 ? "" : "s"}${i.address ? " · " + esc(i.address) : ""}</small></button>
           ${inner.length ? `<div class="jdays">${chips(inner)}</div>` : ""}
         </div></li>`;
@@ -2382,11 +2390,11 @@ function renderJourney() {
     return `<li class="jrow leg">
       <span class="jnode k-${k}">${ICON[k]}</span>
       <div class="jn-body"><button class="jleg k-${k}${i.status === "tbc" ? " tbc" : ""}${i.start === today ? " today" : ""}" data-day="${i.start}">
-        <span class="jl-top"><b>${esc(title)}</b>${pillsFor((i.who || []).filter((o) => o !== p && PEOPLE().includes(o)))}<span class="jl-date">${WD3(i.start)} ${D(i.start).getDate()}</span></span>
+        <span class="jl-top"><b>${esc(title)}</b>${dotsFor((i.who || []).filter((o) => o !== p && PEOPLE().includes(o)))}<span class="jl-date">${WD3(i.start)} ${D(i.start).getDate()}</span></span>
         <small>${esc(sub)}</small></button>${extra[i.id] ? `<div class="jdays">${chips(extra[i.id])}</div>` : ""}</div></li>`;
   }).join("");
   const t = store.trip;
-  root.innerHTML = `${header({ views: true })}<div class="jwrap">${outsideBlock(p, "before")}
+  root.innerHTML = `${header({ views: true })}<div class="jwrap">${whoKey()}${outsideBlock(p, "before")}
     <ol class="journey">${stops || `<li class="jempty">No bookings yet${isEditor() ? " - add one with +" : ""}.</li>`}
       ${t ? `<li class="jrow station end"><span class="jnode k-home">${ICON.home}</span><div class="jn-body"><div class="jcard plain"><b>End of Trip</b><small>${WD[D(t.end).getDay()]} ${longDate(t.end)}</small></div></div></li>` : ""}</ol>${outsideBlock(p, "after")}</div>`;
   wireHeader(); wireDays();
@@ -2563,7 +2571,7 @@ function offlineForm() {
   modal(`<h3>Offline Documents</h3>
     <p class="muted small">Keep booking documents - boarding passes, tickets, vouchers, hotel confirmations - on <b>this phone</b>, so they open with no signal (airports, border crossings, theme park gates). New ones are added automatically while the phone is online.</p>
     <label class="pswitch"><input type="checkbox" name="on" ${on ? "checked" : ""}><span>Keep documents on this phone</span></label>
-    <div class="offwho"><span class="muted small">Whose documents:</span><span class="ddots">${PEOPLE().map((c) => `<button type="button" class="dd${who.includes(c) ? " on" : ""}" data-offp="${esc(c)}" style="--pc:${pcolor(c)}" aria-pressed="${who.includes(c)}" title="${esc(NAME(c))}">${esc(c)}</button>`).join("")}</span></div>
+    <div class="offwho"><span class="muted small">Whose documents:</span><span class="ddots">${PEOPLE().map((c) => `<button type="button" class="dd${who.includes(c) ? " on" : ""}" data-offp="${esc(c)}" style="--pc:${pcolor(c)}" aria-pressed="${who.includes(c)}" title="${esc(NAME(c))}">${ddIn(c)}</button>`).join("")}</span></div>
     <p class="small" data-offsum>${sum()}${offState.busy ? ` · saving <span data-offprog>${offState.done} of ${offState.total}</span>…` : ""}</p>
     ${offState.err ? `<p class="jwarn small">Some couldn't be saved: ${esc(offState.err)}</p>` : ""}
     <p class="muted small">They're kept inside the app (not in your Files, Downloads or Gallery). Unticking a person removes their documents from this phone; switching off removes them all. Uninstalling the app also deletes them. Documents marked ✓ are saved.</p>`,
@@ -2631,7 +2639,7 @@ function renderDay() {
     <div class="dayhead${date === iso(new Date()) ? " today" : ""}">
       <button class="nav" data-go="-1" ${idx === 0 && !hasBefore ? "disabled" : ""}>‹</button>
       <div><div class="wd">${date === iso(new Date()) ? "Today · " : ""}${WD[D(date).getDay()]}</div><div class="dt">${longDate(date)}</div>${others.length ? `<div class="ddots" role="group" aria-label="Travelling with">${others.map((o) => { const on = together(p, o, date);
-        return `<button class="dd${on ? " on" : ""}" ${isEditor() ? `data-with="${o}"` : "disabled"} aria-pressed="${on}" aria-label="${esc(NAME(o))}: ${on ? "travelling with " + esc(NAME(p)) : "not with " + esc(NAME(p))}" title="${esc(NAME(o))}${on ? " - together" : " - apart"}${isEditor() ? " (tap to change)" : ""}" style="--pc:${pcolor(o)};--pi:${inkOn(pcolor(o))}">${esc(o)}</button>`; }).join("")}</div>` : ""}</div>
+        return `<button class="dd${on ? " on" : ""}" ${isEditor() ? `data-with="${o}"` : "disabled"} aria-pressed="${on}" aria-label="${esc(NAME(o))}: ${on ? "travelling with " + esc(NAME(p)) : "not with " + esc(NAME(p))}" title="${esc(NAME(o))}${on ? " - together" : " - apart"}${isEditor() ? " (tap to change)" : ""}" style="--pc:${pcolor(o)};--pi:${inkOn(pcolor(o))}">${ddIn(o)}</button>`; }).join("")}</div>` : ""}</div>
       <button class="nav" data-go="1" ${idx === ds.length - 1 && !hasAfter ? "disabled" : ""}>›</button>
     </div>
     ${wxStrip(p, date)}
@@ -2772,7 +2780,7 @@ function peopleList() {
     ${store.peopleError ? `<p class="jwarn small">${esc(store.peopleError)}</p>` : ""}
     <p class="muted small">Everyone you add to a trip gets a profile, so next time you can pick them in Trip Setup. A profile keeps the person's colour on every trip, their documents and private details.</p>
     <div class="plist">${ppl.map((x) => { const st = personStatus(x);
-      return `<button type="button" class="prow2" data-openp="${esc(x.id)}" style="--pc:${upc(x.color) || "var(--muted)"}"><span class="pchip tp"><b>${esc(x.code)}</b></span><span class="pn">${esc(x.name || "")}<small>${(x.docs || []).length ? (x.docs || []).map((d) => docName(d.type)).join(", ") : "No documents yet"}</small></span>${st.level !== "ok" ? `<span class="dstat ${st.level}" title="${esc(st.text)}">!</span>` : ""}</button>`; }).join("") || `<p class="muted">Nobody saved yet - people are saved when you save a Trip Setup.</p>`}</div>
+      return `<button type="button" class="prow2" data-openp="${esc(x.id)}" style="--pc:${upc(x.color) || "var(--muted)"}"><span class="av${x.avatar ? " has" : ""}" style="--pc:${upc(x.color) || "#5D6573"}">${avInner(x.avatar || "", (x.name || x.code || "?").slice(0, 1).toUpperCase(), upc(x.color) || "#5D6573")}</span><span class="pn">${esc(x.name || "")}<small>${(x.docs || []).length ? (x.docs || []).map((d) => docName(d.type)).join(", ") : "No documents yet"}</small></span>${st.level !== "ok" ? `<span class="dstat ${st.level}" title="${esc(st.text)}">!</span>` : ""}</button>`; }).join("") || `<p class="muted">Nobody saved yet - people are saved when you save a Trip Setup.</p>`}</div>
     <button type="button" class="btn small" data-newp>+ Add Traveller Profile</button>`);
   const m = [...document.querySelectorAll(".modal")].pop();
   m.querySelector("[data-newp]").onclick = () => { m.remove(); personForm(null); };
@@ -3281,7 +3289,7 @@ function bulkAttach() {
       <select data-bi="${i}" aria-label="Booking for ${esc(r.file.name)}" ${r.state === "reading" ? "disabled" : ""}>${opts(r.target, r)}</select>
       ${r.vdate && r.target === "new" ? `<label class="bvd small">Voucher - use it on <input type="date" data-bvd="${i}" value="${r.vdate}" min="${store.trip.start}" max="${store.trip.end}"></label>` : ""}
       ${r.target === "new" && r.ai ? `<div class="bwho small${r.who?.length ? "" : " need"}"><span>${r.who?.length ? "In the itinerary of" : `${I.warn}No traveller's name found on it - whose itinerary is it for?`}</span>
-        <span class="ddots">${PEOPLE().map((c) => `<button type="button" class="dd${r.who?.includes(c) ? " on" : ""}" data-bwho="${i}" data-c="${esc(c)}" style="--pc:${pcolor(c)}" aria-pressed="${!!r.who?.includes(c)}" title="${esc(NAME(c))}">${esc(c)}</button>`).join("")}</span></div>` : ""}
+        <span class="ddots">${PEOPLE().map((c) => `<button type="button" class="dd${r.who?.includes(c) ? " on" : ""}" data-bwho="${i}" data-c="${esc(c)}" style="--pc:${pcolor(c)}" aria-pressed="${!!r.who?.includes(c)}" title="${esc(NAME(c))}">${ddIn(c)}</button>`).join("")}</span></div>` : ""}
       ${r.out && r.target === "new" ? `<label class="bout small"><input type="checkbox" data-bout="${i}" ${r.outOk ? "checked" : ""}><span><b>${I.warn}Out of trip dates.</b> Tick to add it anyway - it will show in the grey <b>${r.out === "before" ? "Before Trip" : "After Trip"}</b> block for the people on it, not in the day-by-day plan.</span></label>` : ""}
       ${r.changes?.length && r.target === r.chgTarget ? `<div class="bchg small"><span><b>${I.warn}Different from the booking</b> - this looks like an update:</span>
         <ul>${r.changes.map((c) => `<li>${esc(c.label)}: <s>${esc(c.old)}</s> → <b>${esc(c.nu)}</b></li>`).join("")}</ul>
@@ -3653,7 +3661,7 @@ function recsHtml(p, date, notesHtml) {
     ${locs.length > 1 ? `<div class="seg-mini rlocs">${locs.map((l) => `<button class="${l.key === ui.recLoc ? "on" : ""}" data-rec-loc="${l.key}">${esc(l.area)}</button>`).join("")}</div>` : ""}
     ${notesHtml ? `<p class="rlabel">From Our Notes</p><ul class="entries">${notesHtml}</ul>` : ""}
     ${loc || notesHtml ? `<div class="vhint small"><span class="muted">${I.thumb}Vote for the places you'd like to go - the family's favourites move to the top. Voting as:</span>
-      <span class="ddots">${ALL_CODES().map((c) => `<button type="button" class="dd${c === voter() ? " on" : ""}" data-voter="${esc(c)}" style="--pc:${pcolor(c)}" aria-pressed="${c === voter()}" title="${esc(NAME(c))}">${esc(c)}</button>`).join("")}</span></div>${store.votesError && isEditor() ? `<p class="jwarn small">${esc(store.votesError)}</p>` : ""}` : ""}
+      <span class="ddots">${ALL_CODES().map((c) => `<button type="button" class="dd${c === voter() ? " on" : ""}" data-voter="${esc(c)}" style="--pc:${pcolor(c)}" aria-pressed="${c === voter()}" title="${esc(NAME(c))}">${ddIn(c)}</button>`).join("")}</span></div>${store.votesError && isEditor() ? `<p class="jwarn small">${esc(store.votesError)}</p>` : ""}` : ""}
     ${loc ? `<div class="seg-mini rtabs"><button class="${tab === "do" ? "on" : ""}" data-rec-tab="do">Things to Do</button><button class="${tab === "eat" ? "on" : ""}" data-rec-tab="eat">Places to Eat</button></div>
       ${list.length ? `<ol class="reclist">${shown.map(row).join("")}</ol>
         ${list.length > 5 ? `<button class="lnk" data-rec-more>${ui.recMore ? "Show top 5" : `Show all ${list.length}`}</button>` : ""}`
@@ -3744,6 +3752,7 @@ function ratingBadge(id) {
 const canChange = (j) => isEditor() || (j.by === "family" && j.device === DEVICE);
 const when = (s) => { if (!s) return ""; const d = new Date(s); return d.toLocaleString("en-AU", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }); };
 function avatar(j) {
+  if (j.authorCode && ALL_CODES().includes(j.authorCode)) return avHtml(j.authorCode, "jav");
   const c = j.authorCode && pcolor(j.authorCode);
   const ini = (j.authorCode || (j.author || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 3)).toUpperCase();
   return `<span class="javatar" style="${c ? `--pc:${c};color:${inkOn(c)}` : ""}">${esc(ini)}</span>`;
@@ -3892,7 +3901,7 @@ function modal(html, onSubmit, onDelete) {
     catch (x) { btn.disabled = false; if (!x.back) toast("Save failed: " + (x.code || x.message)); } };
   m.querySelector("input,select,textarea")?.focus();
 }
-const whoBoxes = (who) => `<fieldset class="whobox"><legend>Who</legend>${PEOPLE().map((p) => `<label><input type="checkbox" name="who" value="${p}" ${who.includes(p) ? "checked" : ""}> ${p}</label>`).join("")}</fieldset>`;
+const whoBoxes = (who) => `<fieldset class="whobox"><legend>Who</legend>${PEOPLE().map((p) => `<label><input type="checkbox" name="who" value="${p}" ${who.includes(p) ? "checked" : ""}>${avHtml(p)}${esc(NAME(p))}</label>`).join("")}</fieldset>`;
 const PDF_BTN = `<div class="extract"><label class="btn small pdfbtn"><i class="ic16">${I.scan}</i>Fill from PDF or Photo<input type="file" hidden accept="application/pdf,image/*" data-extract></label>
   <span class="extract-status muted small">The file is read by AI, then attached. Check the details before saving.</span></div>`;
 function setVal(form, name, v) { const el = form.querySelector(`[name="${name}"]`); if (el && v !== undefined && v !== null && v !== "") el.value = v; }

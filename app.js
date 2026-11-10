@@ -29,7 +29,7 @@ const ALL_CODES = () => (store.trip?.travellers || []).concat(store.trip?.extend
 const NAME = (code) => (store.trip?.travellers || []).concat(store.trip?.extended || []).find((t) => t.code === code)?.name || code;
 
 let ui = { person: localStorage.getItem("tp.person") || "", day: null, tripId: null, swap: {}, view: "overview" };
-try { const v = localStorage.getItem("tp.view"); ui.view = ["now", "overview", "timeline", "journey", "budget"].includes(v) ? v : "overview"; } catch (e) { ui.view = "overview"; }
+try { const v = localStorage.getItem("tp.view"); ui.view = ["now", "overview", "timeline", "journey", "budget", "journal", "more"].includes(v) ? v : "now"; } catch (e) { ui.view = "now"; }
 try { ui.swap = JSON.parse(localStorage.getItem("tp.swap") || "{}"); } catch (e) { /* private mode */ }
 // routes:  #/  (trips)   #/t/<tripId>   #/t/<tripId>/<YYYY-MM-DD>
 function parseRoute() {
@@ -111,21 +111,24 @@ function texts(i) {
 const appRoot = $("#app");
 let root = appRoot;   // where the current screen is drawn (a pane in split view)
 function render() {
+  const tabs = store.ready && store.role && store.role !== "none" && !!ui.tripId && !splitOn();
+  if (!tabs) drawTabs(false);
   if (!store.ready) { root.innerHTML = `<div class="loading"><img class="logo-lg" src="icons/logo.svg" alt=""><br>Loading…</div>`; return; }
   if (!store.role) return renderLogin();
   if (store.role === "none") return renderNoAccess();
   if (!ui.tripId) { data.openTrip(ui.bgTrip || null); applyTheme(); renderHome(); return applyFocus(); }   // bgTrip: a trip's details loaded behind the home screen (Country Info)
   data.openTrip(ui.tripId);
-  if (!store.trip && !store.items.length) return renderEmpty();
+  if (!store.trip && !store.items.length) { drawTabs(false); return renderEmpty(); }
   if (!PEOPLE().includes(ui.person)) ui.person = PEOPLE()[0];
-  if (!ui.person) return renderEmpty();
+  if (!ui.person) { drawTabs(false); return renderEmpty(); }
   applyTheme();
   if (ui.view === "budget" && !isEditor()) ui.view = "overview";
+  if (splitOn() && (ui.view === "journal" || ui.view === "more")) ui.view = "overview";
   // during the trip, the app opens on Now (once per session)
   if (!ui.nowChecked && store.trip?.start) { ui.nowChecked = true; const td = iso(new Date()); if (td >= store.trip.start && td <= store.trip.end && !ui.day) ui.view = "now"; }
   if (splitOn()) { renderSplit(); return afterRender(); }
   root = appRoot; appRoot.classList.remove("is-split");
-  renderView(ui.day ? "day" : ui.view);
+  renderView(ui.day ? "day" : ui.view); drawTabs(true);
   if (ui.slide) { root.querySelector(".ov,.tl,.journey,.dayview,.bd,.now")?.classList.add(ui.slide); ui.slide = null; }
   afterRender();
 }
@@ -164,7 +167,7 @@ function afterRender() {
   splitWas = splitOn() + "|" + splitWide();
   if (isEditor() && store.trip) setTimeout(ensureRecs, 0);
 }
-const renderView = (v) => (v === "day" ? renderDay() : v === "now" ? renderNow() : v === "journey" ? renderJourney() : v === "timeline" ? renderTimeline() : v === "budget" && isEditor() ? renderBudget() : renderOverview());
+const renderView = (v) => (v === "day" ? renderDay() : v === "now" ? renderNow() : v === "journey" ? renderJourney() : v === "timeline" ? renderTimeline() : v === "budget" && isEditor() ? renderBudget() : v === "journal" ? renderJournalTab() : v === "more" ? renderMore() : renderOverview());
 // ---- split view: on an unfolded foldable, tablet or computer, two views side by side (left / right), each with its own view icons.
 // A day opened from either side shows on the right; its home button brings the right side back to its view.
 const SPLIT_MIN = 680;
@@ -813,7 +816,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v132";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.0";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -884,28 +887,31 @@ function header(opts = {}) {
   const t = store.trip || {}; const today = iso(new Date());
   const when = !t.start ? "" : t.start > today ? `In ${dayDiff(today, t.start)} days` : today <= t.end ? "On now" : "";
   const sub = [window.__previewDate ? "Preview" : "", t.start ? `${shortDate(t.start)} – ${shortDate(t.end)}` : "", when].filter(Boolean).join(" · ");
-  const me = ui.person, mc = pcolor(me);
+  const me = ui.person, mc = pcolor(me), tabs = !splitOn();
+  const TABNAME = { now: "Today", journal: "Journal", budget: "Budget", more: "More" };
   return `<header class="hero">
     <div class="hero-top">
       <button class="iconbtn" data-home aria-label="All trips" title="All trips">${ICON.menu}</button>
       <div class="hero-title"><span class="hero-sub">${esc(sub)}</span><span class="hero-name">${esc(t.title || "Travel Planner")}</span></div>
-      <details class="more who"><summary class="pbtn" style="--pc:${mc};--pi:${inkOn(mc)}" aria-label="Traveller: ${esc(NAME(me))} - change" title="Change traveller">${esc(me)}</summary>
+      <details class="more who">${tabs ? `<summary class="pbtn2" aria-label="Traveller: ${esc(NAME(me))} - change" title="Change traveller">${avHtml(me)}<span>${esc(NAME(me))}</span></summary>`
+        : `<summary class="pbtn" style="--pc:${mc};--pi:${inkOn(mc)}" aria-label="Traveller: ${esc(NAME(me))} - change" title="Change traveller">${esc(me)}</summary>`}
         <div class="pop"><span class="pop-role">Show itinerary for</span>
-        ${PEOPLE().map((p) => `<button data-person="${p}" class="${p === me ? "on" : ""}"><span class="sw" style="background:${pcolor(p)};color:${inkOn(pcolor(p))}">${esc(p)}</span><span class="grow">${esc(NAME(p))}</span>${p === me ? "✓" : ""}</button>`).join("")}</div></details>
+        ${PEOPLE().map((p) => `<button data-person="${p}" class="${p === me ? "on" : ""}">${avHtml(p)}<span class="grow">${esc(NAME(p))}</span>${p === me ? "✓" : ""}</button>`).join("")}</div></details>
     </div>
     <div class="hero-bar">
       ${!opts.views && ui.day ? `<button class="iconbtn" data-itinerary data-back aria-label="Back to ${VIEWS.find((v) => v[0] === ui.view)?.[1] || "Overview"}" title="Back to ${VIEWS.find((v) => v[0] === ui.view)?.[1] || "Overview"}">${ICON.home}</button>` : ""}
-      ${opts.views ? `<nav class="vseg${viewsFor().length > 3 ? " icons" : ""}" aria-label="View">${viewsFor().map(([k, l, ic]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}" aria-label="${l}" title="${l}">${ICON[ic]}${ui.view === k && viewsFor().length <= 3 ? `<span>${l}</span>` : ""}</button>`).join("")}</nav>` : `<span class="hero-hint">${esc(NAME(me))}'s day</span>`}
+      ${opts.views && tabs ? (PLAN.includes(ui.view) ? `<nav class="vseg lab" aria-label="How to show the plan">${VIEWS.filter((v) => PLAN.includes(v[0])).map(([k, l]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}" aria-pressed="${ui.view === k}">${l}</button>`).join("")}</nav>` : `<span class="hero-hint big">${TABNAME[ui.view] || ""}</span>`)
+      : opts.views ? `<nav class="vseg${viewsFor().length > 3 ? " icons" : ""}" aria-label="View">${viewsFor().map(([k, l, ic]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}" aria-label="${l}" title="${l}">${ICON[ic]}${ui.view === k && viewsFor().length <= 3 ? `<span>${l}</span>` : ""}</button>`).join("")}</nav>` : `<span class="hero-hint">${esc(NAME(me))}'s day</span>`}
       <span class="grow"></span>
       ${ui.pane !== 1 ? splitToggle() : ""}
       ${isEditor() ? `<button class="iconbtn" data-act="add" aria-label="Add booking" title="Add booking">${ICON.plus}</button>` : ""}
-      <details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
+      ${tabs ? "" : `<details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
         ${isEditor() ? `${mi("settings", I.gear, "Trip Setup")}${mi("people", I.users, "Traveller Profiles")}<hr>
         ${mi("bulk", I.clip, "Attach Documents…")}${mi("offline", I.download || I.archive, "Offline Documents…")}${mi("archive", I.archive, "Archive Documents (Zip)…")}<hr>` : ""}
         ${mi("todo", I.check, "To-dos")}${mi("pack", I.bag, "Packing Lists")}${mi("ask", I.chat, "Ask the Trip")}${mi("tripmap", ICON.map, "Trip Map")}${mi("recap", I.stats, "Trip Recap")}${mi("reel", I.camera, "Travel Reel (Slideshow)")}${mi("country", I.globe, "Country Info")}${mi("sos", I.warn, "Emergency &amp; Nearby")}${mi("album", I.book, "Export Album (Word)")}
         ${isEditor() ? `<hr>${mi("export", I.download, "Download Backup")}${mi("import", I.upload, "Restore from Backup…")}` : ""}<hr>
-        ${mi("signout", I.logout, "Sign Out")}</div></details>
+        ${mi("signout", I.logout, "Sign Out")}</div></details>`}
     </div>
   </header>
   ${store.error ? `<div class="banner err">${esc(store.error)}</div>` : ""}`;
@@ -919,13 +925,121 @@ function wireHeader() {
     const pane = b.closest(".pane");
     if (pane) { const k = +pane.dataset.pane; ui.split[k] = b.dataset.view; ui.splitDay[k] = null; try { localStorage.setItem("tp.splitViews", JSON.stringify(ui.split)); } catch (e) { /* ignore */ }
       render(); return; }
-    ui.view = b.dataset.view; try { localStorage.setItem("tp.view", ui.view); } catch (e) { /* ignore */ } sessionStorage.removeItem("tp.wscroll"); render(); }));
+    ui.view = b.dataset.view; try { localStorage.setItem("tp.view", ui.view); if (PLAN.includes(ui.view)) localStorage.setItem("tp.plan", ui.view); } catch (e) { /* ignore */ } sessionStorage.removeItem("tp.wscroll"); render(); }));
   root.querySelectorAll("[data-split]").forEach((b) => (b.onclick = () => { try { localStorage.setItem("tp.split", splitOn() ? "0" : "1"); } catch (e) { /* ignore */ } render(); }));
   root.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.(b)));
   root.querySelectorAll("[data-home]").forEach((b) => (b.onclick = () => routeTo(null)));
   root.querySelectorAll("[data-itinerary]").forEach((b) => (b.onclick = () => routeTo(ui.tripId, null)));
   // close an open menu when tapping elsewhere
   document.onclick = (e) => document.querySelectorAll("details.more[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+}
+
+// ---------------------------------------------------------------- v2 navigation: labelled tabs along the bottom (one view); the split view keeps its icon bars
+const PLAN = ["overview", "timeline", "journey"];
+const planMode = () => { const v = localStorage.getItem("tp.plan"); return PLAN.includes(v) ? v : "overview"; };
+const tabOf = () => (ui.day ? "plan" : ui.view === "now" ? "today" : PLAN.includes(ui.view) ? "plan" : ui.view);
+const TAB_IC = { today: () => ICON.clock, plan: () => SV('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>'), journal: () => I.camera, budget: () => ICON.wallet, map: () => ICON.map,
+  more: () => SV('<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>') };
+const tabList = () => [["today", "Today"], ["plan", "Plan"], ["journal", "Journal"], isEditor() ? ["budget", "Budget"] : ["map", "Map"], ["more", "More"]];
+function goTab(k) {
+  if (k === "map") return openTripMap(ui.tripId);
+  ui.view = k === "today" ? "now" : k === "plan" ? planMode() : k;
+  try { localStorage.setItem("tp.view", ui.view); } catch (e) { /* ignore */ }
+  sessionStorage.removeItem("tp.wscroll"); window.scrollTo(0, 0);
+  if (ui.day) routeTo(ui.tripId, null); else render();
+}
+function drawTabs(show) {
+  let n = document.getElementById("tabbar");
+  if (!show) { n?.remove(); document.body.classList.remove("has-tabs"); return; }
+  if (!n) { n = document.createElement("nav"); n.id = "tabbar"; n.className = "tabbar"; n.setAttribute("aria-label", "Main"); document.body.appendChild(n);
+    n.addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) goTab(b.dataset.tab); }); }
+  document.body.classList.add("has-tabs");
+  const cur = tabOf(), open = (store.todos || []).filter((x) => !x.done), today = iso(new Date()), late = open.some((x) => x.due && x.due < today);
+  n.innerHTML = tabList().map(([k, l]) => `<button type="button" data-tab="${k}" class="${k === cur ? "on" : ""}" ${k === cur ? 'aria-current="page"' : ""}><span class="tb-ic">${TAB_IC[k]()}${k === "more" && late ? `<i class="tb-dot"></i>` : ""}</span>${l}</button>`).join("");
+}
+
+// ---- avatars: a photo or a picture chosen in the Traveller Profile, framed in the person's colour (initials when none is set)
+const AV_EMOJI = ["🦊", "🐼", "🐨", "🦁", "🐯", "🐸", "🐙", "🦄", "🐬", "🦉", "🐢", "🦋", "🌵", "🌴", "⛵", "🎸", "⚽", "🎨", "🚀", "🌮"];
+const allPeople = () => (store.trip?.travellers || []).concat(store.trip?.extended || []);
+function avatarOf(code) {
+  const x = allPeople().find((t) => t.code === code), per = x?.pid && store.people.find((p) => p.id === x.pid);
+  return (per && per.avatar) || x?.avatar || "";
+}
+function shortInit(code) {   // "C", or "Ch" when two travellers share a first letter
+  const nm = NAME(code) || code, first = nm.slice(0, 1).toUpperCase();
+  const clash = allPeople().some((t) => t.code !== code && (t.name || t.code).slice(0, 1).toUpperCase() === first);
+  return clash ? first + nm.slice(1, 2).toLowerCase() : first;
+}
+function avInner(a, label, c) {
+  return a && a.startsWith("data:") ? `<img src="${esc(a)}" alt="">` : a && a.startsWith("e:") ? `<span class="av-e">${esc(a.slice(2))}</span>` : `<span class="av-i" style="color:${inkOn(c)}">${esc(label)}</span>`;
+}
+const avHtml = (code, cls = "") => { const c = pcolor(code), a = avatarOf(code); return `<span class="av ${cls}${a ? " has" : ""}" style="--pc:${c}" title="${esc(NAME(code))}">${avInner(a, shortInit(code), c)}</span>`; };
+// a small square photo for the avatar (kept with the profile and copied to the trips, so the family login sees it too)
+function avatarFromFile(file) {
+  return new Promise((res, rej) => { const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => { const S = 128, cv = document.createElement("canvas"); cv.width = cv.height = S; const s = Math.min(img.width, img.height);
+      cv.getContext("2d").drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, S, S); URL.revokeObjectURL(url); res(cv.toDataURL("image/jpeg", 0.8)); };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("Couldn't read that photo")); }; img.src = url; });
+}
+async function syncPersonAvatar(per) {
+  const a = per.avatar || null;
+  for (const t of store.trips) {
+    let changed = false;
+    const fix = (list) => (list || []).map((x) => (x.pid === per.id && (x.avatar || null) !== a ? (changed = true, { ...x, avatar: a }) : x));
+    const travellers = fix(t.travellers), extended = fix(t.extended);
+    if (changed) await data.saveTrip({ travellers, extended }, t.id).catch((e) => console.warn("avatar sync", t.id, e));
+  }
+}
+
+// ---------------------------------------------------------------- More tab: everything that isn't a tab, grouped by when you need it
+function renderMore() {
+  const td = store.todos || [], open = td.filter((x) => !x.done).length, pk = store.packing || [], ed = isEditor();
+  const tile = (act, icon, label, badge = "", cls = "") => `<button type="button" class="mtile ${cls}" data-act="${act}">${badge ? `<b class="mbadge">${badge}</b>` : ""}<i>${icon}</i><span>${label}</span></button>`;
+  const row = (act, label, sub = "", attr = "") => `<button type="button" class="mrow" ${attr || `data-act="${act}"`}><span class="grow">${label}</span>${sub ? `<small>${sub}</small>` : ""}<i class="mgo">›</i></button>`;
+  root.innerHTML = `${header({ views: true })}<div class="morev">
+    <section><h3>Before You Go</h3><div class="mgrid">${tile("todo", I.check, "To-dos", open || "")}${tile("pack", I.bag, "Packing", pk.length ? `${pk.filter((x) => x.done).length}/${pk.length}` : "", "soft")}${ed ? tile("bulk", I.clip, "Add Documents") : ""}${tile("country", I.globe, "Country Info")}</div></section>
+    <section><h3>On the Trip</h3><div class="mgrid">${tile("ask", I.chat, "Ask the Trip")}${tile("tripmap", ICON.map, "Trip Map")}${tile("sos", I.warn, "Emergency", "", "sos")}${ed ? tile("offline", I.download || I.archive, "Offline Docs") : ""}</div></section>
+    <section><h3>Memories</h3><div class="mgrid">${tile("reel", I.camera, "Trip Reel")}${tile("recap", I.stats, "Recap")}${tile("album", I.book, "Photo Album")}${ed ? tile("archive", I.archive, "Archive Docs") : ""}</div></section>
+    <section class="mlist">${ed ? row("settings", "Trip Setup", "Travellers, dates, families, notifications") + row("people", "Traveller Profiles", "Photos, colours, documents") + row("export", "Download Backup") + row("import", "Restore from Backup…") : ""}
+      ${row("", "All Trips", "", "data-home")}${row("signout", "Sign Out")}</section>
+    <p class="muted small mver">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · Travel Planner ${APP_VERSION}</p></div>`;
+  wireHeader();
+}
+
+// ---------------------------------------------------------------- Journal tab: the same journal as on each day, one day at a time
+function renderJournalTab() {
+  const ds = days(), today = iso(new Date()), posts = (store.journal || []).filter((j) => !j.replyTo && j.date);
+  const withPosts = [...new Set(posts.map((j) => j.date))].sort();
+  let d = ui.jdate; if (!d || !ds.includes(d)) d = ds.includes(today) ? today : withPosts.filter((x) => ds.includes(x)).at(-1) || ds[0];
+  ui.jdate = d;
+  const chips = [...new Set([...withPosts.filter((x) => ds.includes(x)), ...(ds.includes(today) ? [today] : []), d])].sort();
+  const n = (x) => posts.filter((j) => j.date === x).length;
+  root.innerHTML = `${header({ views: true })}<div class="jtab">
+    <div class="jtdays">${chips.map((x) => `<button type="button" class="jdchip${x === d ? " on" : ""}" data-jd="${x}">${x === today ? "Today" : `${WD[D(x).getDay()].slice(0, 3)} ${shortDate(x)}`}${n(x) ? `<b>${n(x)}</b>` : ""}</button>`).join("")}
+      <select data-jsel aria-label="Another day"><option value="">Another day…</option>${ds.map((x) => `<option value="${x}">${WD[D(x).getDay()].slice(0, 3)} ${shortDate(x)}</option>`).join("")}</select></div>
+    <p class="jd-title"><b>${esc(WD[D(d).getDay()])} ${esc(longDate(d))}</b><button type="button" class="lnk" data-day="${d}">Open This Day ›</button></p>
+    ${journalHtml(d)}</div>`;
+  wireHeader(); wireDays(); wireJournal(d);
+  root.querySelectorAll("[data-jd]").forEach((b) => (b.onclick = () => { ui.jdate = b.dataset.jd; render(); }));
+  root.querySelector("[data-jsel]").onchange = (e) => { if (e.target.value) { ui.jdate = e.target.value; render(); } };
+}
+
+// ---- Today, before the trip: what's left to get ready (to-dos, packing, documents)
+function readyHtml() {
+  const t = store.trip, today = iso(new Date()), td = store.todos || [], open = td.filter((x) => !x.done).sort((a, b) => (a.due || "9").localeCompare(b.due || "9"));
+  const pk = store.packing || [], pdone = pk.filter((x) => x.done).length, issues = tripDocIssues({ id: ui.tripId, ...t });
+  const dueTxt = (x) => { if (!x.due) return ""; const n = dayDiff(today, x.due);
+    return `<span class="rdue${n < 0 ? " late" : n <= 7 ? " soon" : ""}">${n < 0 ? `${-n} day${n === -1 ? "" : "s"} late` : n === 0 ? "due today" : n <= 7 ? `in ${n} day${n === 1 ? "" : "s"}` : "due " + shortDate(x.due)}</span>`; };
+  const total = td.length + pk.length, done = td.length - open.length + pdone;
+  return `<section class="ncard ready">
+      <div class="rd-head"><h3>Get Ready</h3>${total ? `<span class="muted small">${done} of ${total} done</span>` : ""}</div>
+      ${total ? `<div class="rbar"><i style="width:${Math.round(done / total * 100)}%"></i></div>` : ""}
+      ${open.slice(0, 3).map((x) => `<div class="rtodo"><button type="button" class="rtick" data-rtick="${esc(x.id)}" aria-label="Mark ${esc(x.text)} as done"></button><div class="grow"><b>${esc(x.text)}</b>${dueTxt(x)}</div>${x.who && allPeople().some((a) => a.code === x.who) ? avHtml(x.who, "sm") : ""}</div>`).join("")}
+      ${!td.length ? `<p class="muted small">No to-dos yet. Add things like “Renew ESTA” or “Buy eSIMs”, or let the app suggest some.</p>` : !open.length ? `<p class="rok small">${I.check} All to-dos done</p>` : ""}
+      <div class="gtiles"><button type="button" class="gtile" data-act="todo"><i>${I.check}</i><span><b>To-dos</b><small>${td.length ? `${open.length} left` : "Start a list"}</small></span></button>
+        <button type="button" class="gtile" data-act="pack"><i>${I.bag}</i><span><b>Packing</b><small>${pk.length ? `${pdone} of ${pk.length} packed` : "Start a list"}</small></span></button>
+        ${isEditor() ? `<button type="button" class="gtile${issues.length ? " warn" : ""}" data-act="${issues.length ? "docwarn" : "offline"}"><i>${issues.length ? I.warn : I.file || I.clip}</i><span><b>Documents</b><small>${issues.length ? `${issues.length} to check` : offOn(ui.tripId) ? "Saved on this phone" : "Save for offline"}</small></span></button>` : ""}</div>
+    </section>`;
 }
 
 // ---------------------------------------------------------------- budget & spending (editors only - costs live in the private collection)
@@ -1741,12 +1855,18 @@ function renderNow() {
   const zoneOf = (s, d) => { const list = d === date ? steps : tmSteps, z = d === date ? zToday : zTom, k = list.indexOf(s); return z && k >= 0 && s.time ? z[k] : ""; };
   const line = (s, d) => `<li class="nstep k-${s.k}${done(s) && d === date ? " done" : ""}${s === next ? " is-next" : ""}"><span class="ntime">${esc(s.time || "")}${zoneOf(s, d) ? `<small class="tz">${esc(zoneOf(s, d))}</small>` : ""}</span><span class="nic">${ICON[KIND[s.k] || s.k] || ""}</span><span class="nt"><b>${esc(s.title)}</b>${s.sub ? `<small>${esc(s.sub)}</small>` : ""}</span></li>`;
   const countdown = next ? (next.time ? inWords(minsUntil(nextDate, next.time)) : nextDate === today ? "today" : nextDate === tomorrow ? "tomorrow" : inWords(dayDiff(today, nextDate) * 1440)) : "";
+  const stats = phase !== "after" ? {} : { places: new Set(itemsFor(p).filter((i) => i.type === "stay" && i.status !== "tbc").map((i) => areaOf(i) || i.short || i.name)).size, flights: itemsFor(p).filter((i) => i.type === "flight").length };
   const status = phase === "before" ? `Trip starts ${inWords(dayDiff(today, t.start) * 1440)} · ${fmtDate(t.start)}` : phase === "after" ? `Trip finished ${fmtDate(t.end)}` : `Day ${day} of ${N}${stay ? " · " + (areaOf(stay) || stay.short || stay.name) : ""}`;
   root.innerHTML = `${header({ views: true })}
   <div class="now">${isEditor() && !offOn(ui.tripId) && phase !== "after" && dayDiff(today, store.trip.start) <= 21 && store.files.length ? `<button class="offhint" data-act="offline"><i>${I.download || I.archive}</i><span><b>Save the trip documents on this phone</b><small>Boarding passes, tickets and vouchers that open with no signal</small></span></button>` : ""}${phase === "before" ? outsideBlock(p, "before") : ""}
     <p class="nstatus">${esc(status)}${w ? ` · ${withPills(p, date)}` : ""}</p>
-    ${phase === "after" ? `<section class="ncard"><h3>Welcome home</h3><p class="muted">Relive it in the Journey or the Journal, or make the photo album.</p>
-        <div class="nacts"><button class="btn small" data-act="album"><i class="ic16">${I.book}</i>Export Album (Word)</button>${isEditor() ? `<button class="btn small" data-act="archive"><i class="ic16">${I.archive}</i>Archive Documents</button>` : ""}</div></section>`
+    ${phase === "before" ? readyHtml() : ""}
+    ${phase === "after" ? `<section class="ncard home"><h3>Welcome Home</h3><p class="muted">${N} days${stats.places ? ` · ${stats.places} places` : ""}${stats.flights ? ` · ${stats.flights} flights` : ""}</p>
+        <button type="button" class="reelcta" data-act="reel"><i>${SV('<path d="M8 5v14l11-7z"/>')}</i><span><b>Watch the Trip Reel</b><small>Your journal photos, day by day, with music</small></span></button>
+        <div class="wrap-list"><button type="button" class="mrow" data-act="album"><span class="grow">Make the Photo Album</span><small>A Word file ready to print</small><i class="mgo">›</i></button>
+          <button type="button" class="mrow" data-act="recap"><span class="grow">See the Trip Recap</span><small>Where the nights went</small><i class="mgo">›</i></button>
+          ${isEditor() ? `<button type="button" class="mrow" data-tabgo="budget"><span class="grow">Settle Up &amp; Budget</span><small>Who owes what</small><i class="mgo">›</i></button>
+          <button type="button" class="mrow" data-act="archive"><span class="grow">Archive the Documents</span><small>One zip with everything</small><i class="mgo">›</i></button>` : ""}</div></section>`
     : next ? `<section class="ncard next k-${next.k}${next.tbc ? " tbc" : ""}">
         <div class="nhead"><span class="nlabel">${phase === "before" ? "First up" : "Next up"}${nextDate !== today && phase !== "before" ? " · tomorrow" : ""}</span><span class="ncount">${esc(countdown)}</span></div>
         <div class="nmain"><span class="nbig">${ICON[KIND[next.k] || next.k] || ""}</span><div><div class="ntitle">${esc(next.title)}</div>
@@ -1761,12 +1881,17 @@ function renderNow() {
     ${(() => { const fl = upcomingFlights(p).filter((f) => f !== next?.item).slice(0, 6); return fl.length ? `<section class="ncard"><h3>Upcoming Check-ins</h3>${pushCard()}
         ${fl.map((f) => checkinHtml(f, true)).join("")}</section>` : ""; })()}
     ${phase !== "after" ? `<button class="btn small nday" data-day="${date}">Open ${date === today ? "Today's" : "Day 1"} Full Day →</button>` : ""}
+    ${phase === "during" ? `<div class="nquick"><button type="button" data-tabgo="journal"><i>${I.camera}</i>Add Photo</button>${isEditor() ? `<button type="button" data-qexp><i>${ICON.wallet}</i>Add Expense</button>` : ""}<button type="button" data-act="ask"><i>${I.chat}</i>Ask the Trip</button></div>` : ""}
     ${phase !== "before" ? outsideBlock(p, "before") : ""}${outsideBlock(p, "after")}
   </div>`;
   wireHeader(); wireDays(); wireCheckins();
   root.querySelectorAll("[data-arrival]").forEach((b) => (b.onclick = () => arrivalSheet(b.dataset.arrival)));
   root.querySelectorAll("[data-wifi]").forEach((b) => (b.onclick = () => wifiSheet(b.dataset.wifi)));
   root.querySelectorAll(".now [data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.()));
+  root.querySelectorAll(".now [data-tabgo]").forEach((b) => (b.onclick = () => { if (b.dataset.tabgo === "journal") ui.jdate = today; goTab(b.dataset.tabgo); }));
+  root.querySelectorAll(".now [data-qexp]").forEach((b) => (b.onclick = () => expenseForm({ date: defaultExpenseDate() })));
+  root.querySelectorAll(".now [data-rtick]").forEach((b) => (b.onclick = async () => { const x = (store.todos || []).find((y) => y.id === b.dataset.rtick); if (!x) return;
+    b.classList.add("on"); try { await data.saveTodo({ ...x, done: true }); toast("Done: " + x.text); } catch (e) { toast(e.message); } }));
   root.querySelectorAll(".now [data-file]").forEach((b) => (b.onclick = () => openFile(store.files.find((x) => x.id === b.dataset.file))));
 }
 // keep the countdown fresh while the Now screen is open
@@ -1788,7 +1913,7 @@ function packBtn() {
 }
 function outsideBlock(p, side) {
   const { items, ents } = outside(p, side), live = store.trip && store.trip.end >= iso(new Date());
-  if (!items.length && !ents.length) return side === "before" && live ? `<div class="oblock before slim"><span class="ob-head"><b>Before Trip</b><span class="muted small">Get ready</span>${todoBtn()}${packBtn()}</span></div>` : "";
+  if (!items.length && !ents.length) return side === "before" && live && splitOn() ? `<div class="oblock before slim"><span class="ob-head"><b>Before Trip</b><span class="muted small">Get ready</span>${todoBtn()}${packBtn()}</span></div>` : "";
   const rows = items.map((i) => ({ d: i.start, k: KIND[i.type], t: outTitle(i) })).concat(ents.map((e) => ({ d: e.date, k: "act", t: firstText(e.text) })))
     .sort((a, b) => a.d.localeCompare(b.d));
   const span = rows[0].d === rows.at(-1).d ? fmtDate(rows[0].d) : `${fmtDate(rows[0].d)} – ${fmtDate(rows.at(-1).d)}`;
@@ -2675,7 +2800,8 @@ const VAULT_FIELDS = [
 function personForm(pid, opts = {}) {
   let per = store.people.find((x) => x.id === pid) || { code: "", name: "", fullName: "", docs: [] };
   let vault = per.id && secure.vault[per.id] && unlocked() ? secure.vault[per.id] : null;
-  let color = upc(per.color) || opts.color || "";
+  let color = upc(per.color) || opts.color || "", avatarVal = per.avatar || "";
+  const avPrev = () => { const c = color || "#5D6573"; return `<span class="av lg${avatarVal ? " has" : ""}" style="--pc:${c}">${avInner(avatarVal, (per.name || per.code || "?").slice(0, 1).toUpperCase(), c)}</span>`; };
   const docsHtml = () => (per.docs || []).length ? (per.docs || []).slice().sort((a, b) => (a.expiry || "9").localeCompare(b.expiry || "9")).map((d) => { const st = docStatus(d, per);
     const num = vault ? (vault.docNumbers || {})[d.id] || d.number || "" : "";
     const hasFile = d.hasFile || d.file || (vault && (vault.files || {})[d.id]);
@@ -2695,6 +2821,9 @@ function personForm(pid, opts = {}) {
     <div class="row"><label>Initials<input name="code" maxlength="6" value="${esc(per.code)}" required></label><label>Preferred Name<input name="name" value="${esc(per.name)}" placeholder="What everyone calls them"></label></div>
     <label>Full Name (as on Passport)<input name="fullName" value="${esc(per.fullName || "")}"></label>
     <div><p class="rlabel">Colour (used on every trip)</p><div class="swrow pfsw" role="radiogroup" aria-label="Colour">${TCOLORS.map(([n, h]) => `<button type="button" class="swbtn${h === color ? " on" : ""}" style="--c:${h}" data-psw="${h}" role="radio" aria-checked="${h === color}" aria-label="${n}" title="${n}"></button>`).join("")}</div></div>
+    <div><p class="rlabel">Photo or Avatar (framed in their colour)</p>
+      <div class="avpick"><span data-avprev>${avPrev()}</span><div class="avbtns"><button type="button" class="btn tiny" data-avphoto>Choose Photo…</button><button type="button" class="btn tiny" data-avnone>Use Initial</button><input type="file" accept="image/*" hidden data-avfile></div></div>
+      <div class="averow" role="group" aria-label="Pick a picture">${AV_EMOJI.map((e) => `<button type="button" class="avemo" data-avemo="${e}" aria-label="Use ${e}">${e}</button>`).join("")}</div></div>
     <fieldset class="pbox"><legend>Travel Documents</legend><div class="dlist">${docsHtml()}</div>
       <button type="button" class="btn tiny" data-dadd>+ Add Document</button></fieldset>
     <fieldset class="pbox"><legend>Private Details</legend><div class="vbox">${vaultHtml()}</div></fieldset>`,
@@ -2703,7 +2832,8 @@ function personForm(pid, opts = {}) {
       const name = String(fd.get("name")).trim() || titleCase(full.split(/\s+/)[0] || "");   // blank: their first name
       if (!/^[A-Z0-9]{2,6}$/.test(code)) throw new Error("Initials: 2-6 letters, no spaces");
       if (!name) throw new Error("Enter a preferred name or the full name");
-      const id = await data.savePerson({ ...(per.id ? { id: per.id } : {}), code, name, fullName: String(fd.get("fullName")).trim(), color, docs: per.docs || [] });
+      const id = await data.savePerson({ ...(per.id ? { id: per.id } : {}), code, name, fullName: String(fd.get("fullName")).trim(), color, avatar: avatarVal || null, docs: per.docs || [] });
+      if (avatarVal !== (per.avatar || "")) await syncPersonAvatar({ ...per, id, avatar: avatarVal });
       if (vault && unlocked()) { VAULT_FIELDS.forEach(([, fs]) => fs.forEach(([k]) => { const v = String(fd.get("v_" + k) ?? "").trim(); if (v) vault[k] = v; else delete vault[k]; }));
         await data.saveVault(id, vault); secure.vault[id] = vault; }
       if (color && color !== upc(per.color)) await syncPersonColor({ ...per, id, code, name, color });
@@ -2712,6 +2842,12 @@ function personForm(pid, opts = {}) {
     }, per.id ? async () => { await unlock(); await data.deletePerson(per); } : null);
   const m = [...document.querySelectorAll(".modal")].pop(), form = m.querySelector("form");
   const redraw = () => { per = store.people.find((x) => x.id === per.id) || per; m.querySelector(".dlist").innerHTML = docsHtml(); refreshDocBtns(); };
+  const avDraw = () => { m.querySelector("[data-avprev]").innerHTML = avPrev(); m.querySelectorAll("[data-avemo]").forEach((b) => b.classList.toggle("on", avatarVal === "e:" + b.dataset.avemo)); };
+  m.querySelector("[data-avphoto]").onclick = () => m.querySelector("[data-avfile]").click();
+  m.querySelector("[data-avfile]").onchange = async (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; try { avatarVal = await avatarFromFile(f); avDraw(); } catch (x) { toast(x.message); } };
+  m.querySelector("[data-avnone]").onclick = () => { avatarVal = ""; avDraw(); };
+  m.querySelectorAll("[data-avemo]").forEach((b) => (b.onclick = () => { avatarVal = "e:" + b.dataset.avemo; avDraw(); }));
+  avDraw();
   const ensure = async () => {   // a new person is saved before adding documents
     if (per.id) return true;
     const code = form.code.value.trim().toUpperCase(), name = form.name.value.trim() || titleCase(form.fullName.value.trim().split(/\s+/)[0] || "");
@@ -2730,7 +2866,7 @@ function personForm(pid, opts = {}) {
   };
   m.addEventListener("click", async (e) => {
     const sw = e.target.closest("[data-psw]");
-    if (sw) { color = sw.dataset.psw; m.querySelectorAll("[data-psw]").forEach((b) => { b.classList.toggle("on", b === sw); b.setAttribute("aria-checked", b === sw); }); return; }
+    if (sw) { color = sw.dataset.psw; avDraw(); m.querySelectorAll("[data-psw]").forEach((b) => { b.classList.toggle("on", b === sw); b.setAttribute("aria-checked", b === sw); }); return; }
     if (e.target.closest("[data-unlock]")) { await openVault(); return; }
     const t = e.target.closest("[data-dadd],[data-dedit],[data-ddel],[data-dfile]"); if (!t) return;
     if (t.dataset.dadd !== undefined) { if (await ensure() && await openVault()) docForm(per, vault, null, redraw); }
@@ -4050,6 +4186,7 @@ const actions = {
   reel: () => travelReel(),
   pack: () => packingSheet(),
   todo: () => todoSheet(),
+  docwarn: () => showTripDocIssues(store.trips.find((t) => t.id === ui.tripId) || { id: ui.tripId, ...store.trip }),
   country: () => (store.trip?.countryInfo?.codes?.length ? showCountryInfo({ id: ui.tripId, ...store.trip }) : isEditor() ? countryInfoFlow() : toast("No country info yet")),
   people: () => peopleList(),
   archive: () => archiveDocs(),

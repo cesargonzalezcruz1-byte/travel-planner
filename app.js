@@ -816,7 +816,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.4";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.5";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -904,7 +904,7 @@ function header(opts = {}) {
       : opts.views ? `<nav class="vseg${viewsFor().length > 3 ? " icons" : ""}" aria-label="View">${viewsFor().map(([k, l, ic]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}" aria-label="${l}" title="${l}">${ICON[ic]}${ui.view === k && viewsFor().length <= 3 ? `<span>${l}</span>` : ""}</button>`).join("")}</nav>` : `<span class="hero-hint">${esc(NAME(me))}'s day</span>`}
       <span class="grow"></span>
       ${ui.pane !== 1 ? splitToggle() : ""}
-      ${isEditor() ? `<button class="iconbtn" data-act="add" aria-label="Add booking" title="Add booking">${ICON.plus}</button>` : ""}
+      <button class="iconbtn addbtn" data-act="add" aria-label="Add to the trip" title="Add to the trip">${ICON.plus}</button>
       ${tabs ? "" : `<details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
         ${isEditor() ? `${mi("settings", I.gear, "Trip Setup")}${mi("people", I.users, "Traveller Profiles")}<hr>
@@ -2346,25 +2346,32 @@ async function openTripMap(tid) {
 // ---------------------------------------------------------------- Timeline view (one card per day)
 function renderTimeline() {
   const p = ui.person, ds = days(), today = iso(new Date());
-  const cards = ds.map((date) => {
-    const { allDay, steps, comments, travel } = dayInfo(p, date);
+  const cardOf = {};
+  ds.forEach((date) => {
+    const { allDay: allDay0, steps, comments, travel } = dayInfo(p, date), allDay = allDay0.filter((s) => s.k !== "stay" && s.k !== "car");   // the stay and car are the group's heading now
     const zones = stepZones(steps, date, (st) => (st.k === "flight" && st.id ? store.items.find((x) => x.id === st.id) : null));
     const w = withText(p, date);
-    return `<section class="dcard${travel ? " travel" : ""}${date === today ? " today" : ""}" id="d-${date}" data-day="${date}" role="button" tabindex="0" aria-label="${WD[D(date).getDay()]} ${longDate(date)}">
+    cardOf[date] = `<section class="dcard${travel ? " travel" : ""}${date === today ? " today" : ""}" id="d-${date}" data-day="${date}" role="button" tabindex="0" aria-label="${WD[D(date).getDay()]} ${longDate(date)}">
       <div class="dc-head">
         <span class="dnum"><small>${WD3(date)}</small><b>${D(date).getDate()}</b></span>
         <span class="dc-title"><b>${WD[D(date).getDay()]} ${shortDate(date)}</b>${w ? withPills(p, date) : ""}</span>
         ${date === today ? `<span class="tbadge now">Today</span>` : travel ? `<span class="tbadge">Travel Day</span>` : ""}
-        ${isEditor() ? `<button class="iconbtn sm" data-add-on="${date}" aria-label="Add booking on ${shortDate(date)}" title="Add booking">${ICON.plus}</button>` : ""}
       </div>
       ${allDay.length ? `<div class="allday">${allDay.map((s) => `<span class="chip k-${s.k}${s.tbc ? " tbc" : ""}"><span class="ic">${ICON[s.k]}</span>${esc(s.title)}${s.sub ? ` <span class="cs">· ${esc(s.sub)}</span>` : ""}</span>`).join("")}</div>` : ""}
       ${steps.length ? `<ol class="steps">${steps.map((s, k) => `<li><span class="st-time">${esc(s.time) || "–"}${zones && zones[k] && s.time ? `<small class="tz">${esc(zones[k])}</small>` : ""}</span><span class="st-dot k-${s.k}"></span>${pillHtml(s)}</li>`).join("")}</ol>` : ""}
       ${!allDay.length && !steps.length ? `<p class="dc-empty">Nothing booked yet</p>` : ""}
       ${comments.map((c) => `<p class="dcom">${ICON.chat}<span>${fmt(c.text)}</span></p>`).join("")}
     </section>`;
-  }).join("");
-  root.innerHTML = `${header({ views: true })}<div class="tl">${whoKey()}${outsideBlock(p, "before")}${cards}${outsideBlock(p, "after")}</div>`;
+  });
+  const groups = tlGroups(p, ds).map((g) => { const first = g.days[0], last = g.days.at(-1), st = g.stay;
+    const cars = itemsFor(p).filter((i) => i.type === "car" && i.start <= last && i.end >= first);
+    return `<section class="tlg"><${st ? `button type="button" data-detail="item:${esc(st.id)}"` : "div"} class="tlg-head${st ? "" : " none"}"><i>${st ? ICON.stay : ICON.flight}</i><span class="tlg-t"><b>${st ? esc(st.short || st.name) + (areaOf(st) && !(st.short || st.name).includes(areaOf(st)) ? `, ${esc(areaOf(st))}` : "") : "On the Move"}${st && st.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>
+        <small>${st ? `${shortDate(st.start)} – ${shortDate(st.end)} · ${dayDiff(st.start, st.end)} night${dayDiff(st.start, st.end) === 1 ? "" : "s"}` : first === last ? shortDate(first) : `${shortDate(first)} – ${shortDate(last)}`}</small></span>${st ? `<span class="crow-go">›</span>` : ""}</${st ? "button" : "div"}>
+      <div class="tlg-body"><span class="tlg-rail${st ? "" : " none"}"></span><div class="tlg-days">${cars.map((c) => `<button type="button" class="tlg-car" data-detail="item:${esc(c.id)}"><i>${ICON.car}</i>${esc([c.company, c.vehicle].filter(Boolean).join(" · ") || "Car")} <span>· ${shortDate(c.start)} – ${shortDate(c.end)}</span></button>`).join("")}
+        ${g.days.map((d) => cardOf[d]).join("")}</div></div></section>`; }).join("");
+  root.innerHTML = `${header({ views: true })}<div class="tl grouped">${whoKey()}${outsideBlock(p, "before")}${groups}${outsideBlock(p, "after")}</div>`;
   wireHeader(); wireDays();
+  root.querySelectorAll(".tl [data-detail]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); detailSheet(b.dataset.detail, null); }));
   const back = sessionStorage.getItem("tp.wscroll");
   if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
   else if (ds.includes(today) && !ui.scrolled) { ui.scrolled = true; document.getElementById("d-" + today)?.scrollIntoView({ block: "start" }); }
@@ -2463,6 +2470,89 @@ function entryLi(e) {
         <button class="btn tiny" data-edit-entry="${e.id}">Edit</button>
         <button class="ibtn danger" data-del-entry="${e.id}" title="Delete" aria-label="Delete">${I.trash}</button>` : ""}</div>
       ${efiles.length ? `<div class="efiles">${efiles.map(fileLink).join("")}</div>` : ""}</li>`; }
+// ---------------------------------------------------------------- v2 day screen: compact cards; tap one for its details sheet (everything the full card had)
+function itemRow(i, date) {
+  const k = KIND[i.type], role = roleOn(i, date), codes = codesOf(i.route), n = (a, b) => dayDiff(a, b);
+  const title = i.type === "flight" ? codes.join(" → ") : i.type === "stay" ? (i.name || i.short || "Stay") : [i.company, i.vehicle].filter(Boolean).join(" · ") || "Car";
+  const sub = i.type === "flight" ? [[i.airline, i.number].filter(Boolean).join(" "), [cleanTime(i.dep), cleanTime(i.arr)].filter(Boolean).join(" → ")].filter(Boolean).join(" · ")
+    : i.type === "stay" ? (role === "Check-in" ? `Check-in${i.checkin ? " from " + i.checkin : ""}` : role === "Check-out" ? `Check-out${i.checkout ? " by " + i.checkout : ""}` : `Night ${n(i.start, date) + 1} of ${n(i.start, i.end)}`)
+    : role === "Pick-up" ? ["Pick-up", i.pickupTime, i.pickup].filter(Boolean).join(" · ") : role === "Drop-off" ? ["Drop-off", i.dropoffTime, i.dropoff].filter(Boolean).join(" · ") : `Day ${n(i.start, date) + 1} of ${n(i.start, i.end) + 1}`;
+  const ci = i.type === "flight" && i.start === date ? checkinFor(i) : null, nf = isEditor() ? store.files.filter((f) => f.itemId === i.id).length : 0;
+  return `<button type="button" class="crow k-${k}" id="it-${esc(i.id)}" data-detail="item:${esc(i.id)}">
+    <span class="crow-ic">${ICON[k]}</span>
+    <span class="crow-main"><b>${esc(title)}${i.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b><small>${esc(sub)}</small>
+      ${ci && ci.status === "open" ? `<span class="crow-badge ok">Check-in open</span>` : ""}${nf ? `<span class="crow-badge">${I.clip}${nf}</span>` : ""}</span>
+    ${dotsFor(ALL_CODES().filter((c) => (i.who || []).includes(c)))}<span class="crow-go">›</span></button>`;
+}
+function actRow(e) {
+  const nf = isEditor() ? store.files.filter((f) => f.entryId === e.id).length : 0, tm = (String(e.text).match(/^\s*(\d{1,2}:\d{2})/) || [])[1] || "";
+  const text = String(e.text || "").split("\n")[0].replace(/^\s*\d{1,2}:\d{2}\s*/, "");
+  return `<li id="en-${esc(e.id)}" class="arow ${e.confirmed ? "is-conf" : "is-plan"}">
+    ${isEditor() ? `<label class="conf" title="Confirmed activities show in the itinerary"><input type="checkbox" data-confirm="${e.id}" ${e.confirmed ? "checked" : ""} aria-label="Confirmed"></label>` : `<span class="aconf">${e.confirmed ? "✓" : "○"}</span>`}
+    <button type="button" class="arow-main" data-detail="entry:${esc(e.id)}"><span class="arow-t">${tm ? `<b class="atime">${esc(tm)}</b>` : ""}<span>${fmt(text)}</span></span>
+      <small>${[e.confirmed ? "" : "Planned - not confirmed", e.place ? esc(e.place) : "", e.endDate && e.endDate !== e.date ? `${fmtDate(e.date)} – ${fmtDate(e.endDate)}` : ""].filter(Boolean).join(" · ")}${ratingBadge(e.id)}${nf ? ` <span class="crow-badge">${I.clip}${nf}</span>` : ""}</small></button>
+    ${e.who.length < PEOPLE().length ? dotsFor(ALL_CODES().filter((c) => e.who.includes(c))) : ""}<span class="crow-go">›</span></li>`;
+}
+// the details sheet: the full booking card (or activity row) with every action it had; Delete sits under "More"
+function detailSheet(ref, date) {
+  const [kind, id] = String(ref).split(":"), it = kind === "item" ? store.items.find((x) => x.id === id) : store.entries.find((x) => x.id === id);
+  if (!it) return;
+  const d = date && date !== "before" && date !== "after" ? date : it.start || it.date;
+  const m = document.createElement("div"); m.className = "modal"; document.body.appendChild(m);
+  const close = () => m.remove();
+  const draw = () => {
+    const cur = kind === "item" ? store.items.find((x) => x.id === id) : store.entries.find((x) => x.id === id);
+    if (!cur) return close();
+    m.innerHTML = `<div class="sheet dsheet"><div class="ds-head"><b>${kind === "item" ? { flight: "Flight", stay: "Stay", car: "Car" }[cur.type] || "Booking" : cur.kind === "comment" ? "Note" : "Activity"}</b><button type="button" class="btn tiny" data-x aria-label="Close">✕</button></div>
+      ${kind === "item" ? itemCard(cur, d) : `<ul class="entries">${entryLi(cur)}</ul>`}
+      ${kind === "item" && cur.type === "stay" ? `<p class="muted small">${shortDate(cur.start)} – ${shortDate(cur.end)} · ${dayDiff(cur.start, cur.end)} night${dayDiff(cur.start, cur.end) === 1 ? "" : "s"}</p>` : ""}
+      ${isEditor() ? `<details class="ds-more"><summary>More…</summary><button type="button" class="btn small danger" data-ds-del><i class="ic16">${I.trash}</i>Delete ${kind === "item" ? "This Booking" : "This"}</button></details>` : ""}</div>`;
+    const keep = root; root = m; try { wireCards(); wireCheckins(); } finally { root = keep; }
+    m.querySelector("[data-x]").onclick = close;
+    m.querySelectorAll("[data-edit-item],[data-edit-entry]").forEach((b) => b.addEventListener("click", close));
+    m.querySelectorAll("[data-attach-item],[data-attach-entry]").forEach((b) => b.addEventListener("change", () => setTimeout(close, 50)));
+    const del = m.querySelector("[data-ds-del]"); if (del) del.onclick = () => { const b = m.querySelector(kind === "item" ? "[data-del-item]" : "[data-del-entry]"); close(); b?.onclick?.(); };
+    m.querySelectorAll("[data-confirm]").forEach((cb) => cb.addEventListener("change", () => setTimeout(draw, 400)));
+  };
+  m.addEventListener("click", (e) => { if (e.target === m) close(); });
+  draw();
+}
+function wireDetails() { root.querySelectorAll("[data-detail]").forEach((b) => (b.onclick = () => detailSheet(b.dataset.detail, ui.day))); }
+
+// ---- one Add button: everything you can add to the trip, for the open day (or today / the first day)
+function addSheet() {
+  const p = ui.person, t = store.trip, today = iso(new Date()), ds = days();
+  const date = ui.day && ds.includes(ui.day) ? ui.day : ds.includes(today) ? today : t.start;
+  const others = PEOPLE().filter((o) => o !== p), who = [p, ...others.filter((o) => together(p, o, date))], ed = isEditor();
+  const m = document.createElement("div"); m.className = "modal"; document.body.appendChild(m);
+  const tile = (k, icon, label, cls) => `<button type="button" class="addtile ${cls}" data-add="${k}"><i>${icon}</i>${label}</button>`;
+  m.innerHTML = `<div class="sheet addsheet"><div class="ds-head"><h3>Add to the Trip</h3><button type="button" class="btn tiny" data-x aria-label="Close">✕</button></div>
+    <p class="muted small">For ${esc(WD[D(date).getDay()])} ${esc(shortDate(date))}${ui.day ? "" : " - you can change the date in the form"}.</p>
+    ${ed ? `<button type="button" class="addscan" data-add="scan"><i>${I.scan || I.clip}</i><span><b>Scan a Booking</b><small>A photo, PDF or screenshot. The app reads it and puts it on the right days.</small></span></button>` : ""}
+    <div class="addgrid">${ed ? tile("activity", ICON.act || I.pin, "Activity", "k-act") + tile("expense", I.receipt || ICON.wallet, "Expense", "k-exp") : ""}${tile("journal", I.camera, "Journal Post or Photo", "k-jrn")}${tile("todo", I.check, "To-do", "k-todo")}${ed ? tile("comment", I.chat, "Note for the Day", "k-note") : ""}</div>
+    ${ed ? `<div class="addhand"><span class="muted small">Add by hand:</span><button type="button" class="btn small" data-add="flight">Flight</button><button type="button" class="btn small" data-add="stay">Stay</button><button type="button" class="btn small" data-add="car">Car</button></div>
+      <label class="addrcpt btn small">${I.receipt || ""}Scan a Receipt<input type="file" accept="image/*,application/pdf" hidden data-add-rcpt></label>` : ""}</div>`;
+  const close = () => m.remove();
+  m.addEventListener("click", (e) => {
+    if (e.target === m || e.target.closest("[data-x]")) return close();
+    const b = e.target.closest("[data-add]"); if (!b) return; const k = b.dataset.add; close();
+    if (k === "scan") return bulkAttach();
+    if (k === "activity" || k === "comment") return entryForm({ kind: k, date, endDate: date, who, status: "planned", confirmed: false, text: "", place: "" });
+    if (k === "expense") return expenseForm({ date: ui.day || defaultExpenseDate() });
+    if (k === "journal") { ui.jdate = date; return goTab("journal"); }
+    if (k === "todo") return todoSheet();
+    return itemForm({ type: k, who, start: date, end: k === "flight" ? date : addDays(date, 1), status: "booked" });
+  });
+  const rc = m.querySelector("[data-add-rcpt]"); if (rc) rc.onchange = () => { const f = rc.files[0]; close(); if (f) scanReceipt(f, ui.day || defaultExpenseDate()); };
+}
+// Timeline: the days grouped under the stay you're sleeping at that night, with the car(s) you have
+function tlGroups(p, ds) {
+  const out = [];
+  for (const d of ds) { const st = tonightStay(p, d), id = st ? st.id : ""; const g = out.at(-1);
+    if (g && g.id === id) g.days.push(d); else out.push({ id, stay: st, days: [d] }); }
+  return out;
+}
+
 // buttons on booking cards and activity rows (day view and the Before / After Trip screens)
 function wireCards() {
   root.querySelectorAll("[data-arrival]").forEach((b) => (b.onclick = () => arrivalSheet(b.dataset.arrival)));
@@ -2660,15 +2750,14 @@ function renderDay() {
     </div>
     ${wxStrip(p, date)}
 
-    <section><h3>Travel & Stays</h3>${its.length ? its.map((i) => itemCard(i, date)).join("") : `<p class="muted">No flights, hotels or cars today.</p>`}</section>
+    <section><h3>Travel & Stays</h3>${its.length ? `<div class="crows">${its.map((i) => itemRow(i, date)).join("")}</div>` : `<p class="muted">No flights, hotels or cars today.</p>`}</section>
 
-    <section><h3>Activities</h3>${isEditor() ? `<p class="muted small">Tick ☑ to confirm - only confirmed activities show in the itinerary. Attaching a booking confirms it.</p>` : ""}<ul class="entries">${sortActs(acts, date).map(entryLi).join("") || `<li class="muted">Nothing planned yet.</li>`}</ul>
-      ${isEditor() ? `<button class="btn small" data-new-entry="activity">+ Add Activity</button>` : ""}${routePanel(p, date, acts)}</section>
+    <section><h3>Activities</h3>${isEditor() ? `<p class="muted small">Tick to confirm - only confirmed activities show in the itinerary. Tap one for its details.</p>` : ""}<ul class="entries arows">${sortActs(acts, date).map(actRow).join("") || `<li class="muted">Nothing planned yet.${isEditor() ? " Tap + to add an activity." : ""}</li>`}</ul>
+      ${routePanel(p, date, acts)}</section>
 
     ${recsHtml(p, date, recs.slice().sort((a, b) => votesFor("e_" + b.id).length - votesFor("e_" + a.id).length).map(entryLi).join(""))}
 
-    <section><h3>Comments</h3><ul class="entries">${coms.map(entryLi).join("") || `<li class="muted">No comments.</li>`}</ul>
-      ${isEditor() ? `<button class="btn small" data-new-entry="comment">+ Add Comment</button>` : ""}</section>
+    ${coms.length ? `<section><h3>Notes</h3><ul class="entries">${coms.map(entryLi).join("")}</ul></section>` : ""}
 
     <section><h3>Map</h3>
       ${mapPins.length ? `${mapsReady() ? `<div class="daymap" id="daymap"></div><p class="daymap-msg muted small"></p>` : isEditor() ? `<p class="muted small">The embedded map isn't set up yet (needs a Google Maps key).</p>` : ""}
@@ -2704,7 +2793,7 @@ function renderDay() {
     ui.slide = +b.dataset.go > 0 ? "from-right" : "from-left"; routeTo(ui.tripId, d2, true); }));
   root.querySelectorAll("[data-new-entry]").forEach((b) => (b.onclick = () => entryForm({ kind: b.dataset.newEntry, date, endDate: date, who: [p, ...others.filter((o) => together(p, o, date))], status: "planned", confirmed: false, text: "", place: "" })));
   root.querySelectorAll("[data-plan]").forEach((b) => (b.onclick = () => { const e = store.entries.find((x) => x.id === b.dataset.plan); data.saveEntry({ ...e, status: "planned", confirmed: false, date, endDate: date }); }));
-  wireCards();
+  wireCards(); wireDetails();
   root.querySelectorAll("[data-attach-day]").forEach((inp) => (inp.onchange = () => upload(inp.files, { date: inp.dataset.attachDay })));
 }
 // ------------------------------------------------------------------ date fields shown as dd-mmm-yy everywhere
@@ -4179,7 +4268,7 @@ const actions = {
   signout: () => data.signOut(),
   newtrip: () => tripForm(null),
   settings: () => tripForm(store.trips.find((t) => t.id === ui.tripId) || { id: ui.tripId, ...store.trip }),
-  add: () => itemForm({ type: "stay", who: [ui.person], start: ui.day || store.trip?.start, end: ui.day || store.trip?.start, status: "booked" }),
+  add: () => addSheet(),
   export: () => {
     const blob = new Blob([JSON.stringify(data.exportAll(), null, 1)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `trip-backup-${iso(new Date())}.json`; a.click();

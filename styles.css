@@ -1118,3 +1118,45 @@ button.dd::after{content:"";position:absolute;inset:-8px}
 .nstatus{line-height:1.3}
 .who .pop button .av{margin-right:2px}
 .avbtns .btn[disabled]{opacity:.5}
+/* v2.5: compact day cards + details sheet, Timeline grouped by stay, one Add button */
+.crows{display:grid;gap:8px}
+.crow{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:10px 12px;border:0;border-radius:20px;background:var(--kt);color:var(--kx);font:inherit;text-align:left;cursor:pointer;scroll-margin-top:12px}
+.crow-ic{flex:none;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--k);color:#fff} .crow-ic svg{width:22px;height:22px}
+.crow-main{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px} .crow-main b{flex:1 1 100%;font-size:15.5px;line-height:1.25;overflow-wrap:anywhere} .crow-main small{font-size:13px;opacity:.92}
+.crow-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:9px;background:#FFFFFFB3;color:var(--ink);font-size:11.5px;font-weight:800} .crow-badge.ok{background:var(--ok);color:#fff} .crow-badge svg{width:12px;height:12px}
+:root[data-theme="midnight"] .crow-badge{background:#00000055;color:#fff}
+.crow-go{flex:none;font-size:22px;line-height:1;color:currentColor;opacity:.55}
+.arows .arow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);scroll-margin-top:12px}
+.arow .conf{flex:none;display:grid;place-items:center;width:32px;height:44px} .arow .conf input{width:22px;height:22px} .aconf{flex:none;width:24px;text-align:center;color:var(--muted);font-weight:800}
+.arow.is-conf .aconf{color:var(--ok)}
+.arow-main{flex:1;min-width:0;display:grid;gap:2px;padding:4px 0;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer;min-height:44px;align-content:center}
+.arow-t{display:flex;gap:8px;align-items:baseline;font-size:15px;font-weight:700} .atime{color:var(--act-x);font-weight:800;flex:none} :root[data-theme="midnight"] .atime{color:var(--act)}
+.arow-main small{font-size:12.5px;color:var(--muted)} .arow.is-plan .arow-t span{font-weight:600}
+.arow .crow-go{color:var(--muted)}
+.dsheet{display:grid;gap:10px} .ds-head{display:flex;align-items:center;justify-content:space-between;gap:10px} .ds-head h3{margin:0} .ds-head b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.dsheet .icard{margin:0} .dsheet [data-del-item],.dsheet [data-del-entry]{display:none}
+.dsheet .entry{border-bottom:0}
+.ds-more{border-top:1px solid var(--line);padding-top:8px} .ds-more summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--muted);min-height:36px;display:flex;align-items:center;list-style:none} .ds-more summary::-webkit-details-marker{display:none} .ds-more[open] summary{margin-bottom:6px}
+/* timeline groups */
+.tl.grouped{gap:18px}
+.tlg{display:grid;gap:8px}
+.tlg-head{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:6px 14px;border:0;border-radius:16px;background:var(--stay-t);color:var(--stay-x);font:inherit;text-align:left;cursor:pointer;flex-wrap:wrap}
+.tlg-head.none{background:var(--flight-t);color:var(--flight-x);cursor:default}
+.tlg-head i{display:flex;font-size:18px;flex:none} .tlg-head b{flex:1;min-width:120px;font-size:15px} .tlg-head small{font-size:12.5px;white-space:nowrap}
+.tlg-body{display:flex;gap:10px} .tlg-rail{flex:none;width:4px;border-radius:2px;background:var(--stay)} .tlg-rail.none{background:var(--flight)}
+.tlg-days{flex:1;min-width:0;display:grid;gap:10px}
+.tlg-car{display:flex;align-items:center;gap:8px;min-height:36px;padding:4px 6px;border:0;background:none;color:var(--car-x);font:inherit;font-size:13px;font-weight:700;text-align:left;cursor:pointer;flex-wrap:wrap}
+.tlg-car i{display:flex;font-size:16px} .tlg-car span{font-weight:500;color:var(--muted)}
+.tl.grouped .dcard{border-radius:22px;padding:12px}
+/* add sheet */
+.addsheet{display:grid;gap:12px}
+.addscan{display:flex;align-items:center;gap:14px;padding:14px;border-radius:20px;border:0;background:var(--dark);color:#fff;font:inherit;text-align:left;cursor:pointer}
+.addscan i{display:grid;place-items:center;width:52px;height:52px;flex:none;border-radius:16px;background:#FFFFFF24;font-size:26px} .addscan span{display:grid;gap:3px} .addscan b{font-size:16.5px} .addscan small{font-size:12.5px;color:#D6D4E0}
+.addgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.addtile{min-height:68px;display:flex;align-items:center;gap:10px;padding:0 14px;border-radius:18px;border:0;font:inherit;font-size:14.5px;font-weight:800;text-align:left;cursor:pointer;background:var(--soft);color:var(--ink)}
+.addtile i{display:flex;font-size:22px;flex:none}
+.addtile.k-act{background:var(--act-t);color:var(--act-x)} .addtile.k-exp{background:var(--clash1-t);color:var(--clash1-x)} .addtile.k-jrn{background:var(--stay-t);color:var(--stay-x)} .addtile.k-todo{background:var(--flight-t);color:var(--flight-x)}
+.addhand{display:flex;flex-wrap:wrap;align-items:center;gap:8px} .addrcpt{justify-self:start;display:inline-flex;align-items:center;gap:6px} .addrcpt svg{width:16px;height:16px}
+.tlg-head{flex-wrap:nowrap} .tlg-t{flex:1;min-width:0;display:grid;gap:1px} .tlg-head b{min-width:0}
+.dsheet .iacts label.btn,.addrcpt{display:inline-flex;flex-direction:row;align-items:center;gap:6px;white-space:nowrap}
+.dsheet .etext{display:flex;gap:8px;align-items:center;flex-wrap:wrap}

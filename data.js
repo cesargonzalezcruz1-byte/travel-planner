@@ -705,9 +705,10 @@ export async function avatarAI(photoDataUrl) {
   const Backend = aiM.AgentPlatformBackend || aiM.VertexAIBackend;
   const ai = aiM.getAI(fb.app, { backend: new Backend(AI_LOCATION) });
   const [head, b64] = String(photoDataUrl).split(","), mimeType = (head.match(/data:([^;]+)/) || [])[1] || "image/jpeg";
-  const prompt = "Create a photorealistic 'digital twin' portrait of the person in this photo for an app profile picture: head and shoulders, facing the viewer, centred, filling most of the frame. "
-    + "It must look like a real studio photograph of the same person - an exact likeness: the same face, age, hair, skin tone, glasses and facial hair if any - with a calm, friendly expression. "
-    + "Even, soft studio lighting, sharp focus, natural skin texture, true-to-life colours. Not an illustration, not a cartoon, no stylisation, no beauty filter. Keep their own clothing but avoid pure white clothes. "
+  const prompt = "Create a photorealistic 3D 'digital twin' portrait of the person in this photo for an app profile picture: head and shoulders, facing the viewer, centred, filling most of the frame. "
+    + "A high-end 3D render of the same person with real depth and volume - an unmistakable likeness: the same face shape, age, hair, skin tone, glasses and facial hair if any - with a calm, friendly expression. "
+    + "Soft studio lighting with gentle highlights and shading that give a rounded, three-dimensional look; smooth, flattering skin (a light beauty retouch is welcome), bright eyes, tidy hair, true-to-life colours. "
+    + "Realistic proportions - not a cartoon, not a caricature, no oversized head or eyes. Keep their own clothing but avoid pure white clothes. "
     + "No text, no border, no frame, no shadow on the background. The background must be perfectly plain pure white (#FFFFFF) and nothing else. Square image.";
   let lastErr = null;
   for (const model of AI_IMAGE_MODELS) {

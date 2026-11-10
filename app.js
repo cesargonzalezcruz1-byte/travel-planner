@@ -816,7 +816,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.3";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.4";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2847,7 +2847,7 @@ function personForm(pid, opts = {}) {
     <div><p class="rlabel">Colour (used on every trip)</p><div class="swrow pfsw" role="radiogroup" aria-label="Colour">${TCOLORS.map(([n, h]) => `<button type="button" class="swbtn${h === color ? " on" : ""}" style="--c:${h}" data-psw="${h}" role="radio" aria-checked="${h === color}" aria-label="${n}" title="${n}"></button>`).join("")}</div></div>
     <div><p class="rlabel">Photo or Avatar (framed in their colour)</p>
       <div class="avpick"><span data-avprev>${avPrev()}</span><div class="avbtns"><button type="button" class="btn tiny" data-avai>✨ Portrait from Photo…</button><button type="button" class="btn tiny" data-avphoto>Use Photo As Is…</button><button type="button" class="btn tiny" data-avnone>Use Initial</button><input type="file" accept="image/*" hidden data-avfile></div></div>
-      <p class="muted small" data-avnote>Portrait from Photo: AI makes a lifelike studio-style portrait from the photo and the person's colour becomes its background.</p></div>
+      <p class="muted small" data-avnote>Portrait from Photo: AI makes a lifelike 3D portrait from the photo and the person's colour becomes its background.</p></div>
     <fieldset class="pbox"><legend>Travel Documents</legend><div class="dlist">${docsHtml()}</div>
       <button type="button" class="btn tiny" data-dadd>+ Add Document</button></fieldset>
     <fieldset class="pbox"><legend>Private Details</legend><div class="vbox">${vaultHtml()}</div></fieldset>`,

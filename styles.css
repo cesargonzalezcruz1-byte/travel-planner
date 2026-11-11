@@ -1268,3 +1268,10 @@ label.addscan{display:flex;font-weight:400;margin-bottom:0} label.addscan b{font
 /* v2.40: Journey - stay blocks are filled with the light stay colour, like flights and cars */
 .jcard:not(.plain){background:var(--stay-t);color:var(--stay-x)} .jcard:not(.plain) small{color:var(--stay-x);opacity:.85}
 .station.tbc .jcard:not(.plain){background:var(--card)}
+/* v2.42: flight, stay, car and activity blocks fade from their colour at the bottom to a lighter tone at the top */
+.pill:not(.tbc),.jleg:not(.tbc),.crow,.icard,.ncard.next{background:linear-gradient(to top,var(--kt),color-mix(in srgb,var(--kt) 30%,var(--card)))}
+.jcard:not(.plain),.tlg-head,.ncard.tonight{background:linear-gradient(to top,var(--stay-t),color-mix(in srgb,var(--stay-t) 30%,var(--card)))}
+.station.tbc .jcard:not(.plain){background:var(--card)}
+.tlg-car,.nstep.k-car[data-detail] .nt{background:linear-gradient(to top,var(--car-t),color-mix(in srgb,var(--car-t) 30%,var(--card)))}
+.ov-fl:not(.tbc):not(.clash){background:linear-gradient(to top,var(--flight-t),color-mix(in srgb,var(--flight-t) 30%,var(--card)))}
+.ov-act{background:linear-gradient(to top,var(--act-t),color-mix(in srgb,var(--act-t) 30%,var(--card)))}

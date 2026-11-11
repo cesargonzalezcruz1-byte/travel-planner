@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.41";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.42";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1696,11 +1696,14 @@ function drawOverviewShapes(svg) {
       return `${i ? "L" : "M"}${(v[0] - a[0] * t).toFixed(3)} ${(v[1] - a[1] * t).toFixed(3)}A${r.toFixed(3)} ${r.toFixed(3)} 0 0 ${c.out ? 1 : 0} ${(v[0] + b[0] * t).toFixed(3)} ${(v[1] + b[1] * t).toFixed(3)}`;
     }).join("") + "Z";
   };
-  svg.innerHTML = shapes.map((x) => {
-    const fill = x.tbc ? "var(--card)" : x.clash ? `var(--clash${x.clash}-t)` : `var(--${x.type}-t${x.shade ? "2" : ""})`;
+  const grads = new Set();
+  const paths = shapes.map((x) => {
+    const tint = x.clash ? `--clash${x.clash}-t` : `--${x.type}-t${x.shade ? "2" : ""}`; grads.add(tint);
+    const fill = x.tbc ? "var(--card)" : `url(#ovg${tint})`;   // each block fades from its colour at the bottom to a lighter tone at the top
     const stroke = x.tbc ? `stroke:var(--${x.clash ? "clash" + x.clash : x.type});stroke-width:${SW};stroke-dasharray:4 3;` : `stroke:var(--${x.clash ? "clash" + x.clash : x.type});stroke-width:${SW};`;   // every block has a darker outline in its own colour
     return `<path data-day="${x.day}" d="${pathOf(outline(x.half ? COL2 : 0, x.s, x.e, x.cutTop, x.cutBot), x.tbc ? INSET + 0.75 : INSET)}" style="fill:${fill};${stroke}"></path>`;
   }).join("");
+  svg.innerHTML = `<defs>${[...grads].map((t) => `<linearGradient id="ovg${t}" x1="0" y1="1" x2="0" y2="0"><stop offset="0" style="stop-color:var(${t})"/><stop offset="1" style="stop-color:color-mix(in srgb,var(${t}) 30%,var(--card))"/></linearGradient>`).join("")}</defs>${paths}`;
   svg.querySelectorAll("[data-day]").forEach((el) => (el.onclick = () => openDay(el.dataset.day, svg._pane)));
 }
 window.addEventListener("resize", () => document.querySelectorAll(".ov-svg").forEach((svg) => drawOverviewShapes(svg)));

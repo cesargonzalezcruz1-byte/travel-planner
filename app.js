@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.22";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.23";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1917,7 +1917,7 @@ function renderNow() {
   const status = phase === "before" ? `Trip starts ${inWords(dayDiff(today, t.start) * 1440)} · ${fmtDate(t.start)}` : phase === "after" ? `Trip finished ${fmtDate(t.end)}` : `Day ${day} of ${N}${stay ? " · " + (areaOf(stay) || stay.short || stay.name) : ""}`;
   root.innerHTML = `${header({ views: true })}
   <div class="now">${isEditor() && !offOn(ui.tripId) && phase !== "after" && dayDiff(today, store.trip.start) <= 21 && store.files.length ? `<button class="offhint" data-act="offline"><i>${I.download || I.archive}</i><span><b>Save the trip documents on this phone</b><small>Boarding passes, tickets and vouchers that open with no signal</small></span></button>` : ""}${phase === "before" ? outsideBlock(p, "before") : ""}
-    <p class="nstatus">${esc(status)}${w ? ` · ${withPills(p, date)}` : ""}</p>
+    <p class="nstatus">${esc(status)}${w ? ` · Travellers ${withPills(p, date)}` : ""}</p>
     ${phase === "before" ? readyHtml() : ""}
     ${phase === "after" ? `<section class="ncard home"><h3>Welcome Home</h3><p class="muted">${N} days${stats.places ? ` · ${stats.places} places` : ""}${stats.flights ? ` · ${stats.flights} flights` : ""}</p>
         <button type="button" class="reelcta" data-act="reel"><i>${SV('<path d="M8 5v14l11-7z"/>')}</i><span><b>Watch the Trip Reel</b><small>Your journal photos, day by day, with music</small></span></button>

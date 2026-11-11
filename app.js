@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.31";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.32";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -992,7 +992,12 @@ const initIn = (x, list) => { const nm = x.name || x.code || "?", f = nm.slice(0
 const avObj = (x, c, list) => { const a = avPhotos() ? (personFor(x) || {}).avatar || x.avatar || "" : ""; return `<span class="av${a ? " has" : ""}" style="--pc:${c}" title="${esc(x.name || x.code || "")}">${avInner(a, initIn(x, list), c)}</span>`; };
 const dotsFor = (codes) => (codes.length ? `<span class="idots" role="img" aria-label="${esc(codes.map(NAME).join(", "))}">${codes.map((o) => `<i class="tdot" style="--pc:${pcolor(o)}"></i>`).join("")}</span>` : "");
 // who is who: each traveller's colour dot with their preferred name (shown at the top of the plan views)
-const whoKey = () => (ALL_CODES().length > 1 ? `<div class="whokey" role="img" aria-label="Who is who: ${esc(ALL_CODES().map(NAME).join(", "))}">${ALL_CODES().map((c) => avHtml(c)).join("")}</div>` : "");
+const whoKey = () => (ALL_CODES().length > 1 ? `<div class="whokey" role="img" aria-label="Who is who: ${esc(ALL_CODES().map(NAME).join(", "))}">${ALL_CODES().map((c) => (isEditor() ? `<button type="button" class="avbtn" data-wprof="${esc(c)}" aria-label="Open ${esc(NAME(c))}'s profile">${avHtml(c)}</button>` : avHtml(c))).join("")}</div>` : "");
+// editors: tapping a traveller in that row opens their profile (creating it first if they have none yet)
+document.addEventListener("click", (e) => { const b = e.target.closest?.("[data-wprof]"); if (!b || !isEditor()) return;
+  const p = allPeople().find((x) => x.code === b.dataset.wprof); if (!p) return;
+  (async () => { try { const pid = (personFor(p) || {}).id || await rememberPerson({ code: p.code, name: p.name || "", fullName: p.fullName || "", color: upc(p.color) || "" }); personForm(pid); }
+    catch (x) { toast("Couldn't open the profile: " + (x.code || x.message)); } })(); });
 const avHtml = (code, cls = "") => { const c = pcolor(code), a = avatarOf(code); return `<span class="av ${cls}${a ? " has" : ""}" style="--pc:${c}" title="${esc(NAME(code))}">${avInner(a, shortInit(code), c)}</span>`; };
 // a small square photo for the avatar (kept with the profile and copied to the trips, so the family login sees it too)
 function avatarFromFile(file, S = 128) {

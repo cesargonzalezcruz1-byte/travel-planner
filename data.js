@@ -720,7 +720,7 @@ export async function quickAddAI(line, ctx) {
   throw new Error(String(lastErr?.message || lastErr).slice(0, 300));
 }
 // A portrait avatar drawn by AI from a photo (a data URL in, a data URL out). The picture comes back on plain white; the app then cuts the white away.
-export async function avatarAI(photoDataUrl) {
+export async function avatarAI(photoDataUrl, mode = "portrait") {
   if (DEMO) { await new Promise((r) => setTimeout(r, 500));   // demo: a simple drawn head on white, so the rest of the flow can be tried
     const cv = document.createElement("canvas"); cv.width = cv.height = 256; const g = cv.getContext("2d");
     g.fillStyle = "#fff"; g.fillRect(0, 0, 256, 256); g.fillStyle = "#3A2A22"; g.beginPath(); g.arc(128, 100, 62, 0, 7); g.fill();
@@ -730,7 +730,11 @@ export async function avatarAI(photoDataUrl) {
   const Backend = aiM.AgentPlatformBackend || aiM.VertexAIBackend;
   const ai = aiM.getAI(fb.app, { backend: new Backend(AI_LOCATION) });
   const [head, b64] = String(photoDataUrl).split(","), mimeType = (head.match(/data:([^;]+)/) || [])[1] || "image/jpeg";
-  const prompt = "Create a photorealistic 3D 'digital twin' portrait of the person in this photo for an app profile picture: head and shoulders, facing the viewer, centred, filling most of the frame. "
+  const prompt = mode === "cutout"
+    ? "Edit this photo and change only the background. Keep the person exactly as photographed - the same face, expression, hair, skin, clothing and lighting; do not redraw, retouch, beautify or restyle them. "
+      + "Replace everything behind and around the person with a perfectly plain pure white (#FFFFFF) background, with a clean edge around the hair and shoulders. "
+      + "Frame it as head and shoulders, centred, filling most of a square image. No shadow, no text, no border."
+    : "Create a photorealistic 3D 'digital twin' portrait of the person in this photo for an app profile picture: head and shoulders, facing the viewer, centred, filling most of the frame. "
     + "A high-end 3D render of the same person with real depth and volume - an unmistakable likeness: the same face shape, age, hair, skin tone, glasses and facial hair if any - with a calm, friendly expression. "
     + "Soft studio lighting with gentle highlights and shading that give a rounded, three-dimensional look; smooth, flattering skin (a light beauty retouch is welcome), bright eyes, tidy hair, true-to-life colours. "
     + "Realistic proportions - not a cartoon, not a caricature, no oversized head or eyes. Keep their own clothing but avoid pure white clothes. "

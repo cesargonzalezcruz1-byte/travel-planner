@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.20";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.21";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1932,10 +1932,10 @@ function renderNow() {
         ${next.flight ? checkinHtml(next.item) : ""}
         ${stepActions(next, nextDate)}</section>`
     : `<section class="ncard"><h3>Nothing else planned today</h3><p class="muted">Free time! Check the Recommended places on the day screen.</p></section>`}
-    ${steps.length > 1 || (steps.length && next && nextDate !== date) ? `<section class="ncard"><h3>${phase === "before" ? "Day 1 · " + fmtDate(date) : "Today"}</h3><ul class="nlist">${steps.map((s) => line(s, date)).join("")}</ul></section>` : ""}
+    ${steps.length > 1 || (steps.length && next && nextDate !== date) ? `<section class="ncard tap" data-day="${date}" role="button" tabindex="0"><h3>${phase === "before" ? "Day 1 · " + fmtDate(date) : "Today"}<i class="nchev">›</i></h3><ul class="nlist">${steps.map((s) => line(s, date)).join("")}</ul></section>` : ""}
     ${stay ? `<section class="ncard k-stay tonight"><h3>Tonight</h3><div class="nmain"><span class="nbig">${ICON.stay}</span><div><div class="ntitle">${esc(stay.name || stay.short)}</div>
         <div class="nsub">${esc(stay.address || areaOf(stay) || "")}</div></div></div>${stepActions({ item: stay, k: "stay", where: stay.address || stay.name }, date)}${isEditor() ? `<button class="arrbtn${store.priv[stay.id]?.arrival ? " has" : ""}" data-arrival="${stay.id}"><i class="ic16">${I.house}</i>Arrival${store.priv[stay.id]?.arrival ? " · Wi-Fi, door code, host" : " +"}</button>` : stay.wifi ? `<button class="arrbtn has" data-wifi="${stay.id}"><i class="ic16">${I.wifi}</i>Wi-Fi</button>` : ""}</section>` : ""}
-    ${tmSteps.length ? `<section class="ncard"><h3>Tomorrow · ${esc(WD[D(tomorrow).getDay()])} ${fmtDate(tomorrow)}</h3><ul class="nlist">${tmSteps.map((s) => line(s, tomorrow)).join("")}</ul></section>` : ""}
+    ${tmSteps.length ? `<section class="ncard tap" data-day="${tomorrow}" role="button" tabindex="0"><h3>Tomorrow · ${esc(WD[D(tomorrow).getDay()])} ${fmtDate(tomorrow)}<i class="nchev">›</i></h3><ul class="nlist">${tmSteps.map((s) => line(s, tomorrow)).join("")}</ul></section>` : ""}
     ${(() => { const fl = upcomingFlights(p).filter((f) => f !== next?.item).slice(0, 6); return fl.length ? `<section class="ncard"><h3>Upcoming Check-ins</h3>${pushCard()}
         ${fl.map((f) => checkinHtml(f, true)).join("")}</section>` : ""; })()}
     ${phase !== "after" ? `<button class="btn small nday" data-day="${date}">Open ${date === today ? "Today's" : "Day 1"} Full Day →</button>` : ""}

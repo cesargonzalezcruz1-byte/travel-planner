@@ -1196,3 +1196,6 @@ body.has-tabs:has(.whokey) .tabbar{box-shadow:none}
 .rtick::before{content:"";position:absolute;inset:-12px}
 .rtick.on{background:#1F8A4C;border-color:#1F8A4C}
 .rtick.on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+/* v2.21: Today - the day and Tomorrow cards open that day; Tonight uses the hotel colour */
+.ncard.tap{cursor:pointer} .ncard.tap h3{display:flex;align-items:center} .nchev{margin-left:auto;font-style:normal;font-size:22px;line-height:1;color:var(--muted)}
+.ncard.tonight{background:var(--stay-t);color:var(--stay-x)} .ncard.tonight h3,.tonight .ntitle{color:var(--stay-x)} .ncard.tonight .nsub,.ncard.tonight .muted{color:var(--stay-x);opacity:.85}

@@ -1184,3 +1184,8 @@ body.has-tabs:has(.whokey) .tabbar{box-shadow:none}
 .dcard.today .dpill{background:var(--stay)}
 .tl.grouped .dc-head{align-items:center}
 .tl.grouped .dc-title{flex-direction:row;align-items:center} .tl.grouped .dc-title .idots{gap:5px} .tl.grouped .dc-title .tdot{width:12px;height:12px}
+/* v2.16: cars keep their grey pill everywhere and open their details when tapped */
+.tlg-car{background:var(--car-t);color:var(--car-x);border-radius:14px;min-height:40px;padding:6px 12px;width:100%} .tlg-car span{color:inherit;opacity:.85}
+.tlg-car::after{content:"›";margin-left:auto;font-size:20px;line-height:1;opacity:.55}
+.nstep.k-car[data-detail]{cursor:pointer} .nstep.k-car[data-detail] .nt{background:var(--car-t);color:var(--car-x);border-radius:14px;padding:6px 12px}
+.pill[data-detail]{cursor:pointer}

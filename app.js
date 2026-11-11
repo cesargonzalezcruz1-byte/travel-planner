@@ -822,7 +822,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.15";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.16";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1910,7 +1910,7 @@ function renderNow() {
   const zf = (st) => (st.flight || (st.k === "flight" && st.item) ? st.item : null);
   const zToday = stepZones(steps, date, zf), zTom = stepZones(tmSteps, tomorrow, zf);
   const zoneOf = (s, d) => { const list = d === date ? steps : tmSteps, z = d === date ? zToday : zTom, k = list.indexOf(s); return z && k >= 0 && s.time ? z[k] : ""; };
-  const line = (s, d) => `<li class="nstep k-${s.k}${done(s) && d === date ? " done" : ""}${s === next ? " is-next" : ""}"><span class="ntime">${esc(s.time || "")}${zoneOf(s, d) ? `<small class="tz">${esc(zoneOf(s, d))}</small>` : ""}</span><span class="nic">${ICON[KIND[s.k] || s.k] || ""}</span><span class="nt"><b>${esc(s.title)}</b>${s.sub ? `<small>${esc(s.sub)}</small>` : ""}</span></li>`;
+  const line = (s, d) => `<li class="nstep k-${s.k}${done(s) && d === date ? " done" : ""}${s === next ? " is-next" : ""}"${s.k === "car" && s.item ? ` data-detail="item:${esc(s.item.id)}" data-dd="${d}" role="button" tabindex="0"` : ""}><span class="ntime">${esc(s.time || "")}${zoneOf(s, d) ? `<small class="tz">${esc(zoneOf(s, d))}</small>` : ""}</span><span class="nic">${ICON[KIND[s.k] || s.k] || ""}</span><span class="nt"><b>${esc(s.title)}</b>${s.sub ? `<small>${esc(s.sub)}</small>` : ""}</span></li>`;
   const countdown = next ? (next.time ? inWords(minsUntil(nextDate, next.time)) : nextDate === today ? "today" : nextDate === tomorrow ? "tomorrow" : inWords(dayDiff(today, nextDate) * 1440)) : "";
   const stats = phase !== "after" ? {} : { places: new Set(itemsFor(p).filter((i) => i.type === "stay" && i.status !== "tbc").map((i) => areaOf(i) || i.short || i.name)).size, flights: itemsFor(p).filter((i) => i.type === "flight").length };
   const status = phase === "before" ? `Trip starts ${inWords(dayDiff(today, t.start) * 1440)} · ${fmtDate(t.start)}` : phase === "after" ? `Trip finished ${fmtDate(t.end)}` : `Day ${day} of ${N}${stay ? " · " + (areaOf(stay) || stay.short || stay.name) : ""}`;
@@ -1945,6 +1945,7 @@ function renderNow() {
   root.querySelectorAll("[data-arrival]").forEach((b) => (b.onclick = () => arrivalSheet(b.dataset.arrival)));
   root.querySelectorAll("[data-wifi]").forEach((b) => (b.onclick = () => wifiSheet(b.dataset.wifi)));
   root.querySelectorAll(".now [data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.()));
+  root.querySelectorAll(".now [data-detail]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); detailSheet(b.dataset.detail, b.dataset.dd || date); }));
   root.querySelectorAll(".now [data-tabgo]").forEach((b) => (b.onclick = () => { if (b.dataset.tabgo === "journal") ui.jdate = today; goTab(b.dataset.tabgo); }));
   root.querySelectorAll(".now [data-qexp]").forEach((b) => (b.onclick = () => expenseForm({ date: defaultExpenseDate() })));
   root.querySelectorAll(".now [data-rtick]").forEach((b) => (b.onclick = async () => { const x = (store.todos || []).find((y) => y.id === b.dataset.rtick); if (!x) return;
@@ -2391,7 +2392,7 @@ function renderTimeline() {
         ${date === today ? `<span class="tbadge now">Today</span>` : travel ? `<span class="tbadge">Travel Day</span>` : ""}
       </div>
       ${allDay.length ? `<div class="allday">${allDay.map((s) => `<span class="chip k-${s.k}${s.tbc ? " tbc" : ""}"><span class="ic">${ICON[s.k]}</span>${esc(s.title)}${s.sub ? ` <span class="cs">· ${esc(s.sub)}</span>` : ""}</span>`).join("")}</div>` : ""}
-      ${steps.length ? `<ol class="steps">${steps.map((s, k) => `<li><span class="st-time">${esc(s.time) || "–"}${zones && zones[k] && s.time ? `<small class="tz">${esc(zones[k])}</small>` : ""}</span><span class="st-dot k-${s.k}"></span>${pillHtml(s)}</li>`).join("")}</ol>` : ""}
+      ${steps.length ? `<ol class="steps">${steps.map((s, k) => `<li><span class="st-time">${esc(s.time) || "–"}${zones && zones[k] && s.time ? `<small class="tz">${esc(zones[k])}</small>` : ""}</span><span class="st-dot k-${s.k}"></span>${s.k === "car" && s.id ? pillHtml(s).replace('<span class="pill', `<span data-detail="item:${esc(s.id)}" data-dd="${date}" role="button" tabindex="0" class="pill`) : pillHtml(s)}</li>`).join("")}</ol>` : ""}
       ${!allDay.length && !steps.length ? `<p class="dc-empty">Nothing booked yet</p>` : ""}
       ${comments.map((c) => `<p class="dcom">${ICON.chat}<span>${fmt(c.text)}</span></p>`).join("")}
     </section>`;
@@ -2404,7 +2405,7 @@ function renderTimeline() {
         ${g.days.map((d) => cardOf[d]).join("")}</div></div></section>`; }).join("");
   root.innerHTML = `${header({ views: true })}<div class="tl grouped">${whoKey()}${outsideBlock(p, "before")}${groups}${outsideBlock(p, "after")}</div>`;
   wireHeader(); wireDays();
-  root.querySelectorAll(".tl [data-detail]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); detailSheet(b.dataset.detail, null); }));
+  root.querySelectorAll(".tl [data-detail]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); detailSheet(b.dataset.detail, b.dataset.dd || null); }));
   const back = sessionStorage.getItem("tp.wscroll");
   if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
   else if (ds.includes(today) && !ui.scrolled) { ui.scrolled = true; document.getElementById("d-" + today)?.scrollIntoView({ block: "start" }); }
@@ -2445,7 +2446,7 @@ function renderJourney() {
       : [i.vehicle && i.vehicle.replace(/\s*\(.*\)$/, ""), `until ${shortDate(i.end)}`, i.dropoff && i.dropoff !== i.pickup ? "return " + i.dropoff : ""].filter(Boolean).join(" · ");
     return `<li class="jrow leg">
       <span class="jnode k-${k}">${ICON[k]}</span>
-      <div class="jn-body"><button class="jleg k-${k}${i.status === "tbc" ? " tbc" : ""}${i.start === today ? " today" : ""}" data-day="${i.start}">
+      <div class="jn-body"><button class="jleg k-${k}${i.status === "tbc" ? " tbc" : ""}${i.start === today ? " today" : ""}" ${isF ? `data-day="${i.start}"` : `data-detail="item:${esc(i.id)}"`}>
         <span class="jl-top"><b>${esc(title)}</b>${dotsFor((i.who || []).filter((o) => o !== p && PEOPLE().includes(o)))}<span class="jl-date">${WD3(i.start)} ${D(i.start).getDate()}</span></span>
         <small>${esc(sub)}</small></button>${extra[i.id] ? `<div class="jdays">${chips(extra[i.id])}</div>` : ""}</div></li>`;
   }).join("");
@@ -2454,6 +2455,7 @@ function renderJourney() {
     <ol class="journey">${stops || `<li class="jempty">No bookings yet${isEditor() ? " - add one with +" : ""}.</li>`}
       ${t ? `<li class="jrow station end"><span class="jnode k-home">${ICON.home}</span><div class="jn-body"><div class="jcard plain"><b>End of Trip</b><small>${WD[D(t.end).getDay()]} ${longDate(t.end)}</small></div></div></li>` : ""}</ol>${outsideBlock(p, "after")}</div>`;
   wireHeader(); wireDays();
+  root.querySelectorAll(".jwrap [data-detail]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); detailSheet(b.dataset.detail, null); }));
   const back = sessionStorage.getItem("tp.wscroll"); if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
   else if (!ui.jScrolled) { const el = root.querySelector(".jday.today, .jleg.today, .jcard.today"); if (el) { ui.jScrolled = true; window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + scrollY - 200)); } }
 }

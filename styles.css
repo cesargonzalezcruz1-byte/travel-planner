@@ -1172,3 +1172,11 @@ button.dd::after{content:"";position:absolute;inset:-8px}
 .av,.dd.on{border-color:color-mix(in srgb,var(--pc) 55%,#fff)}
 :root[data-theme="midnight"] .av,:root[data-theme="midnight"] .dd.on{border-color:color-mix(in srgb,var(--pc) 60%,#fff)}
 .avbtn{border:0;background:none;padding:0;border-radius:50%;cursor:pointer;display:inline-flex}
+/* v2.13: the who-is-who avatars sit at the bottom of the plan views, centred, on a band lighter than the tab bar */
+.whokey{order:99;justify-content:center;margin:6px 0 0;padding:8px 10px;border-radius:18px;background:color-mix(in srgb,var(--dark) 78%,#fff)}
+body.has-tabs .whokey{position:fixed;left:0;right:0;bottom:calc(66px + env(safe-area-inset-bottom));z-index:39;margin:0;border-radius:0;padding:7px 10px;gap:10px}
+body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 62px + env(safe-area-inset-bottom))}
+body.has-tabs:has(.whokey) #toast{bottom:calc(92px + 62px + env(safe-area-inset-bottom))}
+body.has-tabs:has(.whokey) .tabbar{box-shadow:none}
+:root[data-theme="midnight"] .whokey{background:#1E1C29}
+@media print{.whokey{position:static!important}}

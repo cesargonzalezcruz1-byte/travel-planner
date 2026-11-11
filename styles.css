@@ -1265,3 +1265,6 @@ label.addscan{display:flex;font-weight:400;margin-bottom:0} label.addscan b{font
 .nstep.k-car[data-detail] .nt{box-shadow:inset 0 0 0 1.5px var(--car)}
 /* v2.38: Journey - the same small gap between flight, car and stay blocks as between the activity days */
 .journey .jn-body{padding-bottom:6px}
+/* v2.40: Journey - stay blocks are filled with the light stay colour, like flights and cars */
+.jcard:not(.plain){background:var(--stay-t);color:var(--stay-x)} .jcard:not(.plain) small{color:var(--stay-x);opacity:.85}
+.station.tbc .jcard:not(.plain){background:var(--card)}

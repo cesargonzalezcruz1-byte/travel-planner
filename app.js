@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.42";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.43";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1090,13 +1090,13 @@ function renderJournalTab() {
   const withPosts = [...new Set(posts.map((j) => j.date))].sort();
   let d = ui.jdate; if (!d || !ds.includes(d)) d = ds.includes(today) ? today : withPosts.filter((x) => ds.includes(x)).at(-1) || ds[0];
   ui.jdate = d;
-  const chips = [...new Set([...withPosts.filter((x) => ds.includes(x)), ...(ds.includes(today) ? [today] : []), d])].sort();
+  const chips = [...new Set([...withPosts.filter((x) => ds.includes(x)), ...(ds.includes(today) ? [today] : [])])].filter((x) => x !== d).sort();   // the day being shown has its own black pill below
   const n = (x) => posts.filter((j) => j.date === x).length;
   root.innerHTML = `${header({ views: true })}<div class="jtab">
     <div class="jtdays">${chips.map((x) => `<button type="button" class="jdchip${x === d ? " on" : ""}" data-jd="${x}">${x === today ? "Today" : `${WD[D(x).getDay()].slice(0, 3)} ${shortDate(x)}`}${n(x) ? `<b>${n(x)}</b>` : ""}</button>`).join("")}
       <button type="button" class="jdchip jcalbtn${ui.jcal ? " open" : ""}" data-jcal aria-expanded="${ui.jcal ? "true" : "false"}">${JCAL_IC}Calendar<i>▾</i></button></div>
     ${ui.jcal ? jcalHtml(ds, d, today, n) : ""}
-    <p class="jd-title"><b>${esc(WD[D(d).getDay()])} ${esc(longDate(d))}</b><button type="button" class="lnk" data-day="${d}">Open This Day ›</button></p>
+    <p class="jd-title"><b class="jd-pill">${esc(WD[D(d).getDay()])} ${esc(longDate(d))}</b><button type="button" class="lnk" data-day="${d}">Open This Day ›</button></p>
     ${journalHtml(d)}</div>`;
   wireHeader(); wireDays(); wireJournal(d);
   root.querySelectorAll("[data-jd]").forEach((b) => (b.onclick = () => { ui.jdate = b.dataset.jd; render(); }));

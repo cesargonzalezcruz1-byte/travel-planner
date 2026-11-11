@@ -1275,3 +1275,6 @@ label.addscan{display:flex;font-weight:400;margin-bottom:0} label.addscan b{font
 .tlg-car,.nstep.k-car[data-detail] .nt{background:linear-gradient(to top,var(--car-t),color-mix(in srgb,var(--car-t) 30%,var(--card)))}
 .ov-fl:not(.tbc):not(.clash){background:linear-gradient(to top,var(--flight-t),color-mix(in srgb,var(--flight-t) 30%,var(--card)))}
 .ov-act{background:linear-gradient(to top,var(--act-t),color-mix(in srgb,var(--act-t) 30%,var(--card)))}
+/* v2.43: Journal - the day being shown is a black pill; it is no longer repeated in the row of day buttons */
+.jd-title{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.jd-pill{display:inline-flex;align-items:center;height:40px;padding:0 16px;border-radius:20px;background:var(--ink);color:var(--card);font-size:14.5px;font-weight:800;white-space:nowrap}

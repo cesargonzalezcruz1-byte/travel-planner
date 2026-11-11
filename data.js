@@ -694,6 +694,31 @@ async function getModel(tryIndex = 0, schema = EXTRACT_SCHEMA) {
   return aiM.getGenerativeModel(ai, { model: AI_MODELS[tryIndex],
     generationConfig: { responseMimeType: "application/json", responseJsonSchema: schema, temperature: 0 } });
 }
+// "Just type it": one typed line ("Dinner at Hartwood, Thursday 8 pm") turned into an activity, expense, to-do or note - the app then opens the filled-in form to check
+export async function quickAddAI(line, ctx) {
+  if (DEMO) { await new Promise((r) => setTimeout(r, 400));
+    const tm = (line.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i) || []), h = tm[1] ? (+tm[1] % 12) + (/pm/i.test(tm[3]) ? 12 : 0) : null;
+    if (/^\s*(buy|book|renew|call|pay|remember)\b/i.test(line)) return { kind: "todo", text: line.trim(), date: "", time: "", place: "", who: [], amount: "", currency: "", cat: "" };
+    if (/[$€£]\s?\d|\d\s?(usd|mxn|aud|pesos|dollars)/i.test(line)) return { kind: "expense", text: line.replace(/[$€£]?\s?\d[\d.,]*\s?(usd|mxn|aud|pesos|dollars)?/i, "").trim(), date: ctx.date, time: "", place: "", who: [], amount: (line.match(/\d[\d.,]*/) || [""])[0].replace(",", ""), currency: /mxn|pesos/i.test(line) ? "MXN" : "USD", cat: "food" };
+    return { kind: "activity", text: line.replace(/,?\s*(on\s+)?(mon|tue|wed|thu|fri|sat|sun)\w*/i, "").replace(/,?\s*(at\s+)?\d{1,2}(:\d{2})?\s*(am|pm)/i, "").trim(), date: ctx.date, time: h !== null ? `${String(h).padStart(2, "0")}:${tm[2] || "00"}` : "", place: (line.match(/\bat\s+([A-Z][\w' ]+)/) || [])[1] || "", who: [], amount: "", currency: "", cat: "" }; }
+  const schema = req({
+    kind: { type: "string", enum: ["activity", "expense", "todo", "note"], description: "activity = something to do at a place/time on the trip (meals out, tours, visits); expense = money already spent (has an amount); todo = a task to get done (buy, book, renew, call); note = a reminder or tip for a day" },
+    text: { type: "string", description: "Short clean title without the date or time, e.g. 'Dinner at Hartwood'. Keep the user's language." },
+    date: { type: "string", description: "The day it is for, YYYY-MM-DD. Work out weekday names and 'tomorrow' from the context; if none is given use the default date. For a todo this is the due date, and '' when the text gives no date." },
+    time: { type: "string", description: "Start time as 24h HH:MM, or ''" },
+    place: { type: "string", description: "Place name good for a Google Maps search, with the town if you can tell it from where they are that day, or ''" },
+    who: { type: "array", items: { type: "string" }, description: "Traveller codes named in the text (from the list given); empty = the default people" },
+    amount: { type: "string", description: "For an expense: the amount as a plain number, else ''" },
+    currency: { type: "string", description: "For an expense: ISO code (USD, MXN, AUD...), else ''" },
+    cat: { type: "string", description: "For an expense: one of food, transport, shopping, act, stay, car, flight, other; else ''" } });
+  const parts = [{ text: `A family is on (or planning) a trip: ${ctx.trip}. Today is ${ctx.today}. Default date if the text names none: ${ctx.date}. Where they are around that date: ${ctx.where || "?"} (local currency hint: ${ctx.cur || "?"}). Travellers (code = name): ${ctx.people}. Trip days run ${ctx.start} to ${ctx.end}; a weekday name means the next such day inside the trip, on or after the default date.\n\nTurn this line the user typed into one item, following the JSON schema:\n"${String(line).slice(0, 400)}"` }];
+  let lastErr;
+  for (let i = 0; i < AI_MODELS.length; i++) {
+    try { const m = await getModel(i, schema); const res = await m.generateContent(parts); return JSON.parse(res.response.text()); }
+    catch (e) { lastErr = e; if (!/not.?found|404|unsupported|model|429|exhausted|50\d|unavailable|fetch/i.test(String(e.message || e) + (e.code || ""))) break; }
+  }
+  throw new Error(String(lastErr?.message || lastErr).slice(0, 300));
+}
 // A portrait avatar drawn by AI from a photo (a data URL in, a data URL out). The picture comes back on plain white; the app then cuts the white away.
 export async function avatarAI(photoDataUrl) {
   if (DEMO) { await new Promise((r) => setTimeout(r, 500));   // demo: a simple drawn head on white, so the rest of the flow can be tried

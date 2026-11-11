@@ -1160,3 +1160,8 @@ button.dd::after{content:"";position:absolute;inset:-8px}
 .tlg-head{flex-wrap:nowrap} .tlg-t{flex:1;min-width:0;display:grid;gap:1px} .tlg-head b{min-width:0}
 .dsheet .iacts label.btn,.addrcpt{display:inline-flex;flex-direction:row;align-items:center;gap:6px;white-space:nowrap}
 .dsheet .etext{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* v2.6: "just type it" in the Add sheet */
+.addtype{display:grid;gap:6px} .addtype label{font-size:13px;font-weight:800} .addtype .row{display:flex;gap:8px;align-items:center}
+.addtype input{flex:1;min-width:0;height:50px;border-radius:25px;padding:0 16px} .addtype .btn{width:50px;height:50px;border-radius:25px;padding:0;font-size:20px;flex:none}
+.addtype p{margin:0}
+.addsheet label.addrcpt,.dsheet .iacts label.btn{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:6px;width:auto} .addsheet label.addrcpt svg,.dsheet .iacts label.btn svg{flex:none;width:16px;height:16px}

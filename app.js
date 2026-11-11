@@ -816,7 +816,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.5";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.6";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2529,6 +2529,8 @@ function addSheet() {
   m.innerHTML = `<div class="sheet addsheet"><div class="ds-head"><h3>Add to the Trip</h3><button type="button" class="btn tiny" data-x aria-label="Close">✕</button></div>
     <p class="muted small">For ${esc(WD[D(date).getDay()])} ${esc(shortDate(date))}${ui.day ? "" : " - you can change the date in the form"}.</p>
     ${ed ? `<button type="button" class="addscan" data-add="scan"><i>${I.scan || I.clip}</i><span><b>Scan a Booking</b><small>A photo, PDF or screenshot. The app reads it and puts it on the right days.</small></span></button>` : ""}
+    ${ed ? `<form class="addtype" data-addtype><label for="addline">Or just type it</label><div class="row"><input id="addline" name="line" placeholder="Dinner at Hartwood, Thursday 8 pm" autocomplete="off" maxlength="300"><button class="btn primary" aria-label="Add what I typed">→</button></div>
+      <p class="muted small" data-addnote>The app works out the day, the time and what it is. You check it before it saves.</p></form>` : ""}
     <div class="addgrid">${ed ? tile("activity", ICON.act || I.pin, "Activity", "k-act") + tile("expense", I.receipt || ICON.wallet, "Expense", "k-exp") : ""}${tile("journal", I.camera, "Journal Post or Photo", "k-jrn")}${tile("todo", I.check, "To-do", "k-todo")}${ed ? tile("comment", I.chat, "Note for the Day", "k-note") : ""}</div>
     ${ed ? `<div class="addhand"><span class="muted small">Add by hand:</span><button type="button" class="btn small" data-add="flight">Flight</button><button type="button" class="btn small" data-add="stay">Stay</button><button type="button" class="btn small" data-add="car">Car</button></div>
       <label class="addrcpt btn small">${I.receipt || ""}Scan a Receipt<input type="file" accept="image/*,application/pdf" hidden data-add-rcpt></label>` : ""}</div>`;
@@ -2543,6 +2545,20 @@ function addSheet() {
     if (k === "todo") return todoSheet();
     return itemForm({ type: k, who, start: date, end: k === "flight" ? date : addDays(date, 1), status: "booked" });
   });
+  const tf = m.querySelector("[data-addtype]");
+  if (tf) tf.onsubmit = async (e) => { e.preventDefault(); const line = tf.line.value.trim(), note = tf.querySelector("[data-addnote]"), btn = tf.querySelector("button"); if (!line) return;
+    btn.disabled = true; note.textContent = "Working it out…";
+    try {
+      const S = budgetSettings(), st = tonightStay(p, date) || itemsFor(p).find((i) => i.type === "stay" && i.start <= date && date <= i.end);
+      const r = await data.quickAddAI(line, { trip: `${t.title || ""} (${tripCountries().map(countryName).join(", ")})`, today, date, start: t.start, end: t.end, where: st ? [st.name, st.address].filter(Boolean).join(", ") : "", cur: S.home, people: ALL_CODES().map((c) => `${c} = ${NAME(c)}`).join(", ") });
+      const d2 = /^\d{4}-\d{2}-\d{2}$/.test(r.date || "") ? r.date : date, w2 = (r.who || []).filter((c) => ALL_CODES().includes(c)), txt = String(r.text || line).trim();
+      close();
+      if (r.kind === "todo") { await data.saveTodo({ text: txt.slice(0, 200), due: /^\d{4}-\d{2}-\d{2}$/.test(r.date || "") && r.date >= today ? r.date : "", who: w2[0] || "" }); toast("To-do added"); return todoSheet(); }
+      if (r.kind === "expense") return expenseForm({ text: txt, amount: r.amount ? +String(r.amount).replace(/[^\d.]/g, "") || "" : "", currency: r.currency || undefined, cat: r.cat || undefined, date: d2 });
+      const inTrip = ds.includes(d2) ? d2 : date, others2 = PEOPLE().filter((o) => o !== p);
+      return entryForm({ kind: r.kind === "note" ? "comment" : "activity", date: inTrip, endDate: inTrip, who: w2.length ? w2 : [p, ...others2.filter((o) => together(p, o, inTrip))], status: "planned", confirmed: false, text: (r.kind !== "note" && r.time ? r.time + " " : "") + txt, place: r.place || "" });
+    } catch (x) { console.error(x); btn.disabled = false; note.textContent = "Couldn't work that out: " + (x.message || x) + " - try the buttons below."; }
+  };
   const rc = m.querySelector("[data-add-rcpt]"); if (rc) rc.onchange = () => { const f = rc.files[0]; close(); if (f) scanReceipt(f, ui.day || defaultExpenseDate()); };
 }
 // Timeline: the days grouped under the stay you're sleeping at that night, with the car(s) you have

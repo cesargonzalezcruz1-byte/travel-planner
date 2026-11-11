@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.26";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.27";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2595,7 +2595,7 @@ function detailSheet(ref, date) {
     m.innerHTML = `<div class="sheet dsheet"><div class="ds-head"><b>${kind === "item" ? { flight: "Flight", stay: "Stay", car: "Car" }[cur.type] || "Booking" : cur.kind === "comment" ? "Note" : "Activity"}</b><button type="button" class="btn tiny" data-x aria-label="Close">✕</button></div>
       ${kind === "item" ? itemCard(cur, d) : `<ul class="entries">${entryLi(cur)}</ul>`}
       ${kind === "item" && cur.type === "stay" ? `<p class="muted small">${shortDate(cur.start)} – ${shortDate(cur.end)} · ${dayDiff(cur.start, cur.end)} night${dayDiff(cur.start, cur.end) === 1 ? "" : "s"}</p>` : ""}
-      ${isEditor() ? `<details class="ds-more"><summary>More…</summary><button type="button" class="btn small danger" data-ds-del><i class="ic16">${I.trash}</i>Delete ${kind === "item" ? "This Booking" : "This"}</button></details>` : ""}</div>`;
+      ${isEditor() ? `<div class="ds-foot"><button type="button" class="btn small danger" data-ds-del><i class="ic16">${I.trash}</i>Delete This ${kind === "item" ? { flight: "Flight", stay: "Stay", car: "Car" }[cur.type] || "Booking" : cur.kind === "comment" ? "Note" : "Activity"}</button></div>` : ""}</div>`;
     const keep = root; root = m; try { wireCards(); wireCheckins(); } finally { root = keep; }
     m.querySelector("[data-x]").onclick = close;
     m.querySelectorAll("[data-edit-item],[data-edit-entry]").forEach((b) => b.addEventListener("click", close));

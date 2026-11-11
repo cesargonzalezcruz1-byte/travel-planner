@@ -1217,3 +1217,5 @@ html:has(body.has-tabs){scroll-padding-top:176px}
 .ov-head .ovpick .pop button{font-weight:700} .ov-head .ovpick .pop button.on{background:var(--soft)}
 .ov-act{z-index:2;margin:3px 2px;border:0;border-radius:11px;background:var(--act-t);color:var(--act-x);display:flex;align-items:center;justify-content:center;gap:4px;padding:0 8px;min-width:0;cursor:pointer;font:inherit}
 .ov-act b{font-size:10.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0} .ov-act i{font-style:normal;font-size:10px;font-weight:800;flex:none;opacity:.8}
+/* v2.27: details card - Delete sits at the bottom (it still asks to confirm) */
+.ds-foot{border-top:1px solid var(--line);padding-top:12px;display:flex;justify-content:center}

@@ -723,7 +723,7 @@ function tripForm(t) {
         .map((f) => ({ id: f.id, name: f.name.trim() || joinNames(f.members.map((c) => extended.find((p) => p.code === c)?.name || c)), members: f.members }));
       const home = form.querySelector("[name=homeaddr]");
       if (home && home.value.trim() !== home.dataset.was) await data.saveHomeAddress(t.id, home.value.trim());
-      const id = await data.saveTrip({ title: fd.get("title").trim(), start: fd.get("start"), end: fd.get("end"), travellers, extended, families: famList, theme: fd.get("theme") || "ink" }, isNew ? null : t.id);
+      const id = await data.saveTrip({ title: fd.get("title").trim(), start: fd.get("start"), end: fd.get("end"), travellers, extended, families: famList, theme: fd.get("theme") || "ink", ...(isNew && !avPhotos() ? { avStyle: "initials" } : {}) }, isNew ? null : t.id);
       if (isNew) { ui.person = travellers[0].code; localStorage.setItem("tp.person", ui.person); routeTo(id); }
     }, isNew ? null : async () => {
       const typed = prompt(`This deletes "${t.title}" with all its bookings, activities and documents for everyone. Type DELETE to confirm.`);
@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.30";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.31";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -969,7 +969,11 @@ function drawTabs(show) {
 
 // ---- avatars: a photo or a picture chosen in the Traveller Profile, framed in the person's colour (initials when none is set)
 const allPeople = () => (store.trip?.travellers || []).concat(store.trip?.extended || []);
+// Photos/avatars or plain initials in the traveller circles: one choice for the whole app, set by an editor in Traveller Profiles.
+// It is kept on the trips (like the photos themselves) so the family login follows it too.
+const avPhotos = () => ((store.trip && store.trip.avStyle) || (store.trips || []).find((t) => t.avStyle)?.avStyle || "photo") !== "initials";
 function avatarOf(code) {
+  if (!avPhotos()) return "";
   const x = allPeople().find((t) => t.code === code), per = x && personFor(x);
   return (per && per.avatar) || x?.avatar || "";
 }
@@ -985,7 +989,7 @@ const ddIn = (code) => avInner(avatarOf(code), shortInit(code), pcolor(code));  
 // a traveller row that isn't the open trip's (home cards, Trip Setup rows, profiles): x = { code, name, color, avatar, pid }
 const initIn = (x, list) => { const nm = x.name || x.code || "?", f = nm.slice(0, 1).toUpperCase();   // "C", or "Ce" when someone else in the list starts with the same letter
   return (list || []).some((t) => t !== x && t.code !== x.code && (t.name || t.code || "").slice(0, 1).toUpperCase() === f) ? f + nm.slice(1, 2).toLowerCase() : f; };
-const avObj = (x, c, list) => { const a = (personFor(x) || {}).avatar || x.avatar || ""; return `<span class="av${a ? " has" : ""}" style="--pc:${c}" title="${esc(x.name || x.code || "")}">${avInner(a, initIn(x, list), c)}</span>`; };
+const avObj = (x, c, list) => { const a = avPhotos() ? (personFor(x) || {}).avatar || x.avatar || "" : ""; return `<span class="av${a ? " has" : ""}" style="--pc:${c}" title="${esc(x.name || x.code || "")}">${avInner(a, initIn(x, list), c)}</span>`; };
 const dotsFor = (codes) => (codes.length ? `<span class="idots" role="img" aria-label="${esc(codes.map(NAME).join(", "))}">${codes.map((o) => `<i class="tdot" style="--pc:${pcolor(o)}"></i>`).join("")}</span>` : "");
 // who is who: each traveller's colour dot with their preferred name (shown at the top of the plan views)
 const whoKey = () => (ALL_CODES().length > 1 ? `<div class="whokey" role="img" aria-label="Who is who: ${esc(ALL_CODES().map(NAME).join(", "))}">${ALL_CODES().map((c) => avHtml(c)).join("")}</div>` : "");
@@ -2989,11 +2993,19 @@ function peopleList() {
   infoBox(`<h2>Traveller Profiles</h2>
     ${store.peopleError ? `<p class="jwarn small">${esc(store.peopleError)}</p>` : ""}
     <p class="muted small">Everyone you add to a trip gets a profile, so next time you can pick them in Trip Setup. A profile keeps the person's colour on every trip, their documents and private details.</p>
+    <div class="avstyle"><span><b>Show Travellers As</b><small class="muted">Applies everywhere in the app, for everyone</small></span><div class="seg-mini">${[["photo", "Photos"], ["initials", "Initials"]].map(([k, l]) => `<button type="button" data-avstyle="${k}" class="${(k === "photo") === avPhotos() ? "on" : ""}">${l}</button>`).join("")}</div></div>
     <div class="plist">${ppl.map((x) => { const st = personStatus(x);
-      return `<button type="button" class="prow2" data-openp="${esc(x.id)}" style="--pc:${upc(x.color) || "var(--muted)"}"><span class="av${x.avatar ? " has" : ""}" style="--pc:${upc(x.color) || "#5D6573"}">${avInner(x.avatar || "", (x.name || x.code || "?").slice(0, 1).toUpperCase(), upc(x.color) || "#5D6573")}</span><span class="pn">${esc(x.name || "")}<small>${(x.docs || []).length ? (x.docs || []).map((d) => docName(d.type)).join(", ") : "No documents yet"}</small></span>${st.level !== "ok" ? `<span class="dstat ${st.level}" title="${esc(st.text)}">!</span>` : ""}</button>`; }).join("") || `<p class="muted">Nobody saved yet - people are saved when you save a Trip Setup.</p>`}</div>
+      return `<button type="button" class="prow2" data-openp="${esc(x.id)}" style="--pc:${upc(x.color) || "var(--muted)"}"><span class="av${x.avatar && avPhotos() ? " has" : ""}" style="--pc:${upc(x.color) || "#5D6573"}">${avInner(avPhotos() ? x.avatar || "" : "", (x.name || x.code || "?").slice(0, 1).toUpperCase(), upc(x.color) || "#5D6573")}</span><span class="pn">${esc(x.name || "")}<small>${(x.docs || []).length ? (x.docs || []).map((d) => docName(d.type)).join(", ") : "No documents yet"}</small></span>${st.level !== "ok" ? `<span class="dstat ${st.level}" title="${esc(st.text)}">!</span>` : ""}</button>`; }).join("") || `<p class="muted">Nobody saved yet - people are saved when you save a Trip Setup.</p>`}</div>
     <button type="button" class="btn small" data-newp>+ Add Traveller Profile</button>`);
   const m = [...document.querySelectorAll(".modal")].pop();
   m.querySelector("[data-newp]").onclick = () => { m.remove(); personForm(null); };
+  m.querySelectorAll("[data-avstyle]").forEach((b) => (b.onclick = async () => {
+    const v = b.dataset.avstyle; if ((v === "photo") === avPhotos()) return;
+    m.querySelectorAll("[data-avstyle]").forEach((x) => (x.disabled = true));
+    try { for (const t of store.trips) await data.saveTrip({ avStyle: v }, t.id); if (store.trip) store.trip.avStyle = v; store.trips.forEach((t) => (t.avStyle = v));
+      m.remove(); render(); peopleList(); toast(v === "photo" ? "Showing photos and avatars" : "Showing initials"); }
+    catch (e) { m.querySelectorAll("[data-avstyle]").forEach((x) => (x.disabled = false)); toast("Couldn't save: " + (e.code || e.message)); }
+  }));
 }
 // Copy a profile colour onto every trip the person is on (trips keep a copy so the family login, which can't read profiles, sees it too)
 async function syncPersonColor(per) {

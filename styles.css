@@ -1224,3 +1224,6 @@ html:has(body.has-tabs){scroll-padding-top:176px}
 .pp small{font-size:11px;font-weight:700;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pp .av{opacity:.4;filter:grayscale(.7);transition:opacity .15s,filter .15s} .pp.on .av{opacity:1;filter:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--pc) 35%,transparent)}
 .pp.on{color:var(--ink)} .pp.on::after{content:"✓";position:absolute;top:-4px;right:0;width:18px;height:18px;border-radius:9px;background:#1F8A4C;color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;box-shadow:0 0 0 2px var(--card)}
+/* v2.31: Traveller Profiles - choose photos/avatars or initials for the whole app */
+.avstyle{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;padding:10px 12px;border-radius:14px;background:var(--soft);margin:4px 0 10px} .avstyle span{display:grid} .avstyle small{font-size:12px}
+.avstyle{background:transparent;border:1px solid var(--line)}

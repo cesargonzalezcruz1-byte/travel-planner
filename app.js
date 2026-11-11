@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.19";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.20";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2399,7 +2399,8 @@ function renderTimeline() {
     </section>`;
   });
   const groups = tlGroups(p, ds).map((g) => { const first = g.days[0], last = g.days.at(-1), st = g.stay;
-    const cars = itemsFor(p).filter((i) => i.type === "car" && i.start <= last && i.end >= first);
+    const cars = itemsFor(p).filter((i) => i.type === "car" && i.start <= last && i.end >= first)
+      .sort((a, b) => (a.start || "").localeCompare(b.start || "") || (a.pickupTime || "").localeCompare(b.pickupTime || "") || (a.end || "").localeCompare(b.end || ""));   // earliest pick-up first, so a returned car sits above the next one
     return `<section class="tlg"><${st ? `button type="button" data-detail="item:${esc(st.id)}"` : "div"} class="tlg-head${st ? "" : " none"}"><i>${st ? ICON.stay : ICON.flight}</i><span class="tlg-t"><b>${st ? esc(st.short || st.name) + (areaOf(st) && !(st.short || st.name).includes(areaOf(st)) ? `, ${esc(areaOf(st))}` : "") : "On the Move"}${st && st.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>
         <small>${st ? `${shortDate(st.start)} – ${shortDate(st.end)} · ${dayDiff(st.start, st.end)} night${dayDiff(st.start, st.end) === 1 ? "" : "s"}` : first === last ? shortDate(first) : `${shortDate(first)} – ${shortDate(last)}`}</small></span>${st ? `<span class="crow-go">›</span>` : ""}</${st ? "button" : "div"}>
       <div class="tlg-body"><span class="tlg-rail${st ? "" : " none"}"></span><div class="tlg-days">${cars.map((c) => `<button type="button" class="tlg-car" data-detail="item:${esc(c.id)}"><i>${ICON.car}</i>${esc([c.company, c.vehicle].filter(Boolean).join(" · ") || "Car")} <span>· ${shortDate(c.start)} – ${shortDate(c.end)}</span></button>`).join("")}

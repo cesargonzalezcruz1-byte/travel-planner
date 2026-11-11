@@ -1191,3 +1191,8 @@ body.has-tabs:has(.whokey) .tabbar{box-shadow:none}
 .pill[data-detail]{cursor:pointer}
 /* v2.17: timeline start-time dots are black (same as the date pill) so they are not mistaken for traveller dots */
 .tl .st-dot{background:var(--ink)}
+/* v2.19: Get Ready uses small tick boxes, the same as inside To-dos */
+.rtick{width:20px;height:20px;border-radius:4px;border:2px solid var(--muted);position:relative;margin:1px 2px 0 0}
+.rtick::before{content:"";position:absolute;inset:-12px}
+.rtick.on{background:#1F8A4C;border-color:#1F8A4C}
+.rtick.on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}

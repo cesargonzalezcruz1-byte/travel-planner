@@ -38,7 +38,8 @@ function parseRoute() {
 }
 const routeTo = (tripId, day, replace = false) => {
   const h = tripId ? `#/t/${encodeURIComponent(tripId)}${day ? "/" + day : ""}` : "#/";
-  if (replace) history.replaceState(null, "", h); else history.pushState(null, "", h);
+  // If a pop-up's own history step is the current one, reuse it rather than stacking a new page on top of it.
+  if (replace || history.state?.m) history.replaceState(null, "", h); else history.pushState(null, "", h);
   parseRoute(); render();
 };
 const days = () => {
@@ -822,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.17";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.18";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2481,7 +2482,32 @@ function openDay(date, pane = null) {
   sessionStorage.setItem("tp.wscroll", window.scrollY);
   routeTo(ui.tripId, date); window.scrollTo(0, 0);
 }
-window.onpopstate = () => { parseRoute(); render(); };
+// The phone's Back button closes the top pop-up (details card, form, sheet) first, before leaving the page.
+// Every pop-up gets its own step in the browser history; closing it any other way quietly removes that step.
+const openModals = () => [...document.body.children].filter((x) => x.classList?.contains("modal"));
+let skipPop = 0;
+const modalWatch = new MutationObserver((recs) => {
+  let net = 0;
+  for (const r of recs) {
+    r.addedNodes.forEach((n) => { if (n.classList?.contains("modal")) net++; });
+    r.removedNodes.forEach((n) => { if (n.classList?.contains("modal")) net--; });
+  }
+  if (net > 0) for (let k = 0; k < net; k++) history.pushState({ m: (history.state?.m || 0) + 1 }, "", location.href);
+  else if (net < 0 && history.state?.m) { const n = Math.min(-net, history.state.m); skipPop++; history.go(-n); }
+});
+modalWatch.observe(document.body, { childList: true });
+window.onpopstate = () => {
+  if (skipPop > 0) { skipPop--; return; }
+  const top = openModals().pop();
+  if (top) {
+    top.dispatchEvent(new MouseEvent("click"));                       // same as tapping outside the card
+    if (top.isConnected) top.querySelector("[data-cancel],[data-x]")?.click();
+    if (top.isConnected) top.remove();
+    modalWatch.takeRecords();                                         // this close already used its history step
+    return;
+  }
+  parseRoute(); render();
+};
 
 // ---------------------------------------------------------------- day view
 function roleOn(i, date) {

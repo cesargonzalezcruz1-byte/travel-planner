@@ -246,7 +246,7 @@ function renderHome() {
     const days = t.start && t.end ? dayDiff(t.start, t.end) + 1 : 0;
     const status = t.start <= today && today <= t.end ? `<span class="tstat now">On now</span>` : t.start > today ? `<span class="tstat">in ${dayDiff(today, t.start)} days</span>` : `<span class="tstat past">Past</span>`;
     return `<article class="tripcard" data-open="${esc(t.id)}" role="button" tabindex="0">
-      <div class="tc-top"><h3>${esc(t.title || "Untitled Trip")}</h3>${status}</div>${(() => { const iss = tripDocIssues(t); if (!iss.length) return "";
+      <div class="tc-top"><h3>${esc(t.title || "Untitled Trip")}${tripYears(t) ? `<small class="tc-yr">(${tripYears(t)})</small>` : ""}</h3>${status}</div>${(() => { const iss = tripDocIssues(t); if (!iss.length) return "";
         const lvl = iss[0].st.level, who = [...new Set(iss.map((x) => x.per.code))];
         return `<button type="button" class="tc-warn ${lvl}" data-docwarn="${esc(t.id)}" title="${esc(iss.map((x) => (x.per.name || x.per.code) + ": " + x.st.text).join("\n"))}"><i class="ic16">${I.warn}</i>${lvl === "bad" ? "Document problem" : "Check documents"} · ${who.map(esc).join(", ")}</button>`; })()}
       <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
@@ -675,7 +675,8 @@ function tripForm(t) {
       <button type="button" class="btn tiny danger" data-rm title="Remove from this trip" aria-label="Remove ${esc(v.name)} from this trip">✕</button></div>`; };
   const savedPick = (kind) => `<select class="savedpick" data-pick="${kind}" aria-label="Add someone who has a profile"><option value="">${kind === "t" ? "+ Add Traveller" : "+ Add Person"}</option>${[...store.people].sort((a, b) => (a.name || "").localeCompare(b.name || "")).map((x) => `<option value="${esc(x.id)}">${esc(x.name || x.code)} (${esc(x.code)})</option>`).join("")}</select>`;
   modal(`<h3>${isNew ? "New Trip" : "Trip Setup"}</h3>
-    <label>Trip Name<input name="title" value="${esc(t.title)}" placeholder="e.g. Japan 2027" required></label>
+    <label>Trip Name<input name="title" value="${esc(t.title)}" placeholder="e.g. Japan" required></label>
+    <p class="muted small" style="margin-top:-6px">Just the name - the year is added from the dates and shown in brackets under it.</p>
     <div class="row"><label>Start<input type="date" name="start" value="${t.start || ""}" required></label><label>End<input type="date" name="end" value="${t.end || ""}" required></label></div>
     <fieldset class="pbox"><legend>Travellers (Each Gets Their Own Itinerary)</legend>
       <div id="trav">${(t.travellers || []).map((p, k) => row(p, "t", k)).join("")}</div>
@@ -816,7 +817,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.8";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.9";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -892,7 +893,7 @@ function header(opts = {}) {
   return `<header class="hero">
     <div class="hero-top">
       <button class="iconbtn" data-home aria-label="All trips" title="All trips">${ICON.menu}</button>
-      <div class="hero-title"><span class="hero-sub">${esc(sub)}</span><span class="hero-name">${esc(t.title || "Travel Planner")}</span></div>
+      <div class="hero-title"><span class="hero-sub">${esc(sub)}</span><span class="hero-name">${esc(t.title || "Travel Planner")}</span>${tripYears(t) ? `<span class="hero-yr">(${tripYears(t)})</span>` : ""}</div>
       <details class="more who">${tabs ? `<summary class="pbtn2" aria-label="Traveller: ${esc(NAME(me))} - change" title="Change traveller">${avHtml(me)}<span>${esc(NAME(me))}</span></summary>`
         : `<summary class="pbtn" style="--pc:${mc};--pi:${inkOn(mc)}" aria-label="Traveller: ${esc(NAME(me))} - change" title="Change traveller">${esc(me)}</summary>`}
         <div class="pop"><span class="pop-role">Show itinerary for</span>
@@ -935,6 +936,8 @@ function wireHeader() {
 }
 
 // ---------------------------------------------------------------- v2 navigation: labelled tabs along the bottom (one view); the split view keeps its icon bars
+// the trip's year(s), worked out from its dates: "2026" or "2026-27" (shown in brackets under the trip name)
+const tripYears = (t) => { const a = String(t?.start || "").slice(0, 4), b = String(t?.end || "").slice(0, 4); return !a ? "" : !b || a === b ? a : a.slice(0, 2) === b.slice(0, 2) ? `${a}-${b.slice(2)}` : `${a}-${b}`; };
 const PLAN = ["overview", "timeline", "journey"];
 const planMode = () => { const v = localStorage.getItem("tp.plan"); return PLAN.includes(v) ? v : "overview"; };
 const tabOf = () => (ui.day ? "plan" : ui.view === "now" ? "today" : PLAN.includes(ui.view) ? "plan" : ui.view);

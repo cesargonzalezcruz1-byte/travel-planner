@@ -1165,3 +1165,6 @@ button.dd::after{content:"";position:absolute;inset:-8px}
 .addtype input{flex:1;min-width:0;height:50px;border-radius:25px;padding:0 16px} .addtype .btn{width:50px;height:50px;border-radius:25px;padding:0;font-size:20px;flex:none}
 .addtype p{margin:0}
 .addsheet label.addrcpt,.dsheet .iacts label.btn{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:6px;width:auto} .addsheet label.addrcpt svg,.dsheet .iacts label.btn svg{flex:none;width:16px;height:16px}
+/* v2.9: the trip's year(s) in brackets under its name */
+.hero-yr{font-size:13px;font-weight:700;opacity:.8;line-height:1.2}
+.tc-top h3{display:flex;flex-direction:column;gap:1px} .tc-yr{font-size:13px;font-weight:700;color:var(--muted)}

@@ -7,7 +7,7 @@
   --line:#ECEAF2; --line2:#D9D6E3; --row-alt:#FAF9FC; --row-wk:#F1EDF9; --ov-wk:#EFEEF4; --wk-ink:#6D3FD1;
   --flight:#2F6FED; --flight-t:#DDE8FD; --flight-x:#173E8C;
   --stay:#7A4BD6;   --stay-t:#ECE3FC;   --stay-t2:#D9C7F7; --stay-x:#3E1E7A;
-  --car:#5D6573;    --car-t:#ECEDF1;    --car-t2:#D6D9E0;  --car-x:#2E3340;
+  --car:#0E8A84;    --car-t:#D8F1EE;    --car-t2:#BCE5E0;  --car-x:#0A4F4B;
   --act:#E0457B;    --act-t:#FCE3EE;    --act-x:#7A1440;
   --food:#C77D0A; --transport:#0B8FB3; --shopping:#5E8F1A; --other:#A5A9B6;
   --today:#8E2F7E; --today-bg:#F6E3F1; --today-ink:#5E1A52;
@@ -20,7 +20,7 @@
   --line:#EEE8F6; --line2:#DCD3EA; --row-alt:#FBF9FD; --row-wk:#F6EEF8; --ov-wk:#F0EDF5; --wk-ink:#C2367A;
   --flight:#3D6BE0; --flight-t:#DCE6FB; --flight-x:#1D3F8F;
   --stay:#C2367A;   --stay-t:#FBE1EC;   --stay-t2:#F5C6DA; --stay-x:#7A1846;
-  --car:#5D6573;    --car-t:#E9EAEE;    --car-t2:#D3D6DD;  --car-x:#2F3340;
+  --car:#0E8A84;    --car-t:#D6F0EC;    --car-t2:#B9E3DD;  --car-x:#0A4F4B;
   --act:#7C4DDB;    --act-t:#ECE4FB;    --act-x:#3E1E7A;
   --today:#1F8A5B; --today-bg:#E1F4E8; --today-ink:#125C3B;
 }
@@ -31,7 +31,7 @@
   --line:#2A2933; --line2:#3A3846; --row-alt:#1E1E27; --row-wk:#24212F; --ov-wk:#25242E; --wk-ink:#FF6FAE;
   --flight:#6E9BFF; --flight-t:#1F3159; --flight-x:#C9DAFF;
   --stay:#A47BFF;   --stay-t:#2E2350;   --stay-t2:#40306E; --stay-x:#DDD0FF;
-  --car:#9AA3B2;    --car-t:#2A2D36;    --car-t2:#3A3E49;  --car-x:#D9DDE6;
+  --car:#4FD1C5;    --car-t:#12393A;    --car-t2:#1B4F4F;  --car-x:#B9F1EA;
   --act:#FF5FA2;    --act-t:#3A1F2E;    --act-x:#FFC2DC;
   --food:#E0A030; --transport:#2DB3D6; --shopping:#8CC63F; --other:#6B6F7C;
   --today:#3DD68C; --today-bg:#123726; --today-ink:#9BF2C5;
@@ -1217,4 +1217,4 @@ html:has(body.has-tabs){scroll-padding-top:176px}
 /* v2.27: details card - Delete sits at the bottom (it still asks to confirm) */
 .ds-foot{border-top:1px solid var(--line);padding-top:12px;display:flex;justify-content:center}
 /* v2.28: Overview uses the same colours as everywhere else (flight blue, stay purple, car grey, activity pink); the car greys are a step darker here so the shapes show on the striped rows */
-.ov{--car-t:#D6D9E0;--car-t2:#C2C6D0} :root[data-theme="midnight"] .ov{--car-t:#3A3E49;--car-t2:#4B505D}
+/* v2.29: cars are teal green in every theme (grey was too close to the grey backgrounds) */

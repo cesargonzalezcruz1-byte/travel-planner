@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.28";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.29";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -869,9 +869,9 @@ const TDEFAULT = ["#1565C0", "#B35300", "#2E7D32", "#B0186E", "#00796B", "#C6282
 const OLDC = { "#14B8A6": "#00796B", "#0F7C72": "#00796B", "#FF7A59": "#C62828", "#D2442C": "#C62828", "#F2A93B": "#856A00", "#A15F08": "#856A00",
   "#22A06B": "#2E7D32", "#17B2D9": "#1565C0", "#0B76A0": "#1565C0", "#8BBF2B": "#2E7D32", "#5B7A14": "#2E7D32", "#C8553D": "#B35300", "#9A3F24": "#B35300", "#C9A66B": "#B0186E", "#7A5C3E": "#B0186E" };
 const upc = (h) => (h && OLDC[h.toUpperCase()]) || h;
-const THEMES = [["ink", "Ink & Violet", ["#16141F", "#2F6FED", "#7A4BD6", "#5D6573", "#E0457B"]],
-  ["lavender", "Lavender & Pink", ["#4B2A8C", "#3D6BE0", "#C2367A", "#5D6573", "#7C4DDB"]],
-  ["midnight", "Midnight (dark)", ["#000000", "#6E9BFF", "#A47BFF", "#9AA3B2", "#FF5FA2"]]];
+const THEMES = [["ink", "Ink & Violet", ["#16141F", "#2F6FED", "#7A4BD6", "#0E8A84", "#E0457B"]],
+  ["lavender", "Lavender & Pink", ["#4B2A8C", "#3D6BE0", "#C2367A", "#0E8A84", "#7C4DDB"]],
+  ["midnight", "Midnight (dark)", ["#000000", "#6E9BFF", "#A47BFF", "#4FD1C5", "#FF5FA2"]]];
 function pcolor(code) {
   const tr = store.trip?.travellers || []; const k = tr.findIndex((t) => t.code === code);
   const per = k >= 0 && tr[k].pid && store.people.find((x) => x.id === tr[k].pid);   // the traveller's profile colour wins (editors)

@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.45";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.46";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -3515,9 +3515,30 @@ async function shrinkScan(file, name, max = 2000) {
   try { const img = await loadImg(url), k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight)), cv = document.createElement("canvas");
     cv.width = Math.round(img.naturalWidth * k); cv.height = Math.round(img.naturalHeight * k); cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
     const blob = await new Promise((res) => cv.toBlob(res, "image/jpeg", 0.85));
-    return new File([blob || file], name, { type: blob ? "image/jpeg" : file.type || "image/jpeg" }); }
+    const out = new File([blob || file], name, { type: blob ? "image/jpeg" : file.type || "image/jpeg" });
+    if (blob) { out._w = cv.width; out._h = cv.height; }   // size is needed to place it on a PDF page
+    return out; }
   catch (e) { return new File([file], name, { type: file.type || "image/jpeg" }); }
   finally { URL.revokeObjectURL(url); }
+}
+// Several JPEG photos -> one PDF, a page per photo (each page is the shape of its photo). The JPEG data is placed in the PDF as it
+// is, so nothing is re-compressed and no library is needed. pages: [{ bytes: Uint8Array, w, h }] -> Uint8Array
+function photosToPdf(pages) {
+  const enc = new TextEncoder(), chunks = [], offs = []; let len = 0;
+  const put = (x) => { const b = typeof x === "string" ? enc.encode(x) : x; chunks.push(b); len += b.length; };
+  const obj = (n, body, stream) => { offs[n] = len; put(`${n} 0 obj\n${body}\n`); if (stream) { put("stream\n"); put(stream); put("\nendstream\n"); } put("endobj\n"); };
+  put("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".replace(/[\x80-\xff]/g, "?"));
+  const N = pages.length, kid = (k) => 3 + k * 3;
+  obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2, `<< /Type /Pages /Count ${N} /Kids [${pages.map((_, k) => `${kid(k)} 0 R`).join(" ")}] >>`);
+  pages.forEach((pg, k) => { const W = 595, H = Math.round(W * pg.h / pg.w), n = kid(k), draw = enc.encode(`q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`);
+    obj(n, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${n + 2} 0 R >> >> /Contents ${n + 1} 0 R >>`);
+    obj(n + 1, `<< /Length ${draw.length} >>`, draw);
+    obj(n + 2, `<< /Type /XObject /Subtype /Image /Width ${pg.w} /Height ${pg.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${pg.bytes.length} >>`, pg.bytes); });
+  const total = 3 + N * 3, xref = len;
+  put(`xref\n0 ${total}\n0000000000 65535 f \n` + Array.from({ length: total - 1 }, (_, i) => String(offs[i + 1]).padStart(10, "0") + " 00000 n \n").join(""));
+  put(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  const out = new Uint8Array(len); let o = 0; for (const c of chunks) { out.set(c, o); o += c.length; } return out;
 }
 // Camera scan: after each photo, ask whether the same booking has more (next page, back of the ticket...). When there are no more,
 // the photos are handed on as ONE booking: the first photo carries the others in .pages, so they are read together and all stored with it.
@@ -3534,7 +3555,12 @@ function photoScan(first, done) {
     m.querySelector("[data-x]").onclick = close;
     m.querySelector("[data-cammore]").onchange = (ev) => { const f = ev.target.files[0]; if (f) add(f); };
     m.querySelectorAll("[data-camdel]").forEach((b) => (b.onclick = () => { const [x] = shots.splice(+b.dataset.camdel, 1); URL.revokeObjectURL(x.url); draw(); }));
-    m.querySelector("[data-camdone]").onclick = () => {
+    m.querySelector("[data-camdone]").onclick = async () => {
+      if (shots.length > 1 && shots.every((x) => x.file.type === "image/jpeg" && x.file._w)) {   // several photos of one booking -> one PDF with a page each
+        try { const pdf = photosToPdf(await Promise.all(shots.map(async (x) => ({ bytes: new Uint8Array(await x.file.arrayBuffer()), w: x.file._w, h: x.file._h }))));
+          const file = new File([pdf], `Booking photo ${stamp} (${shots.length} pages).pdf`, { type: "application/pdf" }); close(); return done([file]); }
+        catch (e) { console.error(e); /* fall back to separate photos below */ }
+      }
       const files = shots.map((x, k) => new File([x.file], `Booking photo ${stamp}${shots.length > 1 ? ` - ${k + 1} of ${shots.length}` : ""}.jpg`, { type: x.file.type }));
       files[0].pages = files.slice(1); close(); done([files[0]]); };
   };

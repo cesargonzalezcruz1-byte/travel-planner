@@ -786,7 +786,9 @@ The file is called "${file.name}" - its name may contain the intended date.
 For a return or multi-city flight booking, list EVERY separate journey in "journeys" (e.g. BNE-AKL on 17 Sep and CHC-BNE on 5 Oct) and fill the top-level flight fields with the FIRST journey only.
 For a hotel, "end" is the check-out date (a 1-night stay from 8 Jan has end 9 Jan). Hotel check-in/check-out times are often in the policies section.
 Dates as YYYY-MM-DD, times as 24h HH:MM. Use "" only for fields that really are not in the document or don't apply to this type. Keep texts short.`;
-  const parts = [{ inlineData: { mimeType: file.type || "application/pdf", data: await toBase64(file) } }, { text: prompt }];
+  const parts = [{ inlineData: { mimeType: file.type || "application/pdf", data: await toBase64(file) } }];
+  for (const pg of file.pages || []) parts.push({ inlineData: { mimeType: pg.type || "image/jpeg", data: await toBase64(pg) } });   // more camera photos of the same booking
+  parts.push({ text: (file.pages?.length ? `There are ${file.pages.length + 1} photos: they are pages of the SAME booking - read them together as one document.\n` : "") + prompt });
   let lastErr;
   for (let i = 0; i < AI_MODELS.length; i++) {
     try {

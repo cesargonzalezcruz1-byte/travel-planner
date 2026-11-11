@@ -1238,3 +1238,16 @@ html:has(body.has-tabs){scroll-padding-top:176px}
 .jcd.off{background:transparent;color:var(--muted);opacity:.45;font-weight:500;cursor:default}
 .jcd.has{background:var(--stay-t);color:var(--stay-x)} .jcd.today{box-shadow:inset 0 0 0 2px var(--today)} .jcd.on{background:var(--ink);color:var(--card)}
 .jcd b{position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;border-radius:8px;background:var(--stay);color:#fff;font-size:10px;line-height:16px;text-align:center;padding:0 3px;box-shadow:0 0 0 2px var(--card)}
+/* v2.34: take a photo of a booking with the camera; after each photo the app asks if the same booking has more */
+label.addscan{cursor:pointer;margin-top:8px} .addscan.addcam{background:var(--soft);color:var(--ink)} .addscan.addcam i{color:var(--stay-x)}
+.camsheet{display:grid;gap:12px}
+.camshots{display:flex;gap:10px;overflow-x:auto;padding:4px 2px}
+.camshots figure{position:relative;flex:none;margin:0;width:96px;height:128px;border-radius:14px;overflow:hidden;background:var(--soft);display:grid;place-items:center}
+.camshots img{width:100%;height:100%;object-fit:cover} .camshots figure.busy span{font-size:26px;color:var(--muted)}
+.camshots figcaption{position:absolute;left:6px;bottom:6px;min-width:22px;height:22px;border-radius:11px;background:#000a;color:#fff;font-size:12px;font-weight:800;display:grid;place-items:center}
+.camshots figure button{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:13px;border:0;background:#000a;color:#fff;font-size:12px;cursor:pointer}
+.camq{margin:0;display:grid;gap:2px} .camq b{font-size:16px} .camact{align-items:center;gap:8px} .camact label.btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer} .camact label.disabled{opacity:.5;pointer-events:none}
+.bpages{font-weight:800;color:var(--stay-x);white-space:nowrap}
+.addscan.addcam small{color:var(--ink2)} .addscan.addcam i{background:var(--card)}
+label.addscan{display:flex;font-weight:400;margin-bottom:0} label.addscan b{font-weight:800} .camact{flex-wrap:wrap} .camact label.btn,.camact .btn{white-space:nowrap}
+.camact label.btn{flex:none;width:auto;min-width:max-content;padding-left:14px;padding-right:16px}

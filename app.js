@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.33";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.34";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2639,7 +2639,8 @@ function addSheet() {
   const tile = (k, icon, label, cls) => `<button type="button" class="addtile ${cls}" data-add="${k}"><i>${icon}</i>${label}</button>`;
   m.innerHTML = `<div class="sheet addsheet"><div class="ds-head"><h3>Add to the Trip</h3><button type="button" class="btn tiny" data-x aria-label="Close">✕</button></div>
     <p class="muted small">For ${esc(WD[D(date).getDay()])} ${esc(shortDate(date))}${ui.day ? "" : " - you can change the date in the form"}.</p>
-    ${ed ? `<button type="button" class="addscan" data-add="scan"><i>${I.scan || I.clip}</i><span><b>Scan a Booking</b><small>A photo, PDF or screenshot. The app reads it and puts it on the right days.</small></span></button>` : ""}
+    ${ed ? `<button type="button" class="addscan" data-add="scan"><i>${I.scan || I.clip}</i><span><b>Scan a Booking</b><small>A photo, PDF or screenshot. The app reads it and puts it on the right days.</small></span></button>
+      <label class="addscan addcam"><i>${I.camera}</i><span><b>Take a Photo of a Booking</b><small>Use the camera on a paper ticket, voucher or screen. The app reads it and keeps the photo with the booking.</small></span><input type="file" accept="image/*" capture="environment" hidden data-add-cam></label>` : ""}
     ${ed ? `<form class="addtype" data-addtype><label for="addline">Or just type it</label><div class="row"><input id="addline" name="line" placeholder="Dinner at Hartwood, Thursday 8 pm" autocomplete="off" maxlength="300"><button class="btn primary" aria-label="Add what I typed">→</button></div>
       <p class="muted small" data-addnote>The app works out the day, the time and what it is. You check it before it saves.</p></form>` : ""}
     <div class="addgrid">${ed ? tile("activity", ICON.act || I.pin, "Activity", "k-act") + tile("expense", I.receipt || ICON.wallet, "Expense", "k-exp") : ""}${tile("journal", I.camera, "Journal Post or Photo", "k-jrn")}${tile("todo", I.check, "To-do", "k-todo")}${ed ? tile("comment", I.chat, "Note for the Day", "k-note") : ""}</div>
@@ -2670,6 +2671,7 @@ function addSheet() {
       return entryForm({ kind: r.kind === "note" ? "comment" : "activity", date: inTrip, endDate: inTrip, who: w2.length ? w2 : [p, ...others2.filter((o) => together(p, o, inTrip))], status: "planned", confirmed: false, text: (r.kind !== "note" && r.time ? r.time + " " : "") + txt, place: r.place || "" });
     } catch (x) { console.error(x); btn.disabled = false; note.textContent = "Couldn't work that out: " + (x.message || x) + " - try the buttons below."; }
   };
+  const cam = m.querySelector("[data-add-cam]"); if (cam) cam.onchange = () => { const f = cam.files[0]; close(); if (f) photoScan(f, (files) => bulkAttach(files)); };
   const rc = m.querySelector("[data-add-rcpt]"); if (rc) rc.onchange = () => { const f = rc.files[0]; close(); if (f) scanReceipt(f, ui.day || defaultExpenseDate()); };
 }
 // Timeline: the days grouped under the stay you're sleeping at that night, with the car(s) you have
@@ -3486,7 +3488,42 @@ function bookingChanges(item, x) {
   return CHG_FIELDS[item.type].map(([k, label, kind]) => { const a = norm[kind](item[k]), b = norm[kind](x[k]);
     return a && b && a !== b ? { k, label, old: show[kind](item[k]), nu: show[kind](x[k]), val: kind === "t" ? hhmm(x[k]) : x[k] } : null; }).filter(Boolean);
 }
-function bulkAttach() {
+// A camera photo is made smaller before it is read and stored (phone photos are 5-12 MB each).
+async function shrinkScan(file, name, max = 2000) {
+  const url = URL.createObjectURL(file);
+  try { const img = await loadImg(url), k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight)), cv = document.createElement("canvas");
+    cv.width = Math.round(img.naturalWidth * k); cv.height = Math.round(img.naturalHeight * k); cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    const blob = await new Promise((res) => cv.toBlob(res, "image/jpeg", 0.85));
+    return new File([blob || file], name, { type: blob ? "image/jpeg" : file.type || "image/jpeg" }); }
+  catch (e) { return new File([file], name, { type: file.type || "image/jpeg" }); }
+  finally { URL.revokeObjectURL(url); }
+}
+// Camera scan: after each photo, ask whether the same booking has more (next page, back of the ticket...). When there are no more,
+// the photos are handed on as ONE booking: the first photo carries the others in .pages, so they are read together and all stored with it.
+function photoScan(first, done) {
+  const stamp = Math.random().toString(36).slice(2, 6).toUpperCase(), shots = [];   // a short tag, not a date: the reader looks for dates in file names
+  const m = document.createElement("div"); m.className = "modal"; document.body.appendChild(m);
+  const close = () => { shots.forEach((x) => URL.revokeObjectURL(x.url)); m.remove(); };
+  const draw = (busy) => {
+    m.innerHTML = `<div class="sheet camsheet"><div class="ds-head"><h3>Photo of a Booking</h3><button type="button" class="btn tiny" data-x aria-label="Close">✕</button></div>
+      <div class="camshots">${shots.map((x, k) => `<figure><img src="${x.url}" alt="Photo ${k + 1}"><button type="button" data-camdel="${k}" aria-label="Remove photo ${k + 1}">✕</button><figcaption>${k + 1}</figcaption></figure>`).join("")}${busy ? `<figure class="busy"><span>…</span></figure>` : ""}</div>
+      <p class="camq"><b>${shots.length ? "Are there more photos for the same booking?" : "No photo yet"}</b><small class="muted">${shots.length ? "For example the next page or the back of the ticket. A different booking is scanned separately." : "Take a photo to start."}</small></p>
+      <div class="row camact"><label class="btn${busy ? " disabled" : ""}"><i class="ic16">${I.camera}</i>${shots.length ? "Yes, Take Another" : "Take a Photo"}<input type="file" accept="image/*" capture="environment" hidden data-cammore ${busy ? "disabled" : ""}></label>
+        <span class="grow"></span><button type="button" class="btn primary" data-camdone ${shots.length && !busy ? "" : "disabled"}>${shots.length > 1 ? `No, Read These ${shots.length}` : "No, Read It"}</button></div></div>`;
+    m.querySelector("[data-x]").onclick = close;
+    m.querySelector("[data-cammore]").onchange = (ev) => { const f = ev.target.files[0]; if (f) add(f); };
+    m.querySelectorAll("[data-camdel]").forEach((b) => (b.onclick = () => { const [x] = shots.splice(+b.dataset.camdel, 1); URL.revokeObjectURL(x.url); draw(); }));
+    m.querySelector("[data-camdone]").onclick = () => {
+      const files = shots.map((x, k) => new File([x.file], `Booking photo ${stamp}${shots.length > 1 ? ` - ${k + 1} of ${shots.length}` : ""}.jpg`, { type: x.file.type }));
+      files[0].pages = files.slice(1); close(); done([files[0]]); };
+  };
+  const add = async (f) => { if (shots.length >= 8) return toast("8 photos is the most for one booking");
+    draw(true); const file = await shrinkScan(f, "photo.jpg"); shots.push({ file, url: URL.createObjectURL(file) }); draw(); };
+  m.addEventListener("click", (e) => { if (e.target === m) close(); });
+  if (first) add(first); else draw();
+}
+function bulkAttach(preFiles) {
+  const upAll = async (file, meta) => { await data.uploadFile(file, meta); for (const pg of file.pages || []) await data.uploadFile(pg, meta); };   // a camera scan can have several photos
   const targets = bulkTargets();
   const opts = (sel, r) => `<option value="">Don't attach</option>` + (r && r.ai && r.ai.type && r.ai.start ? `<option value="new" ${sel === "new" ? "selected" : ""}>+ New booking: ${esc(aiLabel(r.ai))}</option>` : "")
     + (r?.doc ? docOpts(sel, r) : "")
@@ -3497,7 +3534,8 @@ function bulkAttach() {
   modal(`<h2>Attach Documents</h2>
     <p class="muted small">Choose the confirmations, tickets and vouchers (or a whole folder). Each is matched to its booking - check the matches, change any that are wrong, then upload.</p>
     <div class="row bpick"><label class="btn small"><i class="ic16">${I.file}</i>Choose Files<input type="file" hidden multiple data-bfiles></label>
-      <label class="btn small"><i class="ic16">${I.clip}</i>Choose Folder<input type="file" hidden webkitdirectory multiple data-bfolder></label></div>
+      <label class="btn small"><i class="ic16">${I.clip}</i>Choose Folder<input type="file" hidden webkitdirectory multiple data-bfolder></label>
+      <label class="btn small"><i class="ic16">${I.camera}</i>Take Photo<input type="file" accept="image/*" capture="environment" hidden data-bcam></label></div>
     <p class="bstatus muted small"></p><div class="blist"></div>`, async () => {
     const go = rows.filter((r) => r.target && r.state !== "dup" && !(r.out && r.target === "new" && !r.outOk) && !(r.changes?.length && r.target === r.chgTarget && !r.chg) && !(r.target === "new" && !r.who?.length));
     if (!go.length) { toast("Nothing to attach"); throw Object.assign(new Error(""), { back: true }); }
@@ -3521,7 +3559,7 @@ function bulkAttach() {
       for (const mj of r.target ? r.more || [] : []) {   // the other journeys of a return ticket get the file too
         if (mj.target === "new") { const same = made.find((m) => scoreAI(m.t, mj.ai)[0] >= 80);
           if (same) mj.target = same.t.kind + ":" + same.t.id; else { const t = await createFromAI({ ...mj.ai, who: r.who || mj.ai.who }); made.push({ t }); mj.target = t.kind + ":" + t.id; } }
-        const mid = mj.target.split(":")[1]; if (!store.files.some((f) => f.itemId === mid && f.name === r.file.name)) await data.uploadFile(r.file, { itemId: mid });
+        const mid = mj.target.split(":")[1]; if (!store.files.some((f) => f.itemId === mid && f.name === r.file.name)) await upAll(r.file, { itemId: mid });
       }
       const [kind, id] = r.target.split(":");
       if (kind === "item" && r.chg === "new" && r.target === r.chgTarget) {   // the file has the new times: update the booking
@@ -3533,10 +3571,10 @@ function bulkAttach() {
           await data.saveItem({ ...it, ...patch, note: [it.note, note].filter(Boolean).join("\n") }); Object.assign(it, patch); updated++; }
       }
       setStatus(`Uploading ${++n} of ${go.length}: ${r.file.name}`);
-      if (kind === "item") { await data.uploadFile(r.file, { itemId: id });
+      if (kind === "item") { await upAll(r.file, { itemId: id });
         const it = store.items.find((x) => x.id === id), got = arrOk(r.ai?.private?.arrival);
         if (it?.type === "stay" && got) { const had = store.priv[id] || {}; await data.savePrivate(id, { ...had, arrival: mergeArr(had.arrival, got) }); arrivals++; } }
-      else { const e = store.entries.find((x) => x.id === id); await data.uploadFile(r.file, { entryId: id, date: e?.date || "" }); if (e && !e.confirmed) await data.saveEntry({ ...e, confirmed: true }); }
+      else { const e = store.entries.find((x) => x.id === id); await upAll(r.file, { entryId: id, date: e?.date || "" }); if (e && !e.confirmed) await data.saveEntry({ ...e, confirmed: true }); }
     }
     const nb = go.length - nd;
     toast([nb ? `${nb} document${nb > 1 ? "s" : ""} attached` : "", nd ? `${nd} travel document${nd > 1 ? "s" : ""} added to profiles` : "", made.length ? `${made.length} new booking${made.length > 1 ? "s" : ""} created - check them` : "", updated ? `${updated} booking${updated > 1 ? "s" : ""} updated with new times` : "", arrivals ? `arrival details added to ${arrivals} stay${arrivals > 1 ? "s" : ""}` : ""].filter(Boolean).join(", "));
@@ -3547,7 +3585,7 @@ function bulkAttach() {
   const draw = () => {
     const held = (r) => (r.out && r.target === "new" && !r.outOk) || (r.changes?.length && r.target === r.chgTarget && !r.chg) || (r.target === "new" && !r.who?.length);
     list.innerHTML = rows.map((r, i) => `<div class="brow ${held(r) ? "outw " : ""}${r.target?.startsWith("doc:") ? "pdoc" : r.target === "new" ? "new" : r.target ? "ok" : "none"}${r.state === "dup" ? " dup" : ""}">
-      <div class="bname"><i class="ic16">${I.file}</i><span>${esc(r.file.name)}</span></div>
+      <div class="bname"><i class="ic16">${I.file}</i><span>${esc(r.file.name)}${r.file.pages?.length ? ` <b class="bpages">+ ${r.file.pages.length} more photo${r.file.pages.length > 1 ? "s" : ""}</b>` : ""}</span></div>
       <select data-bi="${i}" aria-label="Booking for ${esc(r.file.name)}" ${r.state === "reading" ? "disabled" : ""}>${opts(r.target, r)}</select>
       ${r.vdate && r.target === "new" ? `<label class="bvd small">Voucher - use it on <input type="date" data-bvd="${i}" value="${r.vdate}" min="${store.trip.start}" max="${store.trip.end}"></label>` : ""}
       ${r.target === "new" && r.ai ? `<div class="bwho small${r.who?.length ? "" : " need"}"><span>${r.who?.length ? "In the itinerary of" : `${I.warn}No traveller's name found on it - whose itinerary is it for?`}</span>
@@ -3627,6 +3665,8 @@ function bulkAttach() {
   };
   m.querySelector("[data-bfiles]").onchange = (ev) => pick(ev.target.files);
   m.querySelector("[data-bfolder]").onchange = (ev) => pick(ev.target.files);
+  m.querySelector("[data-bcam]").onchange = (ev) => { const f = ev.target.files[0]; ev.target.value = ""; if (f) photoScan(f, (files) => pick(files)); };
+  if (preFiles?.length) pick(preFiles);
 }
 
 // ------------------------------------------------------------------ recommendations

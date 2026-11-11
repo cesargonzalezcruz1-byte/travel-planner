@@ -1218,3 +1218,9 @@ html:has(body.has-tabs){scroll-padding-top:176px}
 .ds-foot{border-top:1px solid var(--line);padding-top:12px;display:flex;justify-content:center}
 /* v2.28: Overview uses the same colours as everywhere else (flight blue, stay purple, car grey, activity pink); the car greys are a step darker here so the shapes show on the striped rows */
 /* v2.29: cars are teal green in every theme (grey was too close to the grey backgrounds) */
+/* v2.30: Notifications (This Phone) - traveller photos instead of initials pills; a tick and full colour mean "on" */
+.pushpeople{gap:12px}
+.pp,.pp.on{position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;height:auto;padding:0;border:0;border-radius:0;background:transparent;color:var(--muted);letter-spacing:0}
+.pp small{font-size:11px;font-weight:700;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp .av{opacity:.4;filter:grayscale(.7);transition:opacity .15s,filter .15s} .pp.on .av{opacity:1;filter:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--pc) 35%,transparent)}
+.pp.on{color:var(--ink)} .pp.on::after{content:"✓";position:absolute;top:-4px;right:0;width:18px;height:18px;border-radius:9px;background:#1F8A4C;color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;box-shadow:0 0 0 2px var(--card)}

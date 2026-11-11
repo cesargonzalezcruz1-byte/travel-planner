@@ -1180,3 +1180,6 @@ body.has-tabs:has(.whokey) #toast{bottom:calc(92px + 62px + env(safe-area-inset-
 body.has-tabs:has(.whokey) .tabbar{box-shadow:none}
 :root[data-theme="midnight"] .whokey{background:#1E1C29}
 @media print{.whokey{position:static!important}}
+.dpill{flex:none;display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:18px;background:var(--ink);color:var(--card);font-size:14.5px;font-weight:800;white-space:nowrap}
+.dcard.today .dpill{background:var(--stay)}
+.tl.grouped .dc-head{align-items:center}

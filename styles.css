@@ -1227,3 +1227,14 @@ html:has(body.has-tabs){scroll-padding-top:176px}
 /* v2.31: Traveller Profiles - choose photos/avatars or initials for the whole app */
 .avstyle{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;padding:10px 12px;border-radius:14px;background:var(--soft);margin:4px 0 10px} .avstyle span{display:grid} .avstyle small{font-size:12px}
 .avstyle{background:transparent;border:1px solid var(--line)}
+/* v2.33: Journal - a calendar instead of the "Another day" drop-down */
+.jcalbtn i{font-style:normal;font-size:10px;opacity:.7;transition:transform .15s} .jcalbtn.open i{transform:rotate(180deg)} .jcalbtn.open{border-color:var(--ink)}
+.jcal{background:var(--card);border-radius:20px;padding:12px 14px 14px;display:grid;gap:14px;box-shadow:0 1px 2px #0000000d}
+@media(min-width:620px){.jcal{grid-template-columns:1fr 1fr;gap:24px}}
+.jcal-m h4{margin:0 0 6px;font-size:14px;font-weight:800}
+.jcal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;justify-items:center}
+.jcal-g>i{font-style:normal;font-size:11px;font-weight:800;color:var(--muted);padding-bottom:2px}
+.jcd{position:relative;width:40px;height:40px;max-width:100%;border-radius:20px;border:0;background:var(--soft);color:var(--ink);font:inherit;font-size:14px;font-weight:700;display:grid;place-items:center;cursor:pointer;padding:0}
+.jcd.off{background:transparent;color:var(--muted);opacity:.45;font-weight:500;cursor:default}
+.jcd.has{background:var(--stay-t);color:var(--stay-x)} .jcd.today{box-shadow:inset 0 0 0 2px var(--today)} .jcd.on{background:var(--ink);color:var(--card)}
+.jcd b{position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;border-radius:8px;background:var(--stay);color:#fff;font-size:10px;line-height:16px;text-align:center;padding:0 3px;box-shadow:0 0 0 2px var(--card)}

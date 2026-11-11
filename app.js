@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.32";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.33";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1074,6 +1074,17 @@ function renderMore() {
 }
 
 // ---------------------------------------------------------------- Journal tab: the same journal as on each day, one day at a time
+const JCAL_IC = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>`;
+// Journal calendar: the trip's months, weeks starting on Monday; trip days can be tapped, days with posts show how many.
+function jcalHtml(ds, sel, today, count) {
+  const inTrip = new Set(ds), months = [...new Set(ds.map((x) => x.slice(0, 7)))];
+  const MN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  return `<div class="jcal">${months.map((m) => { const [y, mo] = m.split("-").map(Number), first = `${m}-01`, lead = (D(first).getDay() + 6) % 7, len = new Date(y, mo, 0).getDate();
+    const cells = Array.from({ length: lead }, () => `<span></span>`);
+    for (let k = 1; k <= len; k++) { const x = `${m}-${String(k).padStart(2, "0")}`, c = inTrip.has(x) ? count(x) : 0;
+      cells.push(inTrip.has(x) ? `<button type="button" class="jcd${x === sel ? " on" : ""}${x === today ? " today" : ""}${c ? " has" : ""}" data-jcd="${x}" aria-label="${WD[D(x).getDay()]} ${longDate(x)}${c ? `, ${c} post${c === 1 ? "" : "s"}` : ""}">${k}${c ? `<b>${c}</b>` : ""}</button>` : `<span class="jcd off">${k}</span>`); }
+    return `<div class="jcal-m"><h4>${MN[mo - 1]} ${y}</h4><div class="jcal-g">${["M", "T", "W", "T", "F", "S", "S"].map((w) => `<i>${w}</i>`).join("")}${Array.from({ length: Math.ceil(cells.length / 7) }, (_, w) => cells.slice(w * 7, w * 7 + 7)).filter((w) => w.some((c) => c.includes("data-jcd"))).map((w) => w.join("")).join("")}</div></div>`; }).join("")}</div>`;   // weeks with no trip days are left out
+}
 function renderJournalTab() {
   const ds = days(), today = iso(new Date()), posts = (store.journal || []).filter((j) => !j.replyTo && j.date);
   const withPosts = [...new Set(posts.map((j) => j.date))].sort();
@@ -1083,12 +1094,14 @@ function renderJournalTab() {
   const n = (x) => posts.filter((j) => j.date === x).length;
   root.innerHTML = `${header({ views: true })}<div class="jtab">
     <div class="jtdays">${chips.map((x) => `<button type="button" class="jdchip${x === d ? " on" : ""}" data-jd="${x}">${x === today ? "Today" : `${WD[D(x).getDay()].slice(0, 3)} ${shortDate(x)}`}${n(x) ? `<b>${n(x)}</b>` : ""}</button>`).join("")}
-      <select data-jsel aria-label="Another day"><option value="">Another day…</option>${ds.map((x) => `<option value="${x}">${WD[D(x).getDay()].slice(0, 3)} ${shortDate(x)}</option>`).join("")}</select></div>
+      <button type="button" class="jdchip jcalbtn${ui.jcal ? " open" : ""}" data-jcal aria-expanded="${ui.jcal ? "true" : "false"}">${JCAL_IC}Calendar<i>▾</i></button></div>
+    ${ui.jcal ? jcalHtml(ds, d, today, n) : ""}
     <p class="jd-title"><b>${esc(WD[D(d).getDay()])} ${esc(longDate(d))}</b><button type="button" class="lnk" data-day="${d}">Open This Day ›</button></p>
     ${journalHtml(d)}</div>`;
   wireHeader(); wireDays(); wireJournal(d);
   root.querySelectorAll("[data-jd]").forEach((b) => (b.onclick = () => { ui.jdate = b.dataset.jd; render(); }));
-  root.querySelector("[data-jsel]").onchange = (e) => { if (e.target.value) { ui.jdate = e.target.value; render(); } };
+  root.querySelector("[data-jcal]").onclick = () => { ui.jcal = !ui.jcal; render(); };
+  root.querySelectorAll("[data-jcd]").forEach((b) => (b.onclick = () => { ui.jdate = b.dataset.jcd; ui.jcal = false; render(); scrollTo(0, 0); }));
 }
 
 // ---- Today, before the trip: what's left to get ready (to-dos, packing, documents)

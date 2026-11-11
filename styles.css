@@ -1189,3 +1189,5 @@ body.has-tabs:has(.whokey) .tabbar{box-shadow:none}
 .tlg-car::after{content:"›";margin-left:auto;font-size:20px;line-height:1;opacity:.55}
 .nstep.k-car[data-detail]{cursor:pointer} .nstep.k-car[data-detail] .nt{background:var(--car-t);color:var(--car-x);border-radius:14px;padding:6px 12px}
 .pill[data-detail]{cursor:pointer}
+/* v2.17: timeline start-time dots are black (same as the date pill) so they are not mistaken for traveller dots */
+.tl .st-dot{background:var(--ink)}

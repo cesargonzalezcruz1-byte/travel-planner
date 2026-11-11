@@ -250,7 +250,8 @@ function renderHome() {
         const lvl = iss[0].st.level, who = [...new Set(iss.map((x) => x.per.code))];
         return `<button type="button" class="tc-warn ${lvl}" data-docwarn="${esc(t.id)}" title="${esc(iss.map((x) => (x.per.name || x.per.code) + ": " + x.st.text).join("\n"))}"><i class="ic16">${I.warn}</i>${lvl === "bad" ? "Document problem" : "Check documents"} · ${who.map(esc).join(", ")}</button>`; })()}
       <div class="tc-dates">${t.start ? `${longDate(t.start)} – ${longDate(t.end)} · ${days} days` : "Dates not set"}</div>
-      <div class="tc-people">${(t.travellers || []).map((p, k) => avObj(p, upc(p.color) || TDEFAULT[k % TDEFAULT.length], (t.travellers || []).concat(t.extended || []))).join("")}</div>
+      <div class="tc-people">${(t.travellers || []).map((p, k) => { const a = avObj(p, upc(p.color) || TDEFAULT[k % TDEFAULT.length], (t.travellers || []).concat(t.extended || []));
+        return isEditor() ? `<button type="button" class="avbtn" data-tprof="${k}" aria-label="Open ${esc(p.name || p.code)}'s profile" title="${esc(p.name || p.code)} - open profile">${a}</button>` : a; }).join("")}</div>
       <div class="tc-ctry"><button type="button" class="cchip ask" data-task="${esc(t.id)}"><i>${I.chat}</i>Ask</button><button type="button" class="cchip map" data-tmap="${esc(t.id)}"><i>${ICON.map}</i>Trip Map</button><button type="button" class="cchip stat" data-trecap="${esc(t.id)}"><i>${I.stats}</i>Recap</button>${t.start <= today ? `<button type="button" class="cchip reelc" data-treel="${esc(t.id)}"><i>${I.camera}</i>Reel</button>` : ""}<button type="button" class="cchip sos" data-tsos="${esc(t.id)}"><i>${I.warn}</i>Emergency</button>${t.countryInfo?.codes?.length ? t.countryInfo.codes.map((c) => `<button type="button" class="cchip" data-cinfo="${esc(t.id)}" data-c="${c}"><i>${I.globe}</i>${esc(countryName(c))}</button>`).join("")
         : isEditor() && t.end >= today ? `<button type="button" class="cchip add" data-cnew="${esc(t.id)}"><i>${I.globe}</i>+ Country Info</button>` : ""}</div>
       ${isEditor() ? `<div class="tc-acts"><button class="btn tiny" data-settings="${esc(t.id)}">Setup</button></div>` : ""}
@@ -277,6 +278,10 @@ function renderHome() {
       const tr = e.target.closest("[data-trecap]"); if (tr) return showRecap(tr.dataset.trecap);
       const ts = e.target.closest("[data-tsos]"); if (ts) return emergencySheet(ts.dataset.tsos);
       const tl = e.target.closest("[data-treel]"); if (tl) return travelReel(tl.dataset.treel);
+      const tp = e.target.closest("[data-tprof]");
+      if (tp) { const t = store.trips.find((x) => x.id === el.dataset.open), p = (t?.travellers || [])[+tp.dataset.tprof]; if (!p) return;
+        return (async () => { try { const pid = (personFor(p) || {}).id || await rememberPerson({ code: p.code, name: p.name || "", fullName: p.fullName || "", color: upc(p.color) || "" }); personForm(pid); }
+          catch (x) { toast("Couldn't open the profile: " + (x.code || x.message)); } })(); }
       if (e.target.closest("[data-settings]")) return; localStorage.setItem("tp.trip", el.dataset.open); routeTo(el.dataset.open); };
     el.onkeydown = (e) => { if (e.key === "Enter") el.click(); };
   });
@@ -817,7 +822,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.11";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.12";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),

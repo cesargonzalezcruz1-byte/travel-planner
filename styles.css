@@ -1171,3 +1171,4 @@ button.dd::after{content:"";position:absolute;inset:-8px}
 /* v2.11: every avatar has the lighter edge in the traveller's colour (as on the header button) */
 .av,.dd.on{border-color:color-mix(in srgb,var(--pc) 55%,#fff)}
 :root[data-theme="midnight"] .av,:root[data-theme="midnight"] .dd.on{border-color:color-mix(in srgb,var(--pc) 60%,#fff)}
+.avbtn{border:0;background:none;padding:0;border-radius:50%;cursor:pointer;display:inline-flex}

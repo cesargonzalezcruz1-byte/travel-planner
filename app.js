@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.38";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.39";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1664,8 +1664,6 @@ function drawOverviewShapes(svg) {
   const outline = (x0, s, e, cutTop, cutBot) => {
     const xL = x0, xR = x0 + PAIR, xm = x0 + PAIR / 2, ys = s * H, ye = e * H;
     if (e === s || (cutTop && cutBot)) return [[xL, ys], [xR, ys], [xR, ye + H], [xL, ye + H]];
-    if (e - s === 1 && !cutTop && !cutBot) { const yb = ys + H, n = NECK;
-      return [[xm, ys], [xR, ys], [xR, yb], [xm + n, yb], [xm, yb + n], [xm, yb + H], [xL, yb + H], [xL, yb], [xm - n, yb], [xm, yb - n]]; }
     const pts = cutTop ? [[xL, ys], [xR, ys]] : [[xm, ys], [xR, ys]];
     if (cutBot) pts.push([xR, ye + H], [xL, ye + H]); else pts.push([xR, ye], [xm, ye], [xm, ye + H], [xL, ye + H]);
     if (!cutTop) pts.push([xL, ys + H], [xm, ys + H]);
@@ -1679,11 +1677,17 @@ function drawOverviewShapes(svg) {
       const na = [-a[1], a[0]], nb = [-b[1], b[0]], k = 1 + na[0] * nb[0] + na[1] * nb[1];
       return [v[0] + INS * (na[0] + nb[0]) / k, v[1] + INS * (na[1] + nb[1]) / k];
     });
-    return ins.map((v, i) => {
-      const p0 = ins[(i - 1 + M) % M], q = ins[(i + 1) % M];
-      const t = Math.min(RR, Math.hypot(v[0] - p0[0], v[1] - p0[1]) / 2, Math.hypot(q[0] - v[0], q[1] - v[1]) / 2);
-      const a = unit(p0, v), b = unit(v, q);
-      return `${i ? "L" : "M"}${(v[0] - a[0] * t).toFixed(1)} ${(v[1] - a[1] * t).toFixed(1)}Q${v[0].toFixed(1)} ${v[1].toFixed(1)} ${(v[0] + b[0] * t).toFixed(1)} ${(v[1] + b[1] * t).toFixed(1)}`;
+    // Round every corner with a true circular arc. An outward corner uses the radius RR; an inward corner (a notch that another
+    // block's outward corner sits in) uses RR + the gap, so the two curves share one centre and the space between blocks is the
+    // same all the way round the bend.
+    const C = ins.map((v, i) => { const p0 = ins[(i - 1 + M) % M], q = ins[(i + 1) % M], a = unit(p0, v), b = unit(v, q);
+      const cross = a[0] * b[1] - a[1] * b[0], dot = a[0] * b[0] + a[1] * b[1], phi = Math.atan2(Math.abs(cross), dot);
+      const r = cross >= 0 ? RR : RR + 2 * INS;
+      return { v, a, b, out: cross >= 0, r, t: r * Math.tan(phi / 2), len: Math.hypot(q[0] - v[0], q[1] - v[1]) }; });
+    C.forEach((c, i) => { const n = C[(i + 1) % M], need = c.t + n.t;   // two corners share an edge: shrink both if it is too short
+      if (need > c.len && need > 0) { const k = c.len / need; c.k = Math.min(c.k ?? 1, k); n.k = Math.min(n.k ?? 1, k); } });
+    return C.map((c, i) => { const k = c.k ?? 1, t = c.t * k, r = c.r * k, { v, a, b } = c;
+      return `${i ? "L" : "M"}${(v[0] - a[0] * t).toFixed(2)} ${(v[1] - a[1] * t).toFixed(2)}A${r.toFixed(2)} ${r.toFixed(2)} 0 0 ${c.out ? 1 : 0} ${(v[0] + b[0] * t).toFixed(2)} ${(v[1] + b[1] * t).toFixed(2)}`;
     }).join("") + "Z";
   };
   svg.innerHTML = shapes.map((x) => {

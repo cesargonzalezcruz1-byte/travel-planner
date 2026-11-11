@@ -1168,3 +1168,6 @@ button.dd::after{content:"";position:absolute;inset:-8px}
 /* v2.9: the trip's year(s) in brackets under its name */
 .hero-yr{font-size:13px;font-weight:700;opacity:.8;line-height:1.2}
 .tc-top h3{display:flex;flex-direction:column;gap:1px} .tc-yr{font-size:13px;font-weight:700;color:var(--muted)}
+/* v2.11: every avatar has the lighter edge in the traveller's colour (as on the header button) */
+.av,.dd.on{border-color:color-mix(in srgb,var(--pc) 55%,#fff)}
+:root[data-theme="midnight"] .av,:root[data-theme="midnight"] .dd.on{border-color:color-mix(in srgb,var(--pc) 60%,#fff)}

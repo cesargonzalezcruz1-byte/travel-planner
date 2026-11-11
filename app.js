@@ -817,7 +817,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.9";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.10";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -936,8 +936,8 @@ function wireHeader() {
 }
 
 // ---------------------------------------------------------------- v2 navigation: labelled tabs along the bottom (one view); the split view keeps its icon bars
-// the trip's year(s), worked out from its dates: "2026" or "2026-27" (shown in brackets under the trip name)
-const tripYears = (t) => { const a = String(t?.start || "").slice(0, 4), b = String(t?.end || "").slice(0, 4); return !a ? "" : !b || a === b ? a : a.slice(0, 2) === b.slice(0, 2) ? `${a}-${b.slice(2)}` : `${a}-${b}`; };
+// the trip's year(s), worked out from its dates: "2026" or "2026-2027" (shown in brackets under the trip name)
+const tripYears = (t) => { const a = String(t?.start || "").slice(0, 4), b = String(t?.end || "").slice(0, 4); return !a ? "" : !b || a === b ? a : `${a}-${b}`; };
 const PLAN = ["overview", "timeline", "journey"];
 const planMode = () => { const v = localStorage.getItem("tp.plan"); return PLAN.includes(v) ? v : "overview"; };
 const tabOf = () => (ui.day ? "plan" : ui.view === "now" ? "today" : PLAN.includes(ui.view) ? "plan" : ui.view);

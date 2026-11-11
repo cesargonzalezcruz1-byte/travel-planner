@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.44";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.45";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -949,7 +949,7 @@ const planMode = () => { const v = localStorage.getItem("tp.plan"); return PLAN.
 const tabOf = () => (ui.day ? "plan" : ui.view === "now" ? "today" : PLAN.includes(ui.view) ? "plan" : ui.view);
 const TAB_IC = { today: () => ICON.clock, plan: () => SV('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>'), journal: () => I.camera, budget: () => ICON.wallet, map: () => ICON.map,
   more: () => SV('<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>') };
-const tabList = () => [["today", "Today"], ["plan", "Plan"], ["journal", "Journal"], isEditor() ? ["budget", "Budget"] : ["map", "Map"], ["more", "More"]];
+const tabList = () => [["today", "Today"], ["plan", "Plan"], isEditor() ? ["budget", "Budget"] : ["map", "Map"], ["journal", "Journal"], ["more", "More"]];
 function goTab(k) {
   if (k === "map") return openTripMap(ui.tripId);
   ui.view = k === "today" ? "now" : k === "plan" ? planMode() : k;

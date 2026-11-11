@@ -576,9 +576,6 @@ section h3{margin:0 0 10px;color:var(--ink);font-size:16px;font-weight:800}
 .swbtn:hover{transform:scale(1.08)}
 .swbtn.on::after{content:"";width:11px;height:6px;border:solid #fff;border-width:0 0 2.5px 2.5px;transform:translate(0,-1px) rotate(-45deg)}
 
-/* ---------- overview colours: stays in violet, cars in pink (all themes) ---------- */
-.ov{--stay:#7A4BD6;--stay-t:#ECE3FC;--stay-t2:#D9C7F7;--stay-x:#3E1E7A;--car:#C2367A;--car-t:#FBE1EC;--car-t2:#F5C6DA;--car-x:#7A1846}
-:root[data-theme="midnight"] .ov{--stay:#A47BFF;--stay-t:#2E2350;--stay-t2:#40306E;--stay-x:#DDD0FF;--car:#FF5FA2;--car-t:#3A1F2E;--car-t2:#552A42;--car-x:#FFC2DC}
 
 /* ---------- saved people + travel documents ---------- */
 .addrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -1219,3 +1216,5 @@ html:has(body.has-tabs){scroll-padding-top:176px}
 .ov-act b{font-size:10.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0} .ov-act i{font-style:normal;font-size:10px;font-weight:800;flex:none;opacity:.8}
 /* v2.27: details card - Delete sits at the bottom (it still asks to confirm) */
 .ds-foot{border-top:1px solid var(--line);padding-top:12px;display:flex;justify-content:center}
+/* v2.28: Overview uses the same colours as everywhere else (flight blue, stay purple, car grey, activity pink); the car greys are a step darker here so the shapes show on the striped rows */
+.ov{--car-t:#D6D9E0;--car-t2:#C2C6D0} :root[data-theme="midnight"] .ov{--car-t:#3A3E49;--car-t2:#4B505D}

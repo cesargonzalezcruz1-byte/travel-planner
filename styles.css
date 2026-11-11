@@ -1183,3 +1183,4 @@ body.has-tabs:has(.whokey) .tabbar{box-shadow:none}
 .dpill{flex:none;display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:18px;background:var(--ink);color:var(--card);font-size:14.5px;font-weight:800;white-space:nowrap}
 .dcard.today .dpill{background:var(--stay)}
 .tl.grouped .dc-head{align-items:center}
+.tl.grouped .dc-title{flex-direction:row;align-items:center} .tl.grouped .dc-title .idots{gap:5px} .tl.grouped .dc-title .tdot{width:12px;height:12px}

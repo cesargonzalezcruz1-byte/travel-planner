@@ -1253,3 +1253,5 @@ label.addscan{display:flex;font-weight:400;margin-bottom:0} label.addscan b{font
 .camact label.btn{flex:none;width:auto;min-width:max-content;padding-left:14px;padding-right:16px}
 /* v2.35: Journey - every black day pill is the same width (sized for the widest, e.g. "WED 30") */
 .jday .jd{width:62px;padding:0;justify-content:center;font-variant-numeric:tabular-nums}
+/* v2.36: Timeline - every date pill is the same width (sized for the widest, e.g. "Wed 30 Dec") */
+.tl .dpill{width:112px;padding:0;justify-content:center;font-variant-numeric:tabular-nums}

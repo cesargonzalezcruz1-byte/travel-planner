@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.40";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.41";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1658,8 +1658,14 @@ function renderOverview() {
 }
 function drawOverviewShapes(svg) {
   if (!svg || !svg._shapes) return; const shapes = svg._shapes;
-  const W = svg.getBoundingClientRect().width, H = ROW_H, GAP = 3, PAIR = (W - GAP) / 2, INSET = 2, R = 12, NECK = 10;
+  const box = svg.getBoundingClientRect(), W = box.width, H = ROW_H, GAP = 3, INSET = 2, R = 12;
   if (!W) return;
+  // Sharp lines: the blocks are laid out on whole pixels, the outline is a whole number of screen pixels thick, and every straight
+  // edge is moved onto the screen's pixel grid - otherwise lines land between pixels and look blurry or stepped on ordinary screens.
+  const PAIR = 2 * Math.floor((W - GAP) / 4), COL2 = Math.round(W - PAIR);
+  const dpr = window.devicePixelRatio || 1, swD = Math.max(1, Math.round(1.5 * dpr)), SW = swD / dpr, half = swD % 2 ? 0.5 : 0;
+  const ox = box.left + scrollX, oy = box.top + scrollY;
+  const snap = (v, o) => (Math.round((o + v) * dpr - half) + half) / dpr - o;
   const rows = days().length; svg.setAttribute("viewBox", `0 0 ${W} ${rows * H}`);
   const outline = (x0, s, e, cutTop, cutBot) => {
     const xL = x0, xR = x0 + PAIR, xm = x0 + PAIR / 2, ys = s * H, ye = e * H;
@@ -1675,7 +1681,7 @@ function drawOverviewShapes(svg) {
     const ins = pts.map((v, i) => {
       const a = unit(pts[(i - 1 + M) % M], v), b = unit(v, pts[(i + 1) % M]);
       const na = [-a[1], a[0]], nb = [-b[1], b[0]], k = 1 + na[0] * nb[0] + na[1] * nb[1];
-      return [v[0] + INS * (na[0] + nb[0]) / k, v[1] + INS * (na[1] + nb[1]) / k];
+      return [snap(v[0] + INS * (na[0] + nb[0]) / k, ox), snap(v[1] + INS * (na[1] + nb[1]) / k, oy)];
     });
     // Round every corner with a true circular arc. An outward corner uses the radius RR; an inward corner (a notch that another
     // block's outward corner sits in) uses RR + the gap, so the two curves share one centre and the space between blocks is the
@@ -1687,13 +1693,13 @@ function drawOverviewShapes(svg) {
     C.forEach((c, i) => { const n = C[(i + 1) % M], need = c.t + n.t;   // two corners share an edge: shrink both if it is too short
       if (need > c.len && need > 0) { const k = c.len / need; c.k = Math.min(c.k ?? 1, k); n.k = Math.min(n.k ?? 1, k); } });
     return C.map((c, i) => { const k = c.k ?? 1, t = c.t * k, r = c.r * k, { v, a, b } = c;
-      return `${i ? "L" : "M"}${(v[0] - a[0] * t).toFixed(2)} ${(v[1] - a[1] * t).toFixed(2)}A${r.toFixed(2)} ${r.toFixed(2)} 0 0 ${c.out ? 1 : 0} ${(v[0] + b[0] * t).toFixed(2)} ${(v[1] + b[1] * t).toFixed(2)}`;
+      return `${i ? "L" : "M"}${(v[0] - a[0] * t).toFixed(3)} ${(v[1] - a[1] * t).toFixed(3)}A${r.toFixed(3)} ${r.toFixed(3)} 0 0 ${c.out ? 1 : 0} ${(v[0] + b[0] * t).toFixed(3)} ${(v[1] + b[1] * t).toFixed(3)}`;
     }).join("") + "Z";
   };
   svg.innerHTML = shapes.map((x) => {
     const fill = x.tbc ? "var(--card)" : x.clash ? `var(--clash${x.clash}-t)` : `var(--${x.type}-t${x.shade ? "2" : ""})`;
-    const stroke = x.tbc ? `stroke:var(--${x.clash ? "clash" + x.clash : x.type});stroke-width:1.5;stroke-dasharray:4 3;` : `stroke:var(--${x.clash ? "clash" + x.clash : x.type});stroke-width:1.5;`;   // every block has a darker outline in its own colour
-    return `<path data-day="${x.day}" d="${pathOf(outline(x.half * (PAIR + GAP), x.s, x.e, x.cutTop, x.cutBot), x.tbc ? INSET + 0.75 : INSET)}" style="fill:${fill};${stroke}"></path>`;
+    const stroke = x.tbc ? `stroke:var(--${x.clash ? "clash" + x.clash : x.type});stroke-width:${SW};stroke-dasharray:4 3;` : `stroke:var(--${x.clash ? "clash" + x.clash : x.type});stroke-width:${SW};`;   // every block has a darker outline in its own colour
+    return `<path data-day="${x.day}" d="${pathOf(outline(x.half ? COL2 : 0, x.s, x.e, x.cutTop, x.cutBot), x.tbc ? INSET + 0.75 : INSET)}" style="fill:${fill};${stroke}"></path>`;
   }).join("");
   svg.querySelectorAll("[data-day]").forEach((el) => (el.onclick = () => openDay(el.dataset.day, svg._pane)));
 }

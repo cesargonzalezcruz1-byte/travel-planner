@@ -1205,3 +1205,6 @@ body.has-tabs:has(.whokey) .tabbar{box-shadow:none}
 /* v2.24: the header stays put while the content scrolls underneath */
 body.has-tabs .hero{position:sticky;top:0;z-index:20;padding-top:max(14px,env(safe-area-inset-top));box-shadow:0 6px 16px -10px #0006}
 html:has(body.has-tabs){scroll-padding-top:176px}
+/* v2.25: Journey - traveller dots sit at the top right of every pill, with the date just left of them */
+.journey .jl-top{align-items:flex-start;justify-content:flex-start} .journey .jl-top b{flex:1;min-width:0}
+.journey .jl-top .jl-date{margin-left:auto;line-height:20px} .journey .jl-top .idots{margin-left:0;flex:none;min-height:20px;display:inline-flex;align-items:center}

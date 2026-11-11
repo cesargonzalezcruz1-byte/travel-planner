@@ -1251,3 +1251,5 @@ label.addscan{cursor:pointer;margin-top:8px} .addscan.addcam{background:var(--so
 .addscan.addcam small{color:var(--ink2)} .addscan.addcam i{background:var(--card)}
 label.addscan{display:flex;font-weight:400;margin-bottom:0} label.addscan b{font-weight:800} .camact{flex-wrap:wrap} .camact label.btn,.camact .btn{white-space:nowrap}
 .camact label.btn{flex:none;width:auto;min-width:max-content;padding-left:14px;padding-right:16px}
+/* v2.35: Journey - every black day pill is the same width (sized for the widest, e.g. "WED 30") */
+.jday .jd{width:62px;padding:0;justify-content:center;font-variant-numeric:tabular-nums}

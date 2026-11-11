@@ -1202,3 +1202,6 @@ body.has-tabs:has(.whokey) .tabbar{box-shadow:none}
 /* v2.22: Upcoming Check-ins folds away until tapped */
 .nfold summary{display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;min-height:28px} .nfold summary::-webkit-details-marker{display:none} .nfold summary h3{margin:0}
 .nfchev{margin-left:auto;font-style:normal;font-size:22px;line-height:1;color:var(--muted);transform:rotate(90deg);transition:transform .15s} .nfold[open] .nfchev{transform:rotate(-90deg)}
+/* v2.24: the header stays put while the content scrolls underneath */
+body.has-tabs .hero{position:sticky;top:0;z-index:20;padding-top:max(14px,env(safe-area-inset-top));box-shadow:0 6px 16px -10px #0006}
+html:has(body.has-tabs){scroll-padding-top:176px}

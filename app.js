@@ -816,7 +816,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.7";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.8";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -988,23 +988,48 @@ function avatarFromFile(file, S = 128) {
       cv.getContext("2d").drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, S, S); URL.revokeObjectURL(url); res(cv.toDataURL("image/jpeg", 0.8)); };
     img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("Couldn't read that photo")); }; img.src = url; });
 }
-// the AI portrait comes on plain white: make the white around the person see-through (from the top and sides inwards), so the person's colour shows behind
-function cutWhite(dataUrl, S = 144) {
-  return new Promise((res, rej) => { const img = new Image();
-    img.onload = () => { const cv = document.createElement("canvas"); cv.width = cv.height = S; const g = cv.getContext("2d"), s = Math.min(img.width, img.height);
-      g.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, S, S);
-      const im = g.getImageData(0, 0, S, S), d = im.data, seen = new Uint8Array(S * S), q = [];
-      const white = (k) => { const r = d[k * 4], gg = d[k * 4 + 1], b = d[k * 4 + 2]; return Math.min(r, gg, b) > 232 && Math.max(r, gg, b) - Math.min(r, gg, b) < 16; };
-      const push = (x, y) => { if (x < 0 || y < 0 || x >= S || y >= S) return; const k = y * S + x; if (seen[k]) return; seen[k] = 1; if (white(k)) q.push(k); };
-      for (let i = 0; i < S; i++) { push(i, 0); push(0, i); push(S - 1, i); }
-      let n = 0; while (q.length) { const k = q.pop(), x = k % S, y = (k - x) / S; d[k * 4 + 3] = 0; n++; push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1); }
-      if (n < S * S * 0.04) return res(cv.toDataURL("image/jpeg", 0.85));   // no white background came back: keep the picture as it is
-      for (let k = 0; k < S * S; k++) if (d[k * 4 + 3] && seen[k] === 0) { const x = k % S, y = (k - x) / S;   // soften the edge a little
-        const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => { const X = x + a, Y = y + b; return X >= 0 && Y >= 0 && X < S && Y < S && d[(Y * S + X) * 4 + 3] === 0; }).length;
-        if (nb) d[k * 4 + 3] = nb > 1 ? 120 : 190; }
-      g.putImageData(im, 0, 0); res(cv.toDataURL("image/png")); };
-    img.onerror = () => rej(new Error("Couldn't read the portrait")); img.src = dataUrl; });
+// Cutting the background out of an avatar picture, so the person's colour shows behind them.
+// The picture's own border tells us the background colour: a flat chroma colour (the AI is asked for pure green) is removed everywhere it appears,
+// with soft edges and the green tinge taken off; a flat white / grey is removed only from the outside inwards, so white shirts and teeth are kept.
+function squareCanvas(src, S) {   // src: an <img>; centre-cropped square
+  const cv = document.createElement("canvas"); cv.width = cv.height = S; const g = cv.getContext("2d", { willReadFrequently: true }), s = Math.min(src.width, src.height);
+  g.drawImage(src, (src.width - s) / 2, (src.height - s) / 2, s, s, 0, 0, S, S); return cv;
 }
+const loadImg = (url) => new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => rej(new Error("Couldn't read that picture")); img.src = url; });
+const shrinkPng = (cv, S = 144) => { const o = document.createElement("canvas"); o.width = o.height = S; const g = o.getContext("2d"); g.imageSmoothingQuality = "high"; g.drawImage(cv, 0, 0, S, S); return o.toDataURL("image/png"); };
+// returns { url, cut } - cut is false when no flat background was found (the picture is returned unchanged, as a JPEG)
+function keyOut(img) {
+  const S = 288, cv = squareCanvas(img, S), g = cv.getContext("2d", { willReadFrequently: true }), im = g.getImageData(0, 0, S, S), d = im.data;
+  let clear = 0; for (let k = 3; k < d.length; k += 4) if (d[k] < 16) clear++;
+  if (clear > S * S * 0.04) return { url: shrinkPng(cv), cut: true, how: "already" };   // already has a see-through background
+  const side = []; for (let y = 0; y < S * 0.7; y += 2) { side.push(y * S); side.push(y * S + S - 1); }
+  const idx = [...new Set(Array.from({ length: S / 2 }, (_, i) => i * 2).concat(side))];
+  const med = (c) => { const v = idx.map((k) => d[k * 4 + c]).sort((a, b) => a - b); return v[v.length >> 1]; };
+  const key = [med(0), med(1), med(2)], dist = (k) => Math.hypot(d[k * 4] - key[0], d[k * 4 + 1] - key[1], d[k * 4 + 2] - key[2]);
+  const off = idx.filter((k) => dist(k) > 60).length / idx.length;
+  if (off > 0.22) return { url: cv.toDataURL("image/jpeg", 0.85), cut: false };   // the border isn't one flat colour: nothing safe to remove
+  const chroma = Math.max(...key) - Math.min(...key);
+  let n = 0;
+  if (chroma > 70) {   // a colour screen: remove it wherever it is, with a soft edge
+    const t0 = 70, t1 = 150, gk = key[1] >= key[0] && key[1] >= key[2];
+    for (let k = 0; k < S * S; k++) { const x = dist(k), a = x <= t0 ? 0 : x >= t1 ? 1 : (x - t0) / (t1 - t0);
+      if (a < 1) { d[k * 4 + 3] = Math.round(a * a * 255); if (a < 0.5) n++; }
+      if (gk) { const r = d[k * 4], gg = d[k * 4 + 1], b = d[k * 4 + 2], m = Math.max(r, b); if (gg > m + 8) d[k * 4 + 1] = Math.round(m + (gg - m) * 0.15); }   // take the green tinge off hair and shoulders
+    }
+  } else {   // white / grey: only what's connected to the outside
+    const seen = new Uint8Array(S * S), q = [], tol = 42;
+    const push = (x, y) => { if (x < 0 || y < 0 || x >= S || y >= S) return; const k = y * S + x; if (seen[k]) return; seen[k] = 1; if (dist(k) < tol) q.push(k); };
+    for (let i = 0; i < S; i++) { push(i, 0); push(0, i); push(S - 1, i); }
+    const gone = new Uint8Array(S * S);
+    while (q.length) { const k = q.pop(), x = k % S, y = (k - x) / S; gone[k] = 1; d[k * 4 + 3] = 0; n++; push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1); }
+    for (let k = 0; k < S * S; k++) if (!gone[k]) { const x = k % S, y = (k - x) / S;   // feather the edge and fade the white fringe
+      let nb = 0; for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]]) { const X = x + a, Y = y + b; if (X >= 0 && Y >= 0 && X < S && Y < S && gone[Y * S + X]) nb++; }
+      if (nb) { const near = dist(k) < 90 ? 0.45 : 1; d[k * 4 + 3] = Math.round(255 * Math.max(0.15, 1 - nb / 7) * near); } }
+  }
+  if (n < S * S * 0.04) return { url: cv.toDataURL("image/jpeg", 0.85), cut: false };
+  g.putImageData(im, 0, 0); return { url: shrinkPng(cv), cut: true, how: chroma > 70 ? "colour" : "white" };
+}
+const cutKey = async (dataUrl) => keyOut(await loadImg(dataUrl));
 async function syncPersonAvatar(per) {
   const a = per.avatar || null;
   for (const t of store.trips) {
@@ -2980,13 +3005,20 @@ function personForm(pid, opts = {}) {
     try {
       btn.disabled = pbtn.disabled = true;
       if (avMode === "photo") {   // the photo itself, with its background taken out so the person's colour shows behind
-        avatarVal = await avatarFromFile(f); avDraw(); note.textContent = "Removing the background… this takes 10-20 seconds.";
-        try { avatarVal = await cutWhite(await data.avatarAI(await avatarFromFile(f, 640), "cutout")); avDraw(); note.textContent = "Done - the background is now the person's colour. Not quite right? Try again, or a photo with a plainer background."; }
-        catch (x) { console.error(x); note.textContent = "Kept the photo as it is - couldn't remove the background: " + (x.message || x); }
+        const url = URL.createObjectURL(f); let own; try { own = keyOut(await loadImg(url)); } finally { URL.revokeObjectURL(url); }
+        if (own.cut && own.how !== "white") { avatarVal = own.url; avDraw(); note.textContent = own.how === "already" ? "Done - your photo already had no background, so it's used exactly as it is." : "Done - the plain background was removed on this phone (no AI needed)."; }
+        else {
+          avatarVal = await avatarFromFile(f); avDraw(); note.textContent = "Removing the background… this takes 10-20 seconds.";
+          try { const r = await cutKey(await data.avatarAI(await avatarFromFile(f, 640), "cutout")); avatarVal = r.url; avDraw();
+            note.textContent = r.cut ? "Done - the background is now the person's colour. Not quite right? Try again, or a photo with a plainer background." : "The AI didn't return a clean background this time - tap Use Photo to try again."; }
+          catch (x) { console.error(x);
+            if (own.cut) { avatarVal = own.url; avDraw(); note.textContent = "The AI wasn't available, so the white background was removed on this phone. White clothing may have gone with it."; }
+            else note.textContent = "Kept the photo as it is - couldn't remove the background: " + (x.message || x); }
+        }
       } else {
         note.textContent = "Making the portrait… this takes 10-20 seconds.";
         const drawn = await data.avatarAI(await avatarFromFile(f, 640));
-        avatarVal = await cutWhite(drawn); avDraw(); note.textContent = "Done. Not quite right? Tap Portrait from Photo again for another go, or try a clearer photo.";
+        avatarVal = (await cutKey(drawn)).url; avDraw(); note.textContent = "Done. Not quite right? Tap Portrait from Photo again for another go, or try a clearer photo.";
       }
     } catch (x) { console.error(x); note.textContent = "Couldn't make the avatar: " + (x.message || x); }
     btn.disabled = pbtn.disabled = false; };

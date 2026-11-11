@@ -1208,3 +1208,12 @@ html:has(body.has-tabs){scroll-padding-top:176px}
 /* v2.25: Journey - traveller dots sit at the top right of every pill, with the date just left of them */
 .journey .jl-top{align-items:flex-start;justify-content:flex-start} .journey .jl-top b{flex:1;min-width:0}
 .journey .jl-top .jl-date{margin-left:auto;line-height:20px} .journey .jl-top .idots{margin-left:0;flex:none;min-height:20px;display:inline-flex;align-items:center}
+/* v2.26: Overview - tap the STAY or CAR heading to show Activity there instead */
+.ov-lab.t-stay[style]{color:var(--stay-x)} .ov-lab.t-car[style]{color:var(--car-x)}
+.ov-head .ovpick{text-align:center;color:var(--k)} .ov-head .ovpick.k-act{--k:var(--act);color:var(--act-x)}
+.ovpick summary{cursor:pointer;display:inline-flex;align-items:center;gap:3px;padding:6px 10px;margin:-6px 0;border-radius:10px} .ovpick summary i{font-style:normal;font-size:9px;opacity:.7}
+.ovpick[open] summary{background:var(--soft)}
+.ov-head .ovpick .pop{min-width:140px;width:max-content;left:50%;right:auto;transform:translateX(-50%);font-size:14px;letter-spacing:0;text-align:left}
+.ov-head .ovpick .pop button{font-weight:700} .ov-head .ovpick .pop button.on{background:var(--soft)}
+.ov-act{z-index:2;margin:3px 2px;border:0;border-radius:11px;background:var(--act-t);color:var(--act-x);display:flex;align-items:center;justify-content:center;gap:4px;padding:0 8px;min-width:0;cursor:pointer;font:inherit}
+.ov-act b{font-size:10.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0} .ov-act i{font-style:normal;font-size:10px;font-weight:800;flex:none;opacity:.8}

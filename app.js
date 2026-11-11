@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.25";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.26";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1531,6 +1531,23 @@ function budgetForm() {
 // and ends in the left half of its last day, so hand-overs read like the spreadsheet. Each booking is one SVG shape.
 const placeCode = (x) => { const m = String(x || "").trim().match(/^([A-Z]{3})\b/); return m ? m[1] : String(x || "").replace(/\s*airport$/i, "").trim(); };
 const ROW_H = 34;
+// Overview: the two wide columns can each show Stay, Car or Activity (tap the heading); every phone remembers its own choice.
+const OV_TYPES = { stay: "Stay", car: "Car", act: "Activity" };
+const ovCols = () => { try { const v = JSON.parse(localStorage.getItem("tp.ovcols") || "null"); if (Array.isArray(v) && v.length === 2 && v.every((x) => OV_TYPES[x])) return v; } catch (e) { /* ignore */ } return ["stay", "car"]; };
+// A one- or two-word label for an activity, short enough for an Overview pill: drops the time, brackets and filler words.
+const ACT_STOP = new Set("a an the at in to of for with on and or from by our my de la el del los las y en al day trip tour visit full half morning afternoon evening night".split(" "));
+function shortAct(e, max = 16) {
+  if (e.short) return e.short;
+  let t = String(e.text || "").split("\n")[0].replace(/\([^)]*\)/g, " ").replace(/\b\d{1,2}[:.]\d{2}\s*(am|pm)?\b/gi, " ").replace(/\b\d{1,2}\s*(am|pm)\b/gi, " ");
+  t = t.split(/\s+[-–—|+&]\s+|[,;:]/)[0] || t;
+  const sig = (x) => x.split(/\s+/).map((w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")).filter((w) => w && !ACT_STOP.has(w.toLowerCase()));
+  const head = t.split(/\s+(?:at|@)\s+/i)[0];   // "Christmas dinner at the Hyatt" -> "Christmas dinner"; a lone word ("Dinner at Hartwood") keeps the place
+  const words = sig(head).length >= 2 ? sig(head) : sig(t);
+  if (!words.length) return String(e.text || "Activity").trim().slice(0, max);
+  let out = words[0];
+  for (const w of words.slice(1, 3)) { if ((out + " " + w).length > max) break; out += " " + w; }
+  return out;
+}
 function renderOverview() {
   const p = ui.person, ds = days(), N = ds.length, today = iso(new Date());
   const ix = (d) => dayDiff(store.trip.start, d);
@@ -1573,8 +1590,16 @@ function renderOverview() {
   // stays and cars: one shape per booking (clashing ones: one at a time, see above)
   const shapes = [];
   let clashNow = 0;
-  const lab = (col, r1, r2, cls, d, title, sub) => cells.push(`<button class="ov-lab ${cls}${clashNow ? " clash c" + clashNow : ""}" data-day="${d}" style="grid-column:${col};grid-row:${r1} / ${r2}">${title ? `<b>${esc(title)}</b>` : ""}${sub ? `<small>${esc(sub)}</small>` : ""}</button>`);
-  [["stay", 3], ["car", 5]].forEach(([type, col]) => {
+  let labType = "stay";
+  const lab = (col, r1, r2, cls, d, title, sub) => cells.push(`<button class="ov-lab t-${labType} ${cls}${clashNow ? " clash c" + clashNow : ""}" data-day="${d}" style="grid-column:${col};grid-row:${r1} / ${r2}">${title ? `<b>${esc(title)}</b>` : ""}${sub ? `<small>${esc(sub)}</small>` : ""}</button>`);
+  const cols = ovCols();
+  [[cols[0], 3], [cols[1], 5]].forEach(([type, col]) => {
+    labType = type;
+    if (type === "act") {   // one pill per day: the first confirmed activity in a couple of words, plus a count of the rest
+      ds.forEach((d, k) => { const a = entriesFor(p, d).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed); if (!a.length) return;
+        cells.push(`<button class="ov-act" data-day="${d}" style="grid-column:${col} / span 2;grid-row:${k + 1}" title="${esc(a.map((e) => String(e.text || "").split("\n")[0]).join(" · "))}"><b>${esc(shortAct(a[0], a.length > 1 ? 13 : 16))}</b>${a.length > 1 ? `<i>+${a.length - 1}</i>` : ""}</button>`); });
+      return;
+    }
     layout(its.filter((i) => i.type === type)).forEach((pk, n) => {
       const i = pk.i; clashNow = pk.clash;
       const s0 = ix(i.start), e0 = ix(i.end), cutTop = s0 < 0, cutBot = e0 > N - 1;
@@ -1596,11 +1621,13 @@ function renderOverview() {
   const legend = others.length ? `<div class="ov-legend"><span class="muted">Traveling together with:</span>${others.map((o) => `<span><i style="background:${pcolor(o)}"></i>${esc(NAME(o))}</span>`).join("")}</div>` : "";
   root.innerHTML = `${header({ views: true })}
     <div class="ov">${whoKey()}${outsideBlock(p, "before")}<div class="ov-card">
-      <div class="ov-head"><span class="l">DAY</span><span class="k-flight">FLIGHT</span><span class="k-stay" style="grid-column:3 / span 2">STAY</span><span class="k-car" style="grid-column:5 / span 2">CAR</span></div>
+      <div class="ov-head"><span class="l">DAY</span><span class="k-flight">FLIGHT</span>${cols.map((c, n) => `<details class="more ovpick k-${c}" style="grid-column:${3 + 2 * n} / span 2"><summary aria-label="${OV_TYPES[c]} column - change what it shows">${OV_TYPES[c].toUpperCase()}<i>▾</i></summary><div class="pop">${Object.entries(OV_TYPES).map(([k, v]) => `<button type="button" class="${k === c ? "on" : ""}" data-ovcol="${n}:${k}">${v}</button>`).join("")}</div></details>`).join("")}</div>
       <div class="ov-grid" style="--n:${N}">${cells.join("")}<svg class="ov-svg" aria-hidden="true"></svg></div>
       </div>${outsideBlock(p, "after")}</div>`;
   const svgEl = root.querySelector(".ov-svg"); if (svgEl) { svgEl._shapes = shapes; svgEl._pane = ui.pane; } drawOverviewShapes(svgEl);
   wireHeader(); wireDays();
+  root.querySelectorAll("[data-ovcol]").forEach((b) => (b.onclick = () => { const [n, k] = b.dataset.ovcol.split(":"); const c = ovCols(); c[+n] = k;
+    try { localStorage.setItem("tp.ovcols", JSON.stringify(c)); } catch (e) { /* ignore */ } const y = scrollY; render(); scrollTo(0, y); }));
   root.querySelectorAll("[data-swap]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); const k = b.dataset.swap; ui.swap[k] = (ui.swap[k] || 0) + 1;
     try { localStorage.setItem("tp.swap", JSON.stringify(ui.swap)); } catch (e) { /* ignore */ } const y = scrollY; render(); scrollTo(0, y); }));
   const back = sessionStorage.getItem("tp.wscroll");
@@ -4324,6 +4351,7 @@ function entryForm(e) {
   modal(`<h3>${isNew ? "Add" : "Edit"} ${cap(e.kind)}</h3>${e.kind === "activity" ? PDF_BTN : ""}
     <label>${e.kind === "comment" ? "Comment" : "Activity"}<textarea name="text" rows="3" required>${esc(e.text)}</textarea></label>
     ${e.kind === "activity" ? `<label>Place (for Google Maps)<input name="place" value="${esc(e.place || "")}" placeholder="e.g. Gran Cenote Tulum"></label>
+      <label>Short Label for Overview (optional)<input name="short" maxlength="18" value="${esc(e.short || "")}" placeholder="e.g. Chichén Itzá - leave blank for automatic"></label>
       <label>Type<select name="status"><option value="planned" ${e.status !== "recommended" ? "selected" : ""}>In the Plan</option><option value="recommended" ${e.status === "recommended" ? "selected" : ""}>Recommended Idea</option></select></label>
       <label class="check"><input type="checkbox" name="confirmed" ${e.confirmed ? "checked" : ""}> Confirmed - Show It in the Itinerary</label>` : ""}
     <div class="row"><label>From<input type="date" name="date" value="${e.date}" required></label><label>To<input type="date" name="endDate" value="${e.endDate || e.date}"></label></div>
@@ -4332,7 +4360,7 @@ function entryForm(e) {
       <label>Cost<input name="pcost" value="${esc(store.priv[e.id]?.cost || "")}" placeholder="e.g. USD 240 or AU$95"></label>
       ${shareFields(store.priv[e.id] || {}, (k) => "p" + k)}</details>` : ""}`,
     async (fd, form) => {
-      const out = { ...e, text: fd.get("text").trim(), place: fd.get("place") ?? e.place ?? "", status: fd.get("status") || "planned", confirmed: e.kind === "activity" ? (fd.get("confirmed") === "on" || !!form._pendingFile) && fd.get("status") !== "recommended" : true,
+      const out = { ...e, text: fd.get("text").trim(), place: fd.get("place") ?? e.place ?? "", short: e.kind === "activity" ? (fd.get("short") ?? e.short ?? "").trim() : "", status: fd.get("status") || "planned", confirmed: e.kind === "activity" ? (fd.get("confirmed") === "on" || !!form._pendingFile) && fd.get("status") !== "recommended" : true,
                     date: fd.get("date"), endDate: fd.get("endDate") || fd.get("date"), who: fd.getAll("who") };
       if (!out.who.length) throw new Error("Pick at least one person");
       if (out.place !== (e.place || "") || out.text.split("\n")[0] !== String(e.text || "").split("\n")[0]) { delete out.geo; delete out.routeSkip; }   // place changed: look it up again for routes

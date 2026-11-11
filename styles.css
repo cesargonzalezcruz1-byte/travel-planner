@@ -1263,3 +1263,5 @@ label.addscan{display:flex;font-weight:400;margin-bottom:0} label.addscan b{font
 .tlg-head{box-shadow:inset 0 0 0 1.5px var(--stay)} .tlg-car{box-shadow:inset 0 0 0 1.5px var(--car)}
 .ncard.tonight{border:2px solid var(--stay)}
 .nstep.k-car[data-detail] .nt{box-shadow:inset 0 0 0 1.5px var(--car)}
+/* v2.38: Journey - the same small gap between flight, car and stay blocks as between the activity days */
+.journey .jn-body{padding-bottom:6px}

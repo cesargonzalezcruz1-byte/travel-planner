@@ -1278,3 +1278,7 @@ label.addscan{display:flex;font-weight:400;margin-bottom:0} label.addscan b{font
 /* v2.43: Journal - the day being shown is a black pill; it is no longer repeated in the row of day buttons */
 .jd-title{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .jd-pill{display:inline-flex;align-items:center;height:40px;padding:0 16px;border-radius:20px;background:var(--ink);color:var(--card);font-size:14.5px;font-weight:800;white-space:nowrap}
+/* v2.44: Journal - swipe sideways to change day */
+@keyframes jslideL{from{transform:translateX(40px);opacity:.3}to{transform:none;opacity:1}} @keyframes jslideR{from{transform:translateX(-40px);opacity:.3}to{transform:none;opacity:1}}
+.jtab.slide-l{animation:jslideL .18s ease-out} .jtab.slide-r{animation:jslideR .18s ease-out}
+@media (prefers-reduced-motion:reduce){.jtab.slide-l,.jtab.slide-r{animation:none}}

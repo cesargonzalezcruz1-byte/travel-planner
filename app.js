@@ -823,7 +823,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.43";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.44";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1101,6 +1101,8 @@ function renderJournalTab() {
   wireHeader(); wireDays(); wireJournal(d);
   root.querySelectorAll("[data-jd]").forEach((b) => (b.onclick = () => { ui.jdate = b.dataset.jd; render(); }));
   root.querySelector("[data-jcal]").onclick = () => { ui.jcal = !ui.jcal; render(); };
+  // swiping sideways changes the day - handled by the app-wide swipe handler (see "swipe left / right" below)
+  if (ui.jslide) { root.querySelector(".jtab").classList.add(ui.jslide); ui.jslide = ""; }
   root.querySelectorAll("[data-jcd]").forEach((b) => (b.onclick = () => { ui.jdate = b.dataset.jcd; ui.jcal = false; render(); scrollTo(0, 0); }));
 }
 
@@ -1722,6 +1724,12 @@ window.addEventListener("resize", () => document.querySelectorAll(".ov-svg").for
       const ds = days(), j = ds.indexOf(ui.day) + (dx < 0 ? 1 : -1);
       if (j < 0 || j >= ds.length) return;
       ui.slide = dx < 0 ? "from-right" : "from-left"; window.scrollTo(0, 0); routeTo(ui.tripId, ds[j], true); return;
+    }
+    if (ui.view === "journal") {   // Journal: swipe right = the day before, swipe left = the day after
+      if (e.target.closest?.(".jtdays,.jcal") || String(window.getSelection?.() || "")) return;
+      const ds = days(), j = ds.indexOf(ui.jdate) + (dx < 0 ? 1 : -1);
+      if (j < 0 || j >= ds.length) return toast(dx < 0 ? "That's the last day of the trip" : "That's the first day of the trip");
+      ui.jdate = ds[j]; ui.jslide = dx < 0 ? "slide-l" : "slide-r"; window.scrollTo(0, 0); render(); return;
     }
     const V = viewsFor(), k = V.findIndex((v) => v[0] === ui.view), n = k + (dx < 0 ? 1 : -1);
     if (n < 0 || n >= V.length) return;

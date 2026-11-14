@@ -55,6 +55,53 @@ const actTime = (e) => timeIn(e.time) || timeIn((String(e.text || "").split("\n"
 const actText = (e) => { const t = String(e.text || ""); return actTime(e) ? t.replace(LEAD_TIME, "") || t : t; };   // the text without a time typed in front
 // where an activity without a time sits among the day's timed steps: after the day's last timed activity, or around midday when there is none
 const untimedKey = (acts) => { const last = acts.map(actTime).filter(Boolean).sort().at(-1); return last && last > "12:00" ? last + "z" : "12:00"; };
+// ---- hand-placed order: a step without a time (an activity, or a booking with no hour entered) can be dragged between the day's other
+// steps by an editor. Saved on the trip as dayOrder[date] = { step: the step it sits after ("^" = first) }, so everyone sees the same order.
+const DAY_FIRST = "^";
+function stepRefs(steps) {   // a stable name for each step of a day: e:<activity id>, or i:<booking id>:<nth step of that booking that day>
+  const seen = {};
+  for (const s of steps) { const e = s.entry?.id || s.eid, i = s.item?.id || s.id; s.ref = e ? "e:" + e : i ? `i:${i}:${(seen[i] = (seen[i] ?? -1) + 1)}` : ""; }
+}
+function applyDayOrder(steps, date) {
+  const map = store.trip?.dayOrder?.[date]; if (!map) return steps;
+  const man = steps.filter((s) => !s.time && s.ref && map[s.ref]); if (!man.length) return steps;
+  const rest = steps.filter((s) => !man.includes(s)), left = man.slice(); let moved = true;
+  while (left.length && moved) { moved = false;
+    for (const s of left.slice()) { const a = map[s.ref], at = a === DAY_FIRST ? -1 : rest.findIndex((x) => x.ref === a);
+      if (a === DAY_FIRST || at >= 0) { rest.splice(at + 1, 0, s); left.splice(left.indexOf(s), 1); moved = true; } } }
+  for (const s of left) { const nx = steps.slice(steps.indexOf(s) + 1).find((x) => rest.includes(x)); rest.splice(nx ? rest.indexOf(nx) : rest.length, 0, s); }   // what it sat after is gone: back to its usual place
+  steps.splice(0, steps.length, ...rest); return steps;
+}
+// seq: the day's step names in their new order; moved: the one just dragged; untimed: the names that have no time (only those can be hand-placed)
+async function saveDayOrder(date, seq, moved, untimed) {
+  const all = store.trip?.dayOrder || {}, old = all[date] || {}, map = { ...old };
+  const manual = new Set([...Object.keys(old).filter((k) => old[k]), moved]);
+  seq.forEach((r, k) => { if (manual.has(r) && untimed.includes(r)) map[r] = k ? seq[k - 1] : DAY_FIRST; });
+  if (store.trip) store.trip.dayOrder = { ...all, [date]: map };
+  await data.saveTrip({ dayOrder: { ...all, [date]: map } }, ui.tripId);
+}
+// Drag to reorder with the grip handle (touch or mouse). items: the rows of one list; onDrop(from, to) when the place changed.
+function wireDrag(list, rowSel, onDrop) {
+  list.querySelectorAll(":scope > " + rowSel + " [data-grip]").forEach((grip) => {
+    grip.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); });
+    grip.addEventListener("pointerdown", (e) => {
+      if (e.button) return; e.preventDefault(); e.stopPropagation();
+      const rows = [...list.querySelectorAll(":scope > " + rowSel)], row = grip.closest(rowSel), from = rows.indexOf(row);
+      const box = rows.map((r) => r.getBoundingClientRect()), y0 = e.clientY; let to = from;
+      grip.setPointerCapture(e.pointerId); row.classList.add("dragging"); list.classList.add("drag-on");
+      const move = (ev) => { const dy = ev.clientY - y0, mid = box[from].top + box[from].height / 2 + dy;
+        to = from; rows.forEach((r, k) => { if (k < from && mid < box[k].top + box[k].height / 2) to = Math.min(to, k); if (k > from && mid > box[k].top + box[k].height / 2) to = Math.max(to, k); });
+        const lo = box[0].top - box[from].top, hi = box.at(-1).bottom - box[from].bottom;
+        row.style.transform = `translateY(${Math.max(lo, Math.min(hi, dy))}px)`;
+        rows.forEach((r, k) => { if (r !== row) r.style.transform = k >= to && k < from ? `translateY(${box[from].height}px)` : k <= to && k > from ? `translateY(${-box[from].height}px)` : ""; }); };
+      const end = (ev) => { grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", end); grip.removeEventListener("pointercancel", end);
+        rows.forEach((r) => (r.style.transform = "")); row.classList.remove("dragging"); list.classList.remove("drag-on");
+        if (ev.type === "pointerup" && to !== from) onDrop(from, to); };
+      grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", end); grip.addEventListener("pointercancel", end);
+    });
+  });
+}
+const GRIP = `<i class="grip" data-grip role="button" aria-label="Drag to move" title="Drag to move"><svg viewBox="0 0 12 18" width="12" height="18" aria-hidden="true"><g fill="currentColor"><circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/><circle cx="3" cy="9" r="1.6"/><circle cx="9" cy="9" r="1.6"/><circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/></g></svg></i>`;
 const byActTime = (a, b) => (actTime(a) || "99").localeCompare(actTime(b) || "99");
 const entriesFor = (p, date) => store.entries.filter((e) => (e.who || []).includes(p) && e.date <= date && date <= (e.endDate || e.date));
 
@@ -836,7 +883,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.48";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.49";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1802,7 +1849,8 @@ function dayInfo(p, date) {
   }
   const ents = entriesFor(p, date);
   const cacts = ents.filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed), ukey = untimedKey(cacts);
-  cacts.forEach((e) => steps.push({ k: "act", time: actTime(e), key: ukey, title: actText(e), rich: true, sub: e.place && !e.text.includes(e.place) ? e.place : "" }));
+  cacts.forEach((e) => steps.push({ eid: e.id, k: "act", time: actTime(e), key: ukey, title: actText(e), rich: true, sub: e.place && !e.text.includes(e.place) ? e.place : "" }));
+  stepRefs(steps);
   const sortKey = (s) => s.time || s.key || "12:00";
   steps.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
   // travel order across time zones (see nowSteps): check-outs / car returns at the origin before a flight, check-ins / car pick-ups at the destination after it
@@ -1815,6 +1863,7 @@ function dayInfo(p, date) {
     for (const s of steps.filter(after)) { const k = steps.indexOf(s); if (k < steps.indexOf(f)) { steps.splice(k, 1); steps.splice(steps.indexOf(f) + 1, 0, s); } }
     for (const s of steps.filter(before)) { const k = steps.indexOf(s); if (k > steps.indexOf(f)) { steps.splice(k, 1); steps.splice(steps.indexOf(f), 0, s); } }
   });
+  applyDayOrder(steps, date);
   const comments = ents.filter((e) => e.kind === "comment");
   return { allDay, steps, comments, travel: steps.some((s) => s.k !== "act") };
 }
@@ -1973,6 +2022,7 @@ function nowSteps(p, date) {
   const cacts = entriesFor(p, date).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed), ukey = untimedKey(cacts);
   cacts.forEach((e) =>
     out.push({ entry: e, k: "act", time: actTime(e), key: ukey, title: firstText(actText(e)), sub: e.place && !e.text.includes(e.place) ? e.place : "", where: e.place || "" }));
+  stepRefs(out);
   const sk = (s) => s.time || s.key || "12:00";
   out.sort((a, b) => sk(a).localeCompare(sk(b)));
   // Clock times are local, so a flight across time zones can "land before it leaves". Keep things in travel order:
@@ -1984,6 +2034,7 @@ function nowSteps(p, date) {
     for (const s of out.filter(after)) { const i = out.indexOf(s), fi = out.indexOf(f); if (i < fi) { out.splice(i, 1); out.splice(out.indexOf(f) + 1, 0, s); } }
     for (const s of out.filter(before)) { const i = out.indexOf(s), fi = out.indexOf(f); if (i > fi) { out.splice(i, 1); out.splice(out.indexOf(f), 0, s); } }
   });
+  applyDayOrder(out, date);
   return out;
 }
 const tonightStay = (p, date) => itemsFor(p).find((i) => i.type === "stay" && i.start <= date && date < i.end);
@@ -2499,7 +2550,7 @@ function renderTimeline() {
         ${date === today ? `<span class="tbadge now">Today</span>` : travel ? `<span class="tbadge">Travel Day</span>` : ""}
       </div>
       ${allDay.length ? `<div class="allday">${allDay.map((s) => `<span class="chip k-${s.k}${s.tbc ? " tbc" : ""}"><span class="ic">${ICON[s.k]}</span>${esc(s.title)}${s.sub ? ` <span class="cs">· ${esc(s.sub)}</span>` : ""}</span>`).join("")}</div>` : ""}
-      ${steps.length ? `<ol class="steps">${steps.map((s, k) => `<li><span class="st-time">${esc(s.time) || "–"}${zones && zones[k] && s.time ? `<small class="tz">${esc(zones[k])}</small>` : ""}</span><span class="st-dot k-${s.k}"></span>${s.k === "car" && s.id ? pillHtml(s).replace('<span class="pill', `<span data-detail="item:${esc(s.id)}" data-dd="${date}" role="button" tabindex="0" class="pill`) : pillHtml(s)}</li>`).join("")}</ol>` : ""}
+      ${steps.length ? `<ol class="steps" data-order="${date}">${steps.map((s, k) => `<li data-ref="${esc(s.ref || "")}"${s.time ? "" : " data-untimed"}><span class="st-time">${esc(s.time) || "–"}${zones && zones[k] && s.time ? `<small class="tz">${esc(zones[k])}</small>` : ""}</span><span class="st-dot k-${s.k}"></span>${s.k === "car" && s.id ? pillHtml(s).replace('<span class="pill', `<span data-detail="item:${esc(s.id)}" data-dd="${date}" role="button" tabindex="0" class="pill`) : pillHtml(s)}${isEditor() && !s.time && s.ref && steps.length > 1 ? GRIP : ""}</li>`).join("")}</ol>` : ""}
       ${!allDay.length && !steps.length ? `<p class="dc-empty">Nothing booked yet</p>` : ""}
       ${comments.map((c) => `<p class="dcom">${ICON.chat}<span>${fmt(c.text)}</span></p>`).join("")}
     </section>`;
@@ -2514,6 +2565,9 @@ function renderTimeline() {
   root.innerHTML = `${header({ views: true })}<div class="tl grouped">${whoKey()}${outsideBlock(p, "before")}${groups}${outsideBlock(p, "after")}</div>`;
   wireHeader(); wireDays();
   root.querySelectorAll(".tl [data-detail]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); detailSheet(b.dataset.detail, b.dataset.dd || null); }));
+  if (isEditor()) root.querySelectorAll(".tl ol.steps[data-order]").forEach((ol) => wireDrag(ol, "li", (from, to) => {   // drag a step that has no time to another place in its day
+    const lis = [...ol.children], seq = lis.map((li) => li.dataset.ref), untimed = lis.filter((li) => "untimed" in li.dataset).map((li) => li.dataset.ref), [m] = seq.splice(from, 1); seq.splice(to, 0, m);
+    saveDayOrder(ol.dataset.order, seq, m, untimed).then(() => render()).catch((x) => toast("Couldn't save the new order: " + (x.code || x.message))); }));
   const back = sessionStorage.getItem("tp.wscroll");
   if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
   else if (ds.includes(today) && !ui.scrolled) { ui.scrolled = true; document.getElementById("d-" + today)?.scrollIntoView({ block: "start" }); }
@@ -2525,7 +2579,7 @@ function renderJourney() {
   const p = ui.person, ord = { flight: 0, car: 1, stay: 2 };
   const its = itemsFor(p).filter((i) => !(i.end < store.trip.start || i.start > store.trip.end)).sort((a, b) => a.start.localeCompare(b.start) || ord[a.type] - ord[b.type]);
   // every confirmed activity of a day (multi-day ones included)
-  const actsOn = (date) => entriesFor(p, date).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed).sort(byActTime).map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e));
+  const actsOn = (date) => dayInfo(p, date).steps.filter((s) => s.k === "act").map((s) => (s.time ? s.time + " " : "") + s.title);   // same order as the Timeline, hand-placed ones included
   const dayChip = (d) => { const a = actsOn(d);
     return `<button class="jday${d === today ? " today" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jn-acts">${a.map((t) => `<span class="ja"><span class="jdot"></span>${fmt(t)}</span>`).join("")}</span>` : ""}</button>`; };
   const chips = (ds) => { let out = "", run = [];
@@ -2655,11 +2709,12 @@ function itemRow(i, date) {
 function actRow(e) {
   const nf = isEditor() ? store.files.filter((f) => f.entryId === e.id).length : 0, tm = actTime(e);
   const text = actText(e).split("\n")[0];
-  return `<li id="en-${esc(e.id)}" class="arow ${e.confirmed ? "is-conf" : "is-plan"}">
+  const canDrag = isEditor() && e.confirmed && !tm && !e.seq;   // a confirmed activity with no time can be dragged to another place in the day
+  return `<li id="en-${esc(e.id)}" class="arow ${e.confirmed ? "is-conf" : "is-plan"}" data-ref="e:${esc(e.id)}"${e.confirmed ? " data-conf" : ""}>
     ${isEditor() ? `<label class="conf" title="Confirmed activities show in the itinerary"><input type="checkbox" data-confirm="${e.id}" ${e.confirmed ? "checked" : ""} aria-label="Confirmed"></label>` : `<span class="aconf">${e.confirmed ? "✓" : "○"}</span>`}
     <button type="button" class="arow-main" data-detail="entry:${esc(e.id)}"><span class="arow-t">${tm ? `<b class="atime">${esc(tm)}</b>` : ""}<span>${fmt(text)}</span></span>
       <small>${[e.confirmed ? "" : "Planned - not confirmed", e.place ? esc(e.place) : "", e.endDate && e.endDate !== e.date ? `${fmtDate(e.date)} – ${fmtDate(e.endDate)}` : ""].filter(Boolean).join(" · ")}${ratingBadge(e.id)}${nf ? ` <span class="crow-badge">${I.clip}${nf}</span>` : ""}</small></button>
-    ${e.who.length < PEOPLE().length ? dotsFor(ALL_CODES().filter((c) => e.who.includes(c))) : ""}<span class="crow-go">›</span></li>`;
+    ${e.who.length < PEOPLE().length ? dotsFor(ALL_CODES().filter((c) => e.who.includes(c))) : ""}${canDrag ? GRIP : `<span class="crow-go">›</span>`}</li>`;
 }
 // the details sheet: the full booking card (or activity row) with every action it had; Delete sits under "More"
 function detailSheet(ref, date) {
@@ -2980,6 +3035,13 @@ function renderDay() {
   root.querySelectorAll("[data-new-entry]").forEach((b) => (b.onclick = () => entryForm({ kind: b.dataset.newEntry, date, endDate: date, who: [p, ...others.filter((o) => together(p, o, date))], status: "planned", confirmed: false, text: "", place: "" })));
   root.querySelectorAll("[data-plan]").forEach((b) => (b.onclick = () => { const e = store.entries.find((x) => x.id === b.dataset.plan); data.saveEntry({ ...e, status: "planned", confirmed: false, date, endDate: date }); }));
   wireCards(); wireDetails();
+  { const ul = root.querySelector("ul.arows"); if (ul && isEditor()) wireDrag(ul, "li.arow", (from, to) => {
+      const rows = [...ul.querySelectorAll(":scope > li.arow")], [mv] = rows.splice(from, 1); rows.splice(to, 0, mv);
+      const steps = dayInfo(p, date).steps, seq = steps.map((x) => x.ref), m = mv.dataset.ref, at = rows.indexOf(mv);
+      const up = rows.slice(0, at).reverse().find((r) => "conf" in r.dataset), dn = rows.slice(at + 1).find((r) => "conf" in r.dataset);
+      if (!seq.includes(m) || (!up && !dn)) return;
+      seq.splice(seq.indexOf(m), 1); seq.splice(up ? seq.indexOf(up.dataset.ref) + 1 : seq.indexOf(dn.dataset.ref), 0, m);
+      saveDayOrder(date, seq, m, steps.filter((x) => !x.time).map((x) => x.ref)).then(() => render()).catch((x) => toast("Couldn't save the new order: " + (x.code || x.message))); }); }
   root.querySelectorAll("[data-attach-day]").forEach((inp) => (inp.onchange = () => upload(inp.files, { date: inp.dataset.attachDay })));
 }
 // ------------------------------------------------------------------ date fields shown as dd-mmm-yy everywhere
@@ -3870,7 +3932,11 @@ const fmtDur = (sec) => { const m = Math.max(1, Math.round(sec / 60)); return m 
 const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`);
 // activities in the order chosen with "Use this order" (if any), otherwise as they are
 function sortActs(acts, date) {
-  if (!acts.some((e) => e.seq?.[date] != null)) return acts;
+  if (!acts.some((e) => e.seq?.[date] != null)) {   // no route order: the Timeline's order (confirmed ones can be hand-placed); not-yet-confirmed ones slot in by time
+    const rank = new Map(dayInfo(ui.person, date).steps.filter((s) => s.eid).map((s, k) => [s.eid, k])), out = acts.filter((e) => rank.has(e.id)).sort((a, b) => rank.get(a.id) - rank.get(b.id));
+    for (const e of acts.filter((x) => !rank.has(x.id)).sort(byActTime)) { const t = actTime(e), at = t ? out.findIndex((x) => actTime(x) > t) : -1; out.splice(at < 0 ? out.length : at, 0, e); }
+    return out;
+  }
   return acts.slice().sort((a, b) => (a.seq?.[date] ?? 999) - (b.seq?.[date] ?? 999));
 }
 function dayStays(p, date) {

@@ -1298,3 +1298,9 @@ body:has(.pfoot .whokey) #toast{bottom:calc(92px + 62px + env(safe-area-inset-bo
 .split .pane .hero-bar{gap:6px} .split .pane .hero-bar:has(.vseg.lab) .grow{display:none} .split .pane .vseg.lab{flex:1 1 auto;min-width:0;margin-right:auto} .split .pane .vseg.lab button{padding:0 4px;font-size:13px;overflow:hidden;text-overflow:ellipsis}
 /* v2.48: activity start time */
 .timerow{display:flex;align-items:center;gap:8px} .timerow input[type=time]{flex:0 1 160px;min-width:0}
+/* v2.49: drag a step that has no time to another place in its day (editors) */
+.grip{flex:none;display:grid;place-items:center;width:34px;height:40px;margin:-4px -6px -4px -2px;color:var(--muted);cursor:grab;touch-action:none;border-radius:10px;-webkit-user-select:none;user-select:none}
+.grip:active{cursor:grabbing;background:var(--soft)}
+.steps li.dragging{z-index:5;opacity:.95} .steps li.dragging .pill{box-shadow:0 8px 22px #0003,inset 0 0 0 1.5px var(--k)} .steps.drag-on li:not(.dragging){transition:transform .12s}
+.steps.drag-on li::before{visibility:hidden}
+.arows li.dragging{z-index:5;background:var(--card);box-shadow:0 8px 22px #0003;border-radius:14px} .arows.drag-on li:not(.dragging){transition:transform .12s} .arow .grip{margin:0 -6px 0 0}

@@ -1296,3 +1296,5 @@ body:has(#app.is-split) #toast{bottom:calc(92px + env(safe-area-inset-bottom))}
 body:has(#app.is-split) #toast{transform:translateX(-50%) translateY(300px)} body:has(#app.is-split) #toast.show{transform:translateX(-50%) translateY(0)}
 body:has(.pfoot .whokey) #toast{bottom:calc(92px + 62px + env(safe-area-inset-bottom))}
 .split .pane .hero-bar{gap:6px} .split .pane .hero-bar:has(.vseg.lab) .grow{display:none} .split .pane .vseg.lab{flex:1 1 auto;min-width:0;margin-right:auto} .split .pane .vseg.lab button{padding:0 4px;font-size:13px;overflow:hidden;text-overflow:ellipsis}
+/* v2.48: activity start time */
+.timerow{display:flex;align-items:center;gap:8px} .timerow input[type=time]{flex:0 1 160px;min-width:0}

@@ -48,6 +48,14 @@ const days = () => {
   return Array.from({ length: n + 1 }, (_, i) => addDays(store.trip.start, i));
 };
 const itemsFor = (p) => store.items.filter((i) => (i.who || []).includes(p));
+// ---- activity start time: kept in its own field (e.time, "HH:MM"). Older activities had the time typed at the start of the text
+// ("19:00 Dinner"), so that is still read. Activities are ordered by start time everywhere; the ones without a time come after.
+const LEAD_TIME = /^\s*(?:at\s+)?([01]?\d|2[0-3])[:.]([0-5]\d)\s*(?:hrs?\b|h\b)?\s*[-–:]?\s*/i;
+const actTime = (e) => timeIn(e.time) || timeIn((String(e.text || "").split("\n")[0].match(LEAD_TIME) || [""])[0]) || timeIn((String(e.text || "").split("\n")[0].match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/) || [""])[0]);
+const actText = (e) => { const t = String(e.text || ""); return actTime(e) ? t.replace(LEAD_TIME, "") || t : t; };   // the text without a time typed in front
+// where an activity without a time sits among the day's timed steps: after the day's last timed activity, or around midday when there is none
+const untimedKey = (acts) => { const last = acts.map(actTime).filter(Boolean).sort().at(-1); return last && last > "12:00" ? last + "z" : "12:00"; };
+const byActTime = (a, b) => (actTime(a) || "99").localeCompare(actTime(b) || "99");
 const entriesFor = (p, date) => store.entries.filter((e) => (e.who || []).includes(p) && e.date <= date && date <= (e.endDate || e.date));
 
 // ---- rich text convention: initials blue, main names dark red, labels bold, TBC orange
@@ -828,7 +836,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.47";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.48";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1637,7 +1645,7 @@ function renderOverview() {
   [[cols[0], 3], [cols[1], 5]].forEach(([type, col]) => {
     labType = type;
     if (type === "act") {   // one pill per day: the first confirmed activity in a couple of words, plus a count of the rest
-      ds.forEach((d, k) => { const a = entriesFor(p, d).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed); if (!a.length) return;
+      ds.forEach((d, k) => { const a = entriesFor(p, d).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed).sort(byActTime); if (!a.length) return;
         cells.push(`<button class="ov-act" data-day="${d}" style="grid-column:${col} / span 2;grid-row:${k + 1}" title="${esc(a.map((e) => String(e.text || "").split("\n")[0]).join(" · "))}"><b>${esc(shortAct(a[0], a.length > 1 ? 13 : 16))}</b>${a.length > 1 ? `<i>+${a.length - 1}</i>` : ""}</button>`); });
       return;
     }
@@ -1793,8 +1801,8 @@ function dayInfo(p, date) {
     }
   }
   const ents = entriesFor(p, date);
-  ents.filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed)
-    .forEach((e) => steps.push({ k: "act", time: "", key: "12:00", title: e.text, rich: true, sub: e.place && !e.text.includes(e.place) ? e.place : "" }));
+  const cacts = ents.filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed), ukey = untimedKey(cacts);
+  cacts.forEach((e) => steps.push({ k: "act", time: actTime(e), key: ukey, title: actText(e), rich: true, sub: e.place && !e.text.includes(e.place) ? e.place : "" }));
   const sortKey = (s) => s.time || s.key || "12:00";
   steps.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
   // travel order across time zones (see nowSteps): check-outs / car returns at the origin before a flight, check-ins / car pick-ups at the destination after it
@@ -1962,8 +1970,9 @@ function nowSteps(p, date) {
       if (date === i.end) out.push({ ...base, time: cleanTime(i.dropoffTime), key: "17:00", title: `Return the ${i.company || ""} car`, sub: i.dropoff || "", where: [i.company, apt(placeCode(i.dropoff) || i.dropoff || "")].filter(Boolean).join(" ") });
     }
   }
-  entriesFor(p, date).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed).forEach((e) =>
-    out.push({ entry: e, k: "act", time: timeIn(e.text), key: "12:00", title: firstText(e.text), sub: e.place && !e.text.includes(e.place) ? e.place : "", where: e.place || "" }));
+  const cacts = entriesFor(p, date).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed), ukey = untimedKey(cacts);
+  cacts.forEach((e) =>
+    out.push({ entry: e, k: "act", time: actTime(e), key: ukey, title: firstText(actText(e)), sub: e.place && !e.text.includes(e.place) ? e.place : "", where: e.place || "" }));
   const sk = (s) => s.time || s.key || "12:00";
   out.sort((a, b) => sk(a).localeCompare(sk(b)));
   // Clock times are local, so a flight across time zones can "land before it leaves". Keep things in travel order:
@@ -2516,7 +2525,7 @@ function renderJourney() {
   const p = ui.person, ord = { flight: 0, car: 1, stay: 2 };
   const its = itemsFor(p).filter((i) => !(i.end < store.trip.start || i.start > store.trip.end)).sort((a, b) => a.start.localeCompare(b.start) || ord[a.type] - ord[b.type]);
   // every confirmed activity of a day (multi-day ones included)
-  const actsOn = (date) => entriesFor(p, date).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed).map((e) => e.text);
+  const actsOn = (date) => entriesFor(p, date).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed).sort(byActTime).map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e));
   const dayChip = (d) => { const a = actsOn(d);
     return `<button class="jday${d === today ? " today" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jn-acts">${a.map((t) => `<span class="ja"><span class="jdot"></span>${fmt(t)}</span>`).join("")}</span>` : ""}</button>`; };
   const chips = (ds) => { let out = "", run = [];
@@ -2644,8 +2653,8 @@ function itemRow(i, date) {
     ${dotsFor(ALL_CODES().filter((c) => (i.who || []).includes(c)))}<span class="crow-go">›</span></button>`;
 }
 function actRow(e) {
-  const nf = isEditor() ? store.files.filter((f) => f.entryId === e.id).length : 0, tm = (String(e.text).match(/^\s*(\d{1,2}:\d{2})/) || [])[1] || "";
-  const text = String(e.text || "").split("\n")[0].replace(/^\s*\d{1,2}:\d{2}\s*/, "");
+  const nf = isEditor() ? store.files.filter((f) => f.entryId === e.id).length : 0, tm = actTime(e);
+  const text = actText(e).split("\n")[0];
   return `<li id="en-${esc(e.id)}" class="arow ${e.confirmed ? "is-conf" : "is-plan"}">
     ${isEditor() ? `<label class="conf" title="Confirmed activities show in the itinerary"><input type="checkbox" data-confirm="${e.id}" ${e.confirmed ? "checked" : ""} aria-label="Confirmed"></label>` : `<span class="aconf">${e.confirmed ? "✓" : "○"}</span>`}
     <button type="button" class="arow-main" data-detail="entry:${esc(e.id)}"><span class="arow-t">${tm ? `<b class="atime">${esc(tm)}</b>` : ""}<span>${fmt(text)}</span></span>
@@ -2716,7 +2725,7 @@ function addSheet() {
       if (r.kind === "todo") { await data.saveTodo({ text: txt.slice(0, 200), due: /^\d{4}-\d{2}-\d{2}$/.test(r.date || "") && r.date >= today ? r.date : "", who: w2[0] || "" }); toast("To-do added"); return todoSheet(); }
       if (r.kind === "expense") return expenseForm({ text: txt, amount: r.amount ? +String(r.amount).replace(/[^\d.]/g, "") || "" : "", currency: r.currency || undefined, cat: r.cat || undefined, date: d2 });
       const inTrip = ds.includes(d2) ? d2 : date, others2 = PEOPLE().filter((o) => o !== p);
-      return entryForm({ kind: r.kind === "note" ? "comment" : "activity", date: inTrip, endDate: inTrip, who: w2.length ? w2 : [p, ...others2.filter((o) => together(p, o, inTrip))], status: "planned", confirmed: false, text: (r.kind !== "note" && r.time ? r.time + " " : "") + txt, place: r.place || "" });
+      return entryForm({ kind: r.kind === "note" ? "comment" : "activity", date: inTrip, endDate: inTrip, who: w2.length ? w2 : [p, ...others2.filter((o) => together(p, o, inTrip))], status: "planned", confirmed: false, text: txt, time: r.kind !== "note" ? timeIn(r.time) : "", place: r.place || "" });
     } catch (x) { console.error(x); btn.disabled = false; note.textContent = "Couldn't work that out: " + (x.message || x) + " - try the buttons below."; }
   };
   const cam = m.querySelector("[data-add-cam]"); if (cam) cam.onchange = () => { const f = cam.files[0]; close(); if (f) photoScan(f, (files) => bulkAttach(files)); };
@@ -2880,7 +2889,7 @@ function renderDay() {
   const ob = outside(p, "before"), oa = outside(p, "after"), hasBefore = ob.items.length + ob.ents.length > 0, hasAfter = oa.items.length + oa.ents.length > 0;
   const its = itemsFor(p).filter((i) => i.start <= date && date <= i.end).sort((a, b) => ({ flight: 0, car: 2, stay: 1 }[a.type] - { flight: 0, car: 2, stay: 1 }[b.type]));
   const ents = entriesFor(p, date);
-  const acts = ents.filter((e) => e.kind === "activity" && e.status !== "recommended");
+  const acts = ents.filter((e) => e.kind === "activity" && e.status !== "recommended").sort(byActTime);
   const recs = ents.filter((e) => e.kind === "activity" && e.status === "recommended");
   const coms = ents.filter((e) => e.kind === "comment");
   // map pins: one colour per type (as everywhere in the app); recommended / not-yet-confirmed activities are outlined
@@ -3856,7 +3865,7 @@ function ensureRecs() {
 }
 // ---------------------------------------------------------------- travel times between the day's stops (on demand, Routes API)
 const ROUTE_KEY = (p, date) => `${date}_${p}`;
-const actSig = (acts) => acts.map((e) => [e.id, e.place || "", timeIn(e.text) || timeIn(e.time), e.routeSkip ? 1 : 0, e.geo ? 1 : 0].join("~")).join("|");
+const actSig = (acts) => acts.map((e) => [e.id, e.place || "", actTime(e), e.routeSkip ? 1 : 0, e.geo ? 1 : 0].join("~")).join("|");
 const fmtDur = (sec) => { const m = Math.max(1, Math.round(sec / 60)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? " " + (m % 60) + " min" : ""}`; };
 const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`);
 // activities in the order chosen with "Use this order" (if any), otherwise as they are
@@ -3938,7 +3947,7 @@ async function planRoute(p, date, acts, mode) {
   }
   if (!stops.length) return toast("No activities with a place to route");
   // keep booked times in their order; fit the others in where they add the least distance
-  const timeOf = (e) => timeIn(e.text) || timeIn(e.time);
+  const timeOf = (e) => actTime(e);
   const order0 = acts.map((e) => e.id), ord = (a, b) => order0.indexOf(a.e.id) - order0.indexOf(b.e.id);
   stops.sort(ord);
   const timed = stops.filter((x) => timeOf(x.e)).sort((a, b) => timeOf(a.e).localeCompare(timeOf(b.e))), free = stops.filter((x) => !timeOf(x.e));
@@ -4499,12 +4508,15 @@ function entryForm(e) {
       <label>Type<select name="status"><option value="planned" ${e.status !== "recommended" ? "selected" : ""}>In the Plan</option><option value="recommended" ${e.status === "recommended" ? "selected" : ""}>Recommended Idea</option></select></label>
       <label class="check"><input type="checkbox" name="confirmed" ${e.confirmed ? "checked" : ""}> Confirmed - Show It in the Itinerary</label>` : ""}
     <div class="row"><label>From<input type="date" name="date" value="${e.date}" required></label><label>To<input type="date" name="endDate" value="${e.endDate || e.date}"></label></div>
+    ${e.kind === "activity" ? `<label>Start Time (optional)<span class="timerow"><input type="time" name="time" value="${esc(actTime(e))}"><button type="button" class="btn tiny" data-notime>No Time</button></span>
+      <small class="muted">Local time at the place. Activities are listed in time order; without a time they come after the timed ones.</small></label>` : ""}
     ${whoBoxes(e.who)}
     ${e.kind === "activity" && isEditor() ? `<details class="privbox" ${store.priv[e.id]?.cost ? "open" : ""}><summary>Cost (Editors Only)</summary>
       <label>Cost<input name="pcost" value="${esc(store.priv[e.id]?.cost || "")}" placeholder="e.g. USD 240 or AU$95"></label>
       ${shareFields(store.priv[e.id] || {}, (k) => "p" + k)}</details>` : ""}`,
     async (fd, form) => {
-      const out = { ...e, text: fd.get("text").trim(), place: fd.get("place") ?? e.place ?? "", short: e.kind === "activity" ? (fd.get("short") ?? e.short ?? "").trim() : "", status: fd.get("status") || "planned", confirmed: e.kind === "activity" ? (fd.get("confirmed") === "on" || !!form._pendingFile) && fd.get("status") !== "recommended" : true,
+      const tm = e.kind === "activity" ? timeIn(fd.get("time")) : "";
+      const out = { ...e, text: tm ? fd.get("text").trim().replace(LEAD_TIME, "") || fd.get("text").trim() : fd.get("text").trim(), time: tm, place: fd.get("place") ?? e.place ?? "", short: e.kind === "activity" ? (fd.get("short") ?? e.short ?? "").trim() : "", status: fd.get("status") || "planned", confirmed: e.kind === "activity" ? (fd.get("confirmed") === "on" || !!form._pendingFile) && fd.get("status") !== "recommended" : true,
                     date: fd.get("date"), endDate: fd.get("endDate") || fd.get("date"), who: fd.getAll("who") };
       if (!out.who.length) throw new Error("Pick at least one person");
       if (out.place !== (e.place || "") || out.text.split("\n")[0] !== String(e.text || "").split("\n")[0]) { delete out.geo; delete out.routeSkip; }   // place changed: look it up again for routes
@@ -4514,11 +4526,12 @@ function entryForm(e) {
       if (form._pendingFile) { toast("Attaching file…"); await data.uploadFile(form._pendingFile, { entryId: id, date: out.date }); toast("Saved and confirmed, with file attached"); }
     }, isNew ? null : () => data.deleteEntry(e.id));
   const form = document.querySelector(".sheet"); wireShare(form);
+  form.querySelector("[data-notime]")?.addEventListener("click", () => { form.querySelector("[name=time]").value = ""; });
   { const stay = store.items.find((i) => i.type === "stay" && i.status !== "tbc" && i.start <= e.date && e.date < i.end && (i.address || i.name));
     acAttach(form.querySelector("input[name=place]"), { any: true, near: stay ? stay.address || stay.name : "" }); }
   wireExtract(form, () => "activity", (r) => {
-    const txt = [r.text || r.name, r.time ? "at " + r.time : ""].filter(Boolean).join(" ");
-    setVal(form, "text", txt); setVal(form, "place", r.place || r.address); setVal(form, "pcost", r.private?.cost); setVal(form, "date", r.start || r.date); setVal(form, "endDate", r.end || r.start || r.date);
+    const txt = r.text || r.name || "";
+    setVal(form, "text", txt); if (timeIn(r.time)) setVal(form, "time", timeIn(r.time)); setVal(form, "place", r.place || r.address); setVal(form, "pcost", r.private?.cost); setVal(form, "date", r.start || r.date); setVal(form, "endDate", r.end || r.start || r.date);
     if (Array.isArray(r.who) && r.who.length) form.querySelectorAll("input[name=who]").forEach((cb) => (cb.checked = r.who.includes(cb.value)));
     const day0 = form.dataset.day0 || (form.dataset.day0 = form.querySelector("[name=date]")?.defaultValue || "");
     if (needsDate(r)) askVoucherDate(r, form._pendingFile?.name, day0).then((d) => { if (d) { setVal(form, "date", d); setVal(form, "endDate", d); } });

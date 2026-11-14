@@ -124,7 +124,6 @@ function render() {
   if (!ui.person) { drawTabs(false); return renderEmpty(); }
   applyTheme();
   if (ui.view === "budget" && !isEditor()) ui.view = "overview";
-  if (splitOn() && (ui.view === "journal" || ui.view === "more")) ui.view = "overview";
   // during the trip, the app opens on Now (once per session)
   if (!ui.nowChecked && store.trip?.start) { ui.nowChecked = true; const td = iso(new Date()); if (td >= store.trip.start && td <= store.trip.end && !ui.day) ui.view = "now"; }
   if (splitOn()) { renderSplit(); return afterRender(); }
@@ -181,7 +180,7 @@ if (!Array.isArray(ui.splitPeople) || ui.splitPeople.length !== 2) ui.splitPeopl
 ui.splitDay = [null, null];   // a day open on that side (split view)
 function renderSplit() {
   appRoot.classList.add("is-split");
-  const ok = (v) => viewsFor().some((x) => x[0] === v) ? v : "overview";
+  const ok = (v) => (v === "journal" || v === "more" || viewsFor().some((x) => x[0] === v) ? v : "overview");
   ui.split = [ok(ui.split[0]), ok(ui.split[1])];
   const keep = [...appRoot.querySelectorAll(":scope > .split > .pane")].map((p) => p.scrollTop);
   appRoot.innerHTML = `<div class="split"><div class="pane" data-pane="0"></div><div class="pane" data-pane="1"></div></div>`;
@@ -191,7 +190,13 @@ function renderSplit() {
   [0, 1].forEach((k) => {   // each side: its own view, traveller and open day
     const v = ui.splitDay[k] ? "day" : ui.split[k];
     root = panes[k]; ui.pane = k; ui.person = ui.splitPeople[k] || me; ui.day = ui.splitDay[k]; if (v !== "day") ui.view = v;
-    renderView(v); if (keep[k]) panes[k].scrollTop = keep[k]; });
+    renderView(v);
+    // each side works like a phone screen: the traveller row and its own tab bar stay at the bottom while the content scrolls
+    const foot = document.createElement("div"); foot.className = "pfoot"; const wk = root.querySelector(".whokey"); if (wk) foot.appendChild(wk);
+    foot.insertAdjacentHTML("beforeend", `<nav class="tabbar ptabs" aria-label="Main">${tabsHtml()}</nav>`);
+    foot.querySelector(".ptabs").onclick = (e) => { const b = e.target.closest("[data-tab]"); if (b) goTab(b.dataset.tab, k); };
+    root.appendChild(foot);
+    if (keep[k]) panes[k].scrollTop = keep[k]; });
   ui.view = saved; ui.pane = null; ui.person = me; ui.day = null; root = panes[1];
 }
 const splitToggle = () => (splitWide() && ui.tripId ? `<button class="iconbtn splitbtn" data-split aria-label="${splitOn() ? "One view" : "Two views side by side"}" title="${splitOn() ? "One view" : "Two views side by side"}">${splitOn() ? ICON.single : ICON.split}</button>` : "");
@@ -823,7 +828,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.46";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.47";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -894,7 +899,7 @@ function header(opts = {}) {
   const t = store.trip || {}; const today = iso(new Date());
   const when = !t.start ? "" : t.start > today ? `In ${dayDiff(today, t.start)} days` : today <= t.end ? "On now" : "";
   const sub = [window.__previewDate ? "Preview" : "", t.start ? `${shortDate(t.start)} – ${shortDate(t.end)}` : "", when].filter(Boolean).join(" · ");
-  const me = ui.person, mc = pcolor(me), tabs = !splitOn();
+  const me = ui.person, mc = pcolor(me), tabs = true;   // split view uses the same header and tabs as the single view
   const TABNAME = { now: "Today", journal: "Journal", budget: "Budget", more: "More" };
   return `<header class="hero">
     <div class="hero-top">
@@ -950,8 +955,16 @@ const tabOf = () => (ui.day ? "plan" : ui.view === "now" ? "today" : PLAN.includ
 const TAB_IC = { today: () => ICON.clock, plan: () => SV('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>'), journal: () => I.camera, budget: () => ICON.wallet, map: () => ICON.map,
   more: () => SV('<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>') };
 const tabList = () => [["today", "Today"], ["plan", "Plan"], isEditor() ? ["budget", "Budget"] : ["map", "Map"], ["journal", "Journal"], ["more", "More"]];
-function goTab(k) {
+const paneOf = (el) => { const p = el?.closest?.(".pane"); return p ? +p.dataset.pane : undefined; };
+function goTab(k, pane) {
   if (k === "map") return openTripMap(ui.tripId);
+  if (splitOn()) {   // split view: the tab changes only the side it was tapped on (the right side when it came from a pop-up)
+    const n = pane ?? 1, cur = ui.split[n];
+    ui.split[n] = k === "today" ? "now" : k === "plan" ? (PLAN.includes(cur) ? cur : planMode()) : k; ui.splitDay[n] = null;
+    try { localStorage.setItem("tp.splitViews", JSON.stringify(ui.split)); } catch (e) { /* ignore */ }
+    const el = appRoot.querySelectorAll(":scope > .split > .pane")[n]; if (el) el.scrollTop = 0;
+    return render();
+  }
   ui.view = k === "today" ? "now" : k === "plan" ? planMode() : k;
   try { localStorage.setItem("tp.view", ui.view); } catch (e) { /* ignore */ }
   sessionStorage.removeItem("tp.wscroll"); window.scrollTo(0, 0);
@@ -964,7 +977,11 @@ function drawTabs(show) {
     n.addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) goTab(b.dataset.tab); }); }
   document.body.classList.add("has-tabs");
   const cur = tabOf(), open = (store.todos || []).filter((x) => !x.done), today = iso(new Date()), late = open.some((x) => x.due && x.due < today);
-  n.innerHTML = tabList().map(([k, l]) => `<button type="button" data-tab="${k}" class="${k === cur ? "on" : ""}" ${k === cur ? 'aria-current="page"' : ""}><span class="tb-ic">${TAB_IC[k]()}${k === "more" && late ? `<i class="tb-dot"></i>` : ""}</span>${l}</button>`).join("");
+  n.innerHTML = tabsHtml();
+}
+function tabsHtml() {
+  const cur = tabOf(), open = (store.todos || []).filter((x) => !x.done), today = iso(new Date()), late = open.some((x) => x.due && x.due < today);
+  return tabList().map(([k, l]) => `<button type="button" data-tab="${k}" class="${k === cur ? "on" : ""}" ${k === cur ? 'aria-current="page"' : ""}><span class="tb-ic">${TAB_IC[k]()}${k === "more" && late ? `<i class="tb-dot"></i>` : ""}</span>${l}</button>`).join("");
 }
 
 // ---- avatars: a photo or a picture chosen in the Traveller Profile, framed in the person's colour (initials when none is set)
@@ -1714,12 +1731,22 @@ window.addEventListener("resize", () => document.querySelectorAll(".ov-svg").for
   let x0 = 0, y0 = 0, t0 = 0, ok = false;
   document.addEventListener("touchstart", (e) => {
     const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now();
-    ok = e.touches.length === 1 && !!ui.tripId && !splitOn() && !document.querySelector(".modal") && !e.target.closest(".seg,.vseg,.daymap,.pop,input,textarea,select");
+    ok = e.touches.length === 1 && !!ui.tripId && !document.querySelector(".modal") && !e.target.closest(".seg,.vseg,.daymap,.pop,input,textarea,select");
   }, { passive: true });
   document.addEventListener("touchend", (e) => {
     if (!ok) return; ok = false;
     const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
     if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6 || Date.now() - t0 > 700) return;
+    if (splitOn()) {   // split view: a swipe only changes the day on the side it was made - an open day, or the Journal's day
+      const n = paneOf(e.target); if (n === undefined) return;
+      const jr = !ui.splitDay[n] && ui.split[n] === "journal"; if (!ui.splitDay[n] && !jr) return;
+      if (jr && (e.target.closest?.(".jtdays,.jcal") || String(window.getSelection?.() || ""))) return;
+      const ds = days(), j = ds.indexOf(jr ? ui.jdate : ui.splitDay[n]) + (dx < 0 ? 1 : -1);
+      if (j < 0 || j >= ds.length) return jr ? toast(dx < 0 ? "That's the last day of the trip" : "That's the first day of the trip") : undefined;
+      if (jr) { ui.jdate = ds[j]; ui.jslide = dx < 0 ? "slide-l" : "slide-r"; } else ui.splitDay[n] = ds[j];
+      const el = appRoot.querySelectorAll(":scope > .split > .pane")[n]; if (el) el.scrollTop = 0;
+      return render();
+    }
     if (ui.day) {   // day screen: swipe left = next day, right = previous day
       const ds = days(), j = ds.indexOf(ui.day) + (dx < 0 ? 1 : -1);
       if (j < 0 || j >= ds.length) return;
@@ -2017,7 +2044,7 @@ function renderNow() {
   root.querySelectorAll(".now [data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.()));
   root.querySelectorAll(".now [data-detail]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); detailSheet(b.dataset.detail, b.dataset.dd || date); }));
   root.querySelectorAll(".now details.nfold").forEach((d) => (d.ontoggle = () => { ui.ciOpen = d.open; }));   // stays open or closed while the screen refreshes
-  root.querySelectorAll(".now [data-tabgo]").forEach((b) => (b.onclick = () => { if (b.dataset.tabgo === "journal") ui.jdate = today; goTab(b.dataset.tabgo); }));
+  root.querySelectorAll(".now [data-tabgo]").forEach((b) => (b.onclick = () => { if (b.dataset.tabgo === "journal") ui.jdate = today; goTab(b.dataset.tabgo, paneOf(b)); }));
   root.querySelectorAll(".now [data-qexp]").forEach((b) => (b.onclick = () => expenseForm({ date: defaultExpenseDate() })));
   root.querySelectorAll(".now [data-rtick]").forEach((b) => (b.onclick = async () => { const x = (store.todos || []).find((y) => y.id === b.dataset.rtick); if (!x) return;
     b.classList.add("on"); try { await data.saveTodo({ ...x, done: true }); toast("Done: " + x.text); } catch (e) { toast(e.message); } }));

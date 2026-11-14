@@ -1282,3 +1282,17 @@ label.addscan{display:flex;font-weight:400;margin-bottom:0} label.addscan b{font
 @keyframes jslideL{from{transform:translateX(40px);opacity:.3}to{transform:none;opacity:1}} @keyframes jslideR{from{transform:translateX(-40px);opacity:.3}to{transform:none;opacity:1}}
 .jtab.slide-l{animation:jslideL .18s ease-out} .jtab.slide-r{animation:jslideR .18s ease-out}
 @media (prefers-reduced-motion:reduce){.jtab.slide-l,.jtab.slide-r{animation:none}}
+/* v2.47: split view (fold phones, tablets) - each side works like a phone screen: fixed header, traveller row and its own tab bar */
+.split .pane{display:flex;flex-direction:column;scroll-padding-top:176px} .split .pane>*{flex:none}
+.split .pane .hero{position:sticky;top:0;z-index:20;padding-top:max(14px,env(safe-area-inset-top));box-shadow:0 6px 16px -10px #0006}
+.split .pane .hero-name{font-size:18px;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pfoot{position:sticky;bottom:0;z-index:39;margin-top:auto;padding-top:16px;pointer-events:none} .pfoot>*{pointer-events:auto}
+.pfoot .tabbar{position:static;box-shadow:0 -6px 18px #00000026;padding-left:6px;padding-right:6px}
+.pfoot .whokey{position:static;margin:0;border-radius:0;padding:7px 10px;gap:10px} .pfoot .whokey+.tabbar{box-shadow:none}
+body:has(#app.is-split) #toast{bottom:calc(92px + env(safe-area-inset-bottom))}
+.split .pane>*{min-width:0;max-width:100%;box-sizing:border-box}
+.pfoot{display:flex;flex-direction:column} .pfoot .tabbar{margin:0}
+.pfoot .whokey{order:0}
+body:has(#app.is-split) #toast{transform:translateX(-50%) translateY(300px)} body:has(#app.is-split) #toast.show{transform:translateX(-50%) translateY(0)}
+body:has(.pfoot .whokey) #toast{bottom:calc(92px + 62px + env(safe-area-inset-bottom))}
+.split .pane .hero-bar{gap:6px} .split .pane .hero-bar:has(.vseg.lab) .grow{display:none} .split .pane .vseg.lab{flex:1 1 auto;min-width:0;margin-right:auto} .split .pane .vseg.lab button{padding:0 4px;font-size:13px;overflow:hidden;text-overflow:ellipsis}

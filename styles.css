@@ -1385,3 +1385,7 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .ov-card .ov-act span{padding:0 3px}
 .ov-card .ov-act span>small{overflow-wrap:normal;word-break:normal;hyphens:manual;-webkit-hyphens:manual;max-height:none;height:auto;max-height:21.5px}
 .ov-card .ov-act.ov-multi span>small{max-height:none}
+/* v2.67: two-view mode - each view keeps its usual width, whatever is inside it (long activity names were widening Overview) */
+.split .pane>.ov,.split .pane>.tl,.split .pane>.jwrap,.split .pane>.journey,.split .pane>.bd{width:100%;max-width:min(100%,640px)}
+.split .pane>.dayview{width:100%;max-width:min(100%,760px)}
+.split .pane>.now,.split .pane>.morev,.split .pane>.jtab{width:100%;max-width:min(100%,720px)}

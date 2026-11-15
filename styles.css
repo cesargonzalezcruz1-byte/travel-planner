@@ -1363,3 +1363,8 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .ov-act .ovnext{font-size:20px;font-weight:700;line-height:1;cursor:pointer;color:var(--act-x)} .ov-act .ovnext:hover{background:color-mix(in srgb,var(--act) 14%,transparent)}
 .ov-act.paged .ovnext{grid-column:3}
 .ov-act span+span{border-left:0} .ov-act span:not([hidden])~span:not([hidden]){border-left:1.5px solid color-mix(in srgb,var(--act) 55%,transparent)}
+/* v2.62: larger arrow on the Overview activity pill (like the › on the day screen rows) */
+.ov-act .ovnext{font-size:26px;font-weight:600;padding-bottom:2px} .ov-act.paged{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px}
+.ov-act span[data-ovd]{cursor:pointer}
+.ov-act.paged span.ovnext{font-size:26px;font-weight:600;letter-spacing:0;padding:0 0 3px;line-height:1}
+.ov-act.paged span.ovnext{border-radius:0 12px 12px 0;margin:2px 0}

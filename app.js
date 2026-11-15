@@ -915,7 +915,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.61";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.62";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1717,14 +1717,15 @@ function renderOverview() {
     const i = pk.i;
     const s = Math.max(0, ix(i.start)), e = Math.min(N - 1, ix(i.end)); const c = codesOf(i.route);
     const lab = c.length ? `${c[0]}-${c.at(-1)}` : (i.number || "Flight");
-    cells.push(`<button class="ov-fl${i.status === "tbc" ? " tbc" : ""}${pk.clash ? " clash c" + pk.clash : ""}" data-day="${i.start}" style="grid-row:${s + 1} / ${e + 2}" title="${esc(c.join(" → "))}"><b>${esc(lab)}</b></button>`);
+    cells.push(`<button class="ov-fl${i.status === "tbc" ? " tbc" : ""}${pk.clash ? " clash c" + pk.clash : ""}" data-ovd="item:${esc(i.id)}" data-dd="${i.start}" style="grid-row:${s + 1} / ${e + 2}" title="${esc(c.join(" → "))}"><b>${esc(lab)}</b></button>`);
     swapBtn(pk, 2, s + 1);
   });
   // stays and cars: one shape per booking (clashing ones: one at a time, see above)
   const shapes = [];
   let clashNow = 0;
   let labType = "stay";
-  const lab = (col, r1, r2, cls, d, title, sub) => cells.push(`<button class="ov-lab t-${labType} ${cls}${clashNow ? " clash c" + clashNow : ""}" data-day="${d}" style="grid-column:${col};grid-row:${r1} / ${r2}">${title ? `<b>${esc(title)}</b>` : ""}${sub ? `<small>${esc(sub)}</small>` : ""}</button>`);
+  let labItem = null;
+  const lab = (col, r1, r2, cls, d, title, sub) => cells.push(`<button class="ov-lab t-${labType} ${cls}${clashNow ? " clash c" + clashNow : ""}" data-ovd="item:${esc(labItem?.id || "")}" data-dd="${d}" style="grid-column:${col};grid-row:${r1} / ${r2}">${title ? `<b>${esc(title)}</b>` : ""}${sub ? `<small>${esc(sub)}</small>` : ""}</button>`);
   const cols = ovCols();
   [[cols[0], 3], [cols[1], 5]].forEach(([type, col]) => {
     labType = type;
@@ -1733,11 +1734,11 @@ function renderOverview() {
         // up to three activities side by side in the day's pill, split by thin lines; with more than three, the last column counts the rest
         // more than three: two at a time, and the third column is an arrow that shows the next ones (on the last ones it goes back to the start)
         const n = Math.min(a.length, 3), max = n === 1 ? 34 : n === 2 ? 18 : 12, paged = a.length > 3, pages = paged ? Math.ceil(a.length / 2) : 1;
-        cells.push(`<button class="ov-act c${n}${paged ? " paged" : ""}" data-day="${d}" data-at="0" data-np="${pages}" style="grid-column:${col} / span 2;grid-row:${k + 1}" title="${esc(a.map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e).split("\n")[0]).join(" · "))}">${a.map((e, j) => `<span data-pg="${paged ? Math.floor(j / 2) : 0}"${paged && j >= 2 ? " hidden" : ""}><small>${esc(shortAct(e, max))}</small></span>`).join("")}${paged ? `<span class="ovnext" data-ovnext role="button" aria-label="Show the next activities">›</span>` : ""}</button>`); });
+        cells.push(`<button class="ov-act c${n}${paged ? " paged" : ""}" data-dd="${d}" data-at="0" data-np="${pages}" style="grid-column:${col} / span 2;grid-row:${k + 1}" title="${esc(a.map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e).split("\n")[0]).join(" · "))}">${a.map((e, j) => `<span data-pg="${paged ? Math.floor(j / 2) : 0}" data-ovd="entry:${esc(e.id)}"${paged && j >= 2 ? " hidden" : ""}><small>${esc(shortAct(e, max))}</small></span>`).join("")}${paged ? `<span class="ovnext" data-ovnext role="button" aria-label="Show the next activities">›</span>` : ""}</button>`); });
       return;
     }
     layout(its.filter((i) => i.type === type)).forEach((pk, n) => {
-      const i = pk.i; clashNow = pk.clash;
+      const i = pk.i; clashNow = pk.clash; labItem = i;
       const s0 = ix(i.start), e0 = ix(i.end), cutTop = s0 < 0, cutBot = e0 > N - 1;
       const s = Math.max(0, s0), e = Math.min(N - 1, e0);
       shapes.push({ type, half: col === 3 ? 0 : 1, s, e, cutTop, cutBot, shade: n % 2, tbc: i.status === "tbc", day: i.start, clash: pk.clash });
@@ -1762,6 +1763,10 @@ function renderOverview() {
       </div>${outsideBlock(p, "after")}</div>`;
   const svgEl = root.querySelector(".ov-svg"); if (svgEl) { svgEl._shapes = shapes; svgEl._pane = ui.pane; } drawOverviewShapes(svgEl);
   wireHeader(); wireDays();
+  // a flight, stay, car or activity opens its own details; the day itself opens from the date on the left
+  root.querySelectorAll(".ov-fl[data-ovd], .ov-lab[data-ovd], .ov-act").forEach((b) => (b.onclick = (ev) => {
+    const x = ev.target.closest("[data-ovnext]") ? null : ev.target.closest("[data-ovd]"); ev.stopPropagation();
+    if (x && x.dataset.ovd.split(":")[1]) detailSheet(x.dataset.ovd, b.dataset.dd || null); }));
   root.querySelectorAll("[data-ovnext]").forEach((x) => (x.onclick = (ev) => { ev.stopPropagation(); ev.preventDefault();
     const b = x.closest(".ov-act"), np = +b.dataset.np, at = (+b.dataset.at + 1) % np; b.dataset.at = at;
     b.querySelectorAll("[data-pg]").forEach((sp) => (sp.hidden = +sp.dataset.pg !== at));

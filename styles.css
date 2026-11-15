@@ -651,7 +651,7 @@ fieldset{min-width:0}
 .more .pop button[data-act="signout"]{color:var(--danger)} .more .pop button[data-act="signout"] .ic16{color:var(--danger)}
 
 /* ---------- Now / Next Up ---------- */
-.now{max-width:720px;margin:0 auto;padding:12px 14px 40px;display:grid;gap:12px}
+.now:not(.tbadge){max-width:720px;margin:0 auto;padding:12px 14px 40px;display:grid;gap:12px}
 .nstatus{margin:4px 2px 0;font-weight:700;font-size:13px;color:var(--ink2);letter-spacing:.01em}
 .ncard{background:var(--card);border-radius:22px;padding:16px;box-shadow:0 1px 2px #0000000d;display:grid;gap:10px}
 .ncard h3{margin:0;font-size:15px}
@@ -1394,12 +1394,12 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .acard .acconf{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:6px;width:auto;cursor:pointer} .acard .acconf input{width:16px;height:16px;margin:0;accent-color:var(--act)}
 /* v2.69: one spacing between the blocks and cards of every screen (14px), and the trip status line in a dashed block like Before Trip */
 :root{--gap:14px}
-.now,.tl,.ov,.jwrap,.jtab,.morev,.bd,.dayview{display:grid;row-gap:var(--gap);align-content:start}
-.now>*,.tl>*,.ov>*,.jwrap>*,.jtab>*,.morev>*,.bd>*,.dayview>*{margin-top:0!important;margin-bottom:0!important}
+.now:not(.tbadge),.tl,.ov,.jwrap,.jtab,.morev,.bd,.dayview{display:grid;row-gap:var(--gap);align-content:start}
+.now:not(.tbadge)>*,.tl>*,.ov>*,.jwrap>*,.jtab>*,.morev>*,.bd>*,.dayview>*{margin-top:0!important;margin-bottom:0!important}
 .oblock,.oblock.after{margin:0}
 .nstatus{background:var(--soft);border:1.5px dashed var(--line2);border-radius:18px;padding:12px 14px;margin:0;color:var(--ink2)}
 .tl.grouped,.tl{row-gap:var(--gap)}
-.now,.tl,.ov,.jwrap,.jtab,.morev,.bd,.dayview{padding-top:var(--gap)}
+.now:not(.tbadge),.tl,.ov,.jwrap,.jtab,.morev,.bd,.dayview{padding-top:var(--gap)}
 /* v2.70: Journey activity pill - the start time on its own first line, the name underneath */
 .ja:has(.jat){display:inline-grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:6px;row-gap:0;align-items:center;padding-top:4px;padding-bottom:4px;border-radius:14px}
 .ja:has(.jat) .jdot{grid-column:1;grid-row:1} .ja:has(.jat) .jat{grid-column:2;grid-row:1;font-size:11px;line-height:1.2;opacity:.9}
@@ -1412,3 +1412,7 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .journey .jcard:not(.plain){margin-bottom:6px}
 /* v2.74: Timeline - the same 6px gap between the stay heading, the car line and each day inside a stay group (as in Journey) */
 .tlg,.tlg-days{gap:6px} .tlg-body{gap:10px} .tl.grouped .tlg-days>*{margin-top:0;margin-bottom:0}
+/* v2.75: Timeline - days already gone fold away under "Earlier Days" */
+.tl.hide-past .tlg.past,.tl.hide-past .dcard.past{display:none}
+.tlpast .ob-head span:not(.ob-go){font-size:13px} .tlpast .ob-go{font-size:13px;font-weight:700;color:var(--ink2)}
+.dc-head{align-items:center} .dc-head .tbadge{align-self:center;height:auto;line-height:1.2}

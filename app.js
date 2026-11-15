@@ -915,7 +915,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.74";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.75";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2619,7 +2619,7 @@ function renderTimeline() {
     const { allDay: allDay0, steps, comments, travel } = dayInfo(p, date), allDay = allDay0.filter((s) => s.k !== "stay" && s.k !== "car");   // the stay and car are the group's heading now
     const zones = stepZones(steps, date, (st) => (st.k === "flight" && st.id ? store.items.find((x) => x.id === st.id) : null));
     const w = withText(p, date);
-    cardOf[date] = `<section class="dcard${travel ? " travel" : ""}${date === today ? " today" : ""}" id="d-${date}" data-day="${date}" role="button" tabindex="0" aria-label="${WD[D(date).getDay()]} ${longDate(date)}">
+    cardOf[date] = `<section class="dcard${travel ? " travel" : ""}${date === today ? " today" : ""}${date < today ? " past" : ""}" id="d-${date}" data-day="${date}" role="button" tabindex="0" aria-label="${WD[D(date).getDay()]} ${longDate(date)}">
       <div class="dc-head">
         <span class="dpill">${WD[D(date).getDay()].slice(0, 3)} ${shortDate(date)}</span>
         <span class="dc-title">${w ? dotsFor(PEOPLE().filter((o) => o !== p && together(p, o, date))) : ""}</span>
@@ -2634,12 +2634,18 @@ function renderTimeline() {
   const groups = tlGroups(p, ds).map((g) => { const first = g.days[0], last = g.days.at(-1), st = g.stay;
     const cars = itemsFor(p).filter((i) => i.type === "car" && i.start <= last && i.end >= first)
       .sort((a, b) => (a.start || "").localeCompare(b.start || "") || (a.pickupTime || "").localeCompare(b.pickupTime || "") || (a.end || "").localeCompare(b.end || ""));   // earliest pick-up first, so a returned car sits above the next one
-    return `<section class="tlg"><${st ? `button type="button" data-detail="item:${esc(st.id)}"` : "div"} class="tlg-head${st ? "" : " none"}"><i>${st ? ICON.stay : ICON.flight}</i><span class="tlg-t"><b>${st ? esc(st.short || st.name) + (areaOf(st) && !(st.short || st.name).includes(areaOf(st)) ? `, ${esc(areaOf(st))}` : "") : "On the Move"}${st && st.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>
+    return `<section class="tlg${last < today ? " past" : ""}"><${st ? `button type="button" data-detail="item:${esc(st.id)}"` : "div"} class="tlg-head${st ? "" : " none"}"><i>${st ? ICON.stay : ICON.flight}</i><span class="tlg-t"><b>${st ? esc(st.short || st.name) + (areaOf(st) && !(st.short || st.name).includes(areaOf(st)) ? `, ${esc(areaOf(st))}` : "") : "On the Move"}${st && st.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>
         <small>${st ? `${shortDate(st.start)} – ${shortDate(st.end)} · ${dayDiff(st.start, st.end)} night${dayDiff(st.start, st.end) === 1 ? "" : "s"}` : first === last ? shortDate(first) : `${shortDate(first)} – ${shortDate(last)}`}</small></span>${st ? `<span class="crow-go">›</span>` : ""}</${st ? "button" : "div"}>
       <div class="tlg-body"><span class="tlg-rail${st ? "" : " none"}"></span><div class="tlg-days">${cars.map((c) => `<button type="button" class="tlg-car" data-detail="item:${esc(c.id)}"><i>${ICON.car}</i>${esc([c.company, c.vehicle].filter(Boolean).join(" · ") || "Car")} <span>· ${shortDate(c.start)} – ${shortDate(c.end)}</span></button>`).join("")}
         ${g.days.map((d) => cardOf[d]).join("")}</div></div></section>`; }).join("");
-  root.innerHTML = `${header({ views: true })}<div class="tl grouped">${whoKey()}${outsideBlock(p, "before")}${groups}${outsideBlock(p, "after")}</div>`;
+  // once the trip has started, the days already gone fold into one line at the top (open or closed is remembered on this device)
+  const gone = ds.filter((d) => d < today).length, showPast = (() => { try { return localStorage.getItem("tp.tlPast") === "1"; } catch (e) { return false; } })();
+  const pastBar = gone ? `<button type="button" class="oblock tlpast" data-tlpast aria-expanded="${showPast}"><span class="ob-head"><b>Earlier Days</b><span>${gone} day${gone === 1 ? "" : "s"} gone · ${shortDate(ds[0])} – ${shortDate(addDays(today, -1))}</span><span class="ob-go">${showPast ? "Hide ▴" : "Show ▾"}</span></span></button>` : "";
+  root.innerHTML = `${header({ views: true })}<div class="tl grouped${gone && !showPast ? " hide-past" : ""}">${whoKey()}${outsideBlock(p, "before")}${pastBar}${groups}${outsideBlock(p, "after")}</div>`;
   wireHeader(); wireDays();
+  root.querySelector("[data-tlpast]")?.addEventListener("click", () => { const tl = root.querySelector(".tl"), hide = !tl.classList.contains("hide-past"); tl.classList.toggle("hide-past", hide);
+    try { localStorage.setItem("tp.tlPast", hide ? "0" : "1"); } catch (e) { /* ignore */ }
+    const b = root.querySelector("[data-tlpast]"); b.setAttribute("aria-expanded", String(!hide)); b.querySelector(".ob-go").textContent = hide ? "Show ▾" : "Hide ▴"; });
   root.querySelectorAll(".tl [data-detail]").forEach((b) => (b.onclick = (ev) => { if (ev.target.closest("[data-grip]")) return; ev.stopPropagation(); detailSheet(b.dataset.detail, b.dataset.dd || null); }));
   if (isEditor()) root.querySelectorAll(".tl ol.steps[data-order]").forEach((ol) => wireDrag(ol, "li", (from, to) => {   // drag a step that has no time to another place in its day
     const lis = [...ol.children], seq = lis.map((li) => li.dataset.ref), untimed = lis.filter((li) => "untimed" in li.dataset).map((li) => li.dataset.ref), [m] = seq.splice(from, 1); seq.splice(to, 0, m);

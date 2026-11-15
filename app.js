@@ -928,7 +928,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.78";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.79";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2165,6 +2165,7 @@ function renderNow() {
   root.innerHTML = `${header({ views: true })}
   <div class="now">${isEditor() && !offOn(ui.tripId) && phase !== "after" && dayDiff(today, store.trip.start) <= 21 && store.files.length ? `<button class="offhint" data-act="offline"><i>${I.download || I.archive}</i><span><b>Save the trip documents on this phone</b><small>Boarding passes, tickets and vouchers that open with no signal</small></span></button>` : ""}${phase === "before" ? outsideBlock(p, "before") : ""}
     <p class="nstatus">${esc(status)}${w ? ` · Travellers ${withPills(p, date)}` : ""}</p>
+    ${phase !== "after" ? wxStrip(p, date) : ""}
     ${phase === "before" ? readyHtml() : ""}
     ${phase === "after" ? `<section class="ncard home"><h3>Welcome Home</h3><p class="muted">${N} days${stats.places ? ` · ${stats.places} places` : ""}${stats.flights ? ` · ${stats.flights} flights` : ""}</p>
         <button type="button" class="reelcta" data-act="reel"><i>${SV('<path d="M8 5v14l11-7z"/>')}</i><span><b>Watch the Trip Reel</b><small>Your journal photos, day by day, with music</small></span></button>
@@ -2194,6 +2195,7 @@ function renderNow() {
   root.querySelectorAll(".now [data-act]").forEach((b) => (b.onclick = () => actions[b.dataset.act]?.()));
   root.querySelectorAll(".now [data-detail]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); detailSheet(b.dataset.detail, b.dataset.dd || date); }));
   root.querySelectorAll(".now details.nfold").forEach((d) => (d.ontoggle = () => { ui.ciOpen = d.open; }));   // stays open or closed while the screen refreshes
+  root.querySelectorAll(".now [data-wxunit]").forEach((b) => (b.onclick = () => { wxUnit = wxUnit === "C" ? "F" : "C"; try { localStorage.setItem("tp.wxUnit", wxUnit); } catch (e) { /* ignore */ } const y = scrollY; render(); scrollTo(0, y); }));
   root.querySelectorAll(".now [data-tabgo]").forEach((b) => (b.onclick = () => { if (b.dataset.tabgo === "journal") ui.jdate = today; goTab(b.dataset.tabgo, paneOf(b)); }));
   root.querySelectorAll(".now [data-qexp]").forEach((b) => (b.onclick = () => expenseForm({ date: defaultExpenseDate() })));
   root.querySelectorAll(".now [data-rtick]").forEach((b) => (b.onclick = async () => { const x = (store.todos || []).find((y) => y.id === b.dataset.rtick); if (!x) return;
@@ -3999,25 +4001,27 @@ async function wxFetch(loc) {
     d.time.forEach((t, k) => { if (d.weather_code[k] != null) days[t] = [d.weather_code[k], d.temperature_2m_max[k], d.temperature_2m_min[k], d.precipitation_probability_max?.[k] ?? null]; });
     wx.fc[loc.key] = { at: Date.now(), days }; wxSave();
   } catch (e) { console.warn("weather", loc.area, e); wx.failed.add(loc.key); }
-  finally { wx.busy.delete(loc.key); if (ui.day) { const y = scrollY; render(); scrollTo(0, y); } }
+  finally { wx.busy.delete(loc.key); if (ui.tripId && !document.querySelector(".modal")) { const y = scrollY; render(); scrollTo(0, y); } }
 }
+// The weather block (Today and the day screen): one tile per place - where you wake up and, on a moving day, where you sleep
 function wxStrip(p, date) {
   const today = iso(new Date()), ahead = dayDiff(today, date);
   if (ahead < -92) return "";
   const locs = dayLocations(p, date).reverse(); if (!locs.length) return "";   // moving day: where you woke up → where you sleep
-  if (ahead > 15) return `<div class="wx muted small"><i class="wxi">${I.wpart}</i>Forecast from ${fmtDate(iso(new Date(D(date).getTime() - 15 * 864e5)))}</div>`;
-  const chips = locs.map((loc) => {
+  const head = `<div class="wxb-head"><h3>Weather</h3><a class="wxsrc muted" href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></div>`;
+  if (ahead > 15) return `<section class="wxblock">${head}<div class="wxtiles">${locs.map((loc) => `<div class="wxtile soon"><i class="wxi">${I.wpart}</i><span class="wxb"><b>${esc(loc.area)}</b><small class="muted">Forecast available from ${fmtDate(iso(new Date(D(date).getTime() - 15 * 864e5)))}</small></span></div>`).join("")}</div></section>`;
+  const tiles = locs.map((loc) => {
     const fc = wx.fc[loc.key], fresh = fc && Date.now() - fc.at < WX_TTL && (fc.days[date] || ahead < 0);
     if (!fresh && !wx.busy.has(loc.key) && !wx.failed.has(loc.key)) setTimeout(() => wxFetch(loc), 0);
     const d = fc?.days[date];
-    if (!d) return wx.failed.has(loc.key) || (fc && fresh) ? "" : `<span class="wxc muted small">${esc(loc.area)} · loading weather…</span>`;
+    if (!d) return wx.failed.has(loc.key) || (fc && fresh) ? "" : `<div class="wxtile soon"><i class="wxi">${I.wpart}</i><span class="wxb"><b>${esc(loc.area)}</b><small class="muted">Loading the forecast…</small></span></div>`;
     const [icon, label, tone] = WMO(d[0]);
-    const rain = d[3] != null && d[3] >= 20 && ahead >= 0 ? `<i class="wxdrop">${I.drop}</i>${d[3]}%` : "", two = locs.length > 1;
-    return `<button class="wxc" data-wxunit title="${esc(loc.area)}: ${label}${rain ? ", " + d[3] + "% chance of rain" : ""} - tap for °${wxUnit === "C" ? "F" : "C"}"><i class="wxi wx-${tone}">${I[icon]}</i>
-      <span class="wxt"><b>${wxTemp(d[1])}</b><span class="muted">/${wxTemp(d[2])}</span></span>
-      <span class="wxl">${two ? `<span class="muted">${esc(loc.area)}</span>` : `${label}${rain ? " · " + rain : ""}<span class="muted"> · ${esc(loc.area)}</span>`}</span></button>`;
+    const rain = d[3] != null && ahead >= 0 ? d[3] : null;
+    return `<button type="button" class="wxtile" data-wxunit title="Tap for °${wxUnit === "C" ? "F" : "C"}"><i class="wxi wx-${tone}">${I[icon]}</i>
+      <span class="wxb"><b>${esc(loc.area)}</b><small>${label}</small></span>
+      <span class="wxnums"><span class="wxt"><b>${wxTemp(d[1])}</b><span class="muted">${wxTemp(d[2])}</span></span>${rain != null ? `<span class="wxr${rain >= 50 ? " wet" : ""}"><i class="wxdrop">${I.drop}</i>${rain}%</span>` : ""}</span></button>`;
   }).filter(Boolean);
-  return chips.length ? `<div class="wx${locs.length > 1 ? " two" : ""}">${chips.join(locs.length > 1 ? `<span class="wxarrow muted">→</span>` : "")}<a class="wxsrc muted" href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></div>` : "";
+  return tiles.length ? `<section class="wxblock">${head}<div class="wxtiles${locs.length > 1 ? " two" : ""}">${tiles.join("")}</div></section>` : "";
 }
 
 const REC_V = 2;   // v2 adds coordinates for the map

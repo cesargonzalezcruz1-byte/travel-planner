@@ -1368,3 +1368,11 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .ov-act span[data-ovd]{cursor:pointer}
 .ov-act.paged span.ovnext{font-size:26px;font-weight:600;letter-spacing:0;padding:0 0 3px;line-height:1}
 .ov-act.paged span.ovnext{border-radius:0 12px 12px 0;margin:2px 0}
+/* v2.63: Overview - an activity over several days is one tall block; a pill beside it in half the width */
+.ov-act.ov-multi{grid-template-columns:minmax(0,1fr);border-radius:14px} .ov-act.ov-multi span>small{-webkit-line-clamp:4;max-height:none}
+.ov-act.half.paged{grid-template-columns:minmax(0,1fr) 26px} .ov-act.half.paged span.ovnext{grid-column:2;font-size:22px}
+.ov-act.half{padding:0 2px;margin-left:2px;margin-right:2px}
+.ov-act.half span>small{font-size:9.5px;overflow-wrap:normal;word-break:normal;-webkit-line-clamp:2;max-height:22px;line-height:1.1}
+.ov-act.half.paged{grid-template-columns:minmax(0,1fr) 18px;padding:0 2px 0 4px} .ov-act.half.paged span.ovnext{font-size:20px;border-left:0}
+.ov-card .ov-act span>small{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden} .ov-card .ov-act.ov-multi span>small{-webkit-line-clamp:4}
+.ov-card .ov-act.half span>small{font-size:9px;letter-spacing:-.2px}

@@ -915,7 +915,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.62";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.63";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1730,11 +1730,23 @@ function renderOverview() {
   [[cols[0], 3], [cols[1], 5]].forEach(([type, col]) => {
     labType = type;
     if (type === "act") {   // one pill per day: the first confirmed activity in a couple of words, plus a count of the rest
-      ds.forEach((d, k) => { const a = dayInfo(p, d).steps.filter((x) => x.eid).map((x) => store.entries.find((e) => e.id === x.eid)).filter(Boolean); if (!a.length) return;   // the day's order, as in the Timeline
+      // an activity over several days is one block down those days (like a stay); the one-day ones of each day share a pill beside it
+      const multi = new Set(), lanes = [[], []], laneOf = {};
+      store.entries.filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed && (e.who || []).includes(p) && (e.endDate || e.date) > e.date && e.endDate >= ds[0] && e.date <= ds.at(-1))
+        .sort((x, y) => x.date.localeCompare(y.date)).forEach((e) => { const s0 = Math.max(0, ix(e.date)), e0 = Math.min(N - 1, ix(e.endDate)); multi.add(e.id);
+          const L = lanes.findIndex((ln) => !ln.some(([a, b]) => s0 <= b && a <= e0)); laneOf[e.id] = { s: s0, e: e0, lane: L < 0 ? 1 : L }; (lanes[L < 0 ? 1 : L]).push([s0, e0]); });
+      const used = (k) => [0, 1].filter((L) => lanes[L].some(([a, b]) => a <= k && k <= b));
+      const dayActs = ds.map((d) => dayInfo(p, d).steps.filter((x) => x.eid && !multi.has(x.eid)).map((x) => store.entries.find((e) => e.id === x.eid)).filter(Boolean));   // the day's order, as in the Timeline
+      for (const id of multi) { const m = laneOf[id], e = store.entries.find((x) => x.id === id);
+        const alone = lanes[1 - m.lane].every(([a, b]) => b < m.s || a > m.e) && dayActs.slice(m.s, m.e + 1).every((x) => !x.length);   // nothing beside it: full width
+        cells.push(`<button class="ov-act ov-multi" data-dd="${e.date < ds[0] ? ds[0] : e.date}" style="grid-column:${alone ? `${col} / span 2` : col + m.lane};grid-row:${m.s + 1} / ${m.e + 2}" title="${esc(actText(e).split("\n")[0])} · ${esc(shortDate(e.date))} – ${esc(shortDate(e.endDate))}"><span data-pg="0" data-ovd="entry:${esc(e.id)}"><small>${esc(shortAct(e, alone ? 34 : 14))}</small></span></button>`); }
+      ds.forEach((d, k) => { const a = dayActs[k]; if (!a.length) return;
+        const u = used(k); if (u.length === 2) return;   // both sides taken by longer activities (rare)
+        const half = u.length === 1, gcol = half ? `${col + 1 - u[0]}` : `${col} / span 2`;
         // up to three activities side by side in the day's pill, split by thin lines; with more than three, the last column counts the rest
         // more than three: two at a time, and the third column is an arrow that shows the next ones (on the last ones it goes back to the start)
-        const n = Math.min(a.length, 3), max = n === 1 ? 34 : n === 2 ? 18 : 12, paged = a.length > 3, pages = paged ? Math.ceil(a.length / 2) : 1;
-        cells.push(`<button class="ov-act c${n}${paged ? " paged" : ""}" data-dd="${d}" data-at="0" data-np="${pages}" style="grid-column:${col} / span 2;grid-row:${k + 1}" title="${esc(a.map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e).split("\n")[0]).join(" · "))}">${a.map((e, j) => `<span data-pg="${paged ? Math.floor(j / 2) : 0}" data-ovd="entry:${esc(e.id)}"${paged && j >= 2 ? " hidden" : ""}><small>${esc(shortAct(e, max))}</small></span>`).join("")}${paged ? `<span class="ovnext" data-ovnext role="button" aria-label="Show the next activities">›</span>` : ""}</button>`); });
+        const n = half ? 1 : Math.min(a.length, 3), max = half ? 14 : n === 1 ? 34 : n === 2 ? 18 : 12, paged = half ? a.length > 1 : a.length > 3, per = half ? 1 : 2, pages = paged ? Math.ceil(a.length / per) : 1;
+        cells.push(`<button class="ov-act c${n}${paged ? " paged" : ""}${half ? " half" : ""}" data-dd="${d}" data-at="0" data-np="${pages}" style="grid-column:${gcol};grid-row:${k + 1}" title="${esc(a.map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e).split("\n")[0]).join(" · "))}">${a.map((e, j) => `<span data-pg="${paged ? Math.floor(j / per) : 0}" data-ovd="entry:${esc(e.id)}"${paged && j >= per ? " hidden" : ""}><small>${esc(shortAct(e, max))}</small></span>`).join("")}${paged ? `<span class="ovnext" data-ovnext role="button" aria-label="Show the next activities">›</span>` : ""}</button>`); });
       return;
     }
     layout(its.filter((i) => i.type === type)).forEach((pk, n) => {

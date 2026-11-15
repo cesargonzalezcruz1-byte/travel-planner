@@ -1400,3 +1400,9 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .nstatus{background:var(--soft);border:1.5px dashed var(--line2);border-radius:18px;padding:12px 14px;margin:0;color:var(--ink2)}
 .tl.grouped,.tl{row-gap:var(--gap)}
 .now,.tl,.ov,.jwrap,.jtab,.morev,.bd,.dayview{padding-top:var(--gap)}
+/* v2.70: Journey activity pill - the start time on its own first line, the name underneath */
+.ja:has(.jat){display:inline-grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:6px;row-gap:0;align-items:center;padding-top:4px;padding-bottom:4px;border-radius:14px}
+.ja:has(.jat) .jdot{grid-column:1;grid-row:1} .ja:has(.jat) .jat{grid-column:2;grid-row:1;font-size:11px;line-height:1.2;opacity:.9}
+.ja:has(.jat) .jan{grid-column:2;grid-row:2;text-align:left}
+.ja:has(.jat) .grip{grid-column:3;grid-row:1 / span 2}
+.ja{min-width:0;flex:0 1 auto} .ja .jan{text-align:left}

@@ -883,7 +883,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.49";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.50";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2550,7 +2550,7 @@ function renderTimeline() {
         ${date === today ? `<span class="tbadge now">Today</span>` : travel ? `<span class="tbadge">Travel Day</span>` : ""}
       </div>
       ${allDay.length ? `<div class="allday">${allDay.map((s) => `<span class="chip k-${s.k}${s.tbc ? " tbc" : ""}"><span class="ic">${ICON[s.k]}</span>${esc(s.title)}${s.sub ? ` <span class="cs">· ${esc(s.sub)}</span>` : ""}</span>`).join("")}</div>` : ""}
-      ${steps.length ? `<ol class="steps" data-order="${date}">${steps.map((s, k) => `<li data-ref="${esc(s.ref || "")}"${s.time ? "" : " data-untimed"}><span class="st-time">${esc(s.time) || "–"}${zones && zones[k] && s.time ? `<small class="tz">${esc(zones[k])}</small>` : ""}</span><span class="st-dot k-${s.k}"></span>${s.k === "car" && s.id ? pillHtml(s).replace('<span class="pill', `<span data-detail="item:${esc(s.id)}" data-dd="${date}" role="button" tabindex="0" class="pill`) : pillHtml(s)}${isEditor() && !s.time && s.ref && steps.length > 1 ? GRIP : ""}</li>`).join("")}</ol>` : ""}
+      ${steps.length ? `<ol class="steps" data-order="${date}">${steps.map((s, k) => `<li data-ref="${esc(s.ref || "")}"${s.time ? "" : " data-untimed"}><span class="st-time">${esc(s.time) || "–"}${zones && zones[k] && s.time ? `<small class="tz">${esc(zones[k])}</small>` : ""}</span><span class="st-dot k-${s.k}"></span>${s.k === "car" && s.id ? pillHtml(s).replace('<span class="pill', `<span data-detail="item:${esc(s.id)}" data-dd="${date}" role="button" tabindex="0" class="pill`) : isEditor() && !s.time && s.ref && steps.length > 1 ? pillHtml(s).replace(/<\/span>\s*$/, GRIP + "</span>") : pillHtml(s)}</li>`).join("")}</ol>` : ""}
       ${!allDay.length && !steps.length ? `<p class="dc-empty">Nothing booked yet</p>` : ""}
       ${comments.map((c) => `<p class="dcom">${ICON.chat}<span>${fmt(c.text)}</span></p>`).join("")}
     </section>`;

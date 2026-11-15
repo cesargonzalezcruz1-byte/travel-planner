@@ -1304,3 +1304,6 @@ body:has(.pfoot .whokey) #toast{bottom:calc(92px + 62px + env(safe-area-inset-bo
 .steps li.dragging{z-index:5;opacity:.95} .steps li.dragging .pill{box-shadow:0 8px 22px #0003,inset 0 0 0 1.5px var(--k)} .steps.drag-on li:not(.dragging){transition:transform .12s}
 .steps.drag-on li::before{visibility:hidden}
 .arows li.dragging{z-index:5;background:var(--card);box-shadow:0 8px 22px #0003;border-radius:14px} .arows.drag-on li:not(.dragging){transition:transform .12s} .arow .grip{margin:0 -6px 0 0}
+/* v2.50: the drag grip sits inside the pill, so draggable pills are as long as the others */
+.pill .grip{margin:-6px -8px -6px auto;align-self:stretch;height:auto;min-height:32px;width:36px;color:var(--kx);opacity:.6;border-radius:0 999px 999px 0}
+.pill .grip:active{background:color-mix(in srgb,var(--k) 16%,transparent);opacity:1}

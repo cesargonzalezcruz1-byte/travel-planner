@@ -1392,3 +1392,11 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 /* v2.68: activity details card in the same style as the booking cards */
 .acard .ibody b{font-size:16px} .acard .acwhen{font-weight:600;opacity:.85}
 .acard .acconf{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:6px;width:auto;cursor:pointer} .acard .acconf input{width:16px;height:16px;margin:0;accent-color:var(--act)}
+/* v2.69: one spacing between the blocks and cards of every screen (14px), and the trip status line in a dashed block like Before Trip */
+:root{--gap:14px}
+.now,.tl,.ov,.jwrap,.jtab,.morev,.bd,.dayview{display:grid;row-gap:var(--gap);align-content:start}
+.now>*,.tl>*,.ov>*,.jwrap>*,.jtab>*,.morev>*,.bd>*,.dayview>*{margin-top:0!important;margin-bottom:0!important}
+.oblock,.oblock.after{margin:0}
+.nstatus{background:var(--soft);border:1.5px dashed var(--line2);border-radius:18px;padding:12px 14px;margin:0;color:var(--ink2)}
+.tl.grouped,.tl{row-gap:var(--gap)}
+.now,.tl,.ov,.jwrap,.jtab,.morev,.bd,.dayview{padding-top:var(--gap)}

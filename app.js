@@ -213,7 +213,9 @@ function render() {
   if (!ui.nowChecked && store.trip?.start) { ui.nowChecked = true; const td = iso(new Date()); if (td >= store.trip.start && td <= store.trip.end && !ui.day) ui.view = "now"; }
   if (splitOn()) { renderSplit(); return afterRender(); }
   root = appRoot; appRoot.classList.remove("is-split");
-  renderView(ui.day ? "day" : ui.view); drawTabs(true);
+  renderView(ui.day ? "day" : ui.view);
+  if (!root.querySelector(".whokey")) root.insertAdjacentHTML("beforeend", whoKey());   // the traveller row sits above the tabs on every screen of a trip
+  drawTabs(true);
   if (ui.slide) { root.querySelector(".ov,.tl,.journey,.dayview,.bd,.now")?.classList.add(ui.slide); ui.slide = null; }
   afterRender();
 }
@@ -277,7 +279,7 @@ function renderSplit() {
     root = panes[k]; ui.pane = k; ui.person = ui.splitPeople[k] || me; ui.day = ui.splitDay[k]; if (v !== "day") ui.view = v;
     renderView(v);
     // each side works like a phone screen: the traveller row and its own tab bar stay at the bottom while the content scrolls
-    const foot = document.createElement("div"); foot.className = "pfoot"; const wk = root.querySelector(".whokey"); if (wk) foot.appendChild(wk);
+    const foot = document.createElement("div"); foot.className = "pfoot"; const wk = root.querySelector(".whokey"); if (wk) foot.appendChild(wk); else foot.insertAdjacentHTML("beforeend", whoKey());
     foot.insertAdjacentHTML("beforeend", `<nav class="tabbar ptabs" aria-label="Main">${tabsHtml()}</nav>`);
     foot.querySelector(".ptabs").onclick = (e) => { const b = e.target.closest("[data-tab]"); if (b) goTab(b.dataset.tab, k); };
     root.appendChild(foot);
@@ -913,7 +915,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.55";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.56";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),

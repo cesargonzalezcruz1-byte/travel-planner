@@ -928,7 +928,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.77";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.78";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2626,6 +2626,17 @@ async function openTripMap(tid) {
 }
 
 // ---------------------------------------------------------------- Timeline view (one card per day)
+// Once the trip has started, the days already gone fold into one "Earlier Days" line at the top of Timeline and Journey
+// (shown or hidden is remembered on this device, the same for both).
+const pastShown = () => { try { return localStorage.getItem("tp.tlPast") === "1"; } catch (e) { return false; } };
+const pastGone = (ds) => { const today = iso(new Date()); return ds.filter((d) => d < today); };
+const pastHidden = (ds) => pastGone(ds).length > 0 && !pastShown();
+const pastBar = (ds) => { const g = pastGone(ds), show = pastShown(); if (!g.length) return "";
+  return `<button type="button" class="oblock tlpast" data-tlpast aria-expanded="${show}"><span class="ob-head"><b>Earlier Days</b><span>${g.length} day${g.length === 1 ? "" : "s"} gone · ${shortDate(g[0])} – ${shortDate(g.at(-1))}</span><span class="ob-go">${show ? "Hide ▴" : "Show ▾"}</span></span></button>`; };
+document.addEventListener("click", (e) => { const b = e.target.closest?.("[data-tlpast]"); if (!b) return;
+  const box = b.parentElement.querySelector(".hide-past, .tl.grouped, .journey") || b.closest(".tl"), list = b.closest(".tl") || box, hide = !list.classList.contains("hide-past");
+  list.classList.toggle("hide-past", hide); try { localStorage.setItem("tp.tlPast", hide ? "0" : "1"); } catch (x) { /* ignore */ }
+  b.setAttribute("aria-expanded", String(!hide)); b.querySelector(".ob-go").textContent = hide ? "Show ▾" : "Hide ▴"; });
 function renderTimeline() {
   const p = ui.person, ds = days(), today = iso(new Date());
   const cardOf = {};
@@ -2653,13 +2664,8 @@ function renderTimeline() {
       <div class="tlg-body"><span class="tlg-rail${st ? "" : " none"}"></span><div class="tlg-days">${cars.map((c) => `<button type="button" class="tlg-car" data-detail="item:${esc(c.id)}"><i>${ICON.car}</i>${esc([c.company, c.vehicle].filter(Boolean).join(" · ") || "Car")} <span>· ${shortDate(c.start)} – ${shortDate(c.end)}</span></button>`).join("")}
         ${g.days.map((d) => cardOf[d]).join("")}</div></div></section>`; }).join("");
   // once the trip has started, the days already gone fold into one line at the top (open or closed is remembered on this device)
-  const gone = ds.filter((d) => d < today).length, showPast = (() => { try { return localStorage.getItem("tp.tlPast") === "1"; } catch (e) { return false; } })();
-  const pastBar = gone ? `<button type="button" class="oblock tlpast" data-tlpast aria-expanded="${showPast}"><span class="ob-head"><b>Earlier Days</b><span>${gone} day${gone === 1 ? "" : "s"} gone · ${shortDate(ds[0])} – ${shortDate(addDays(today, -1))}</span><span class="ob-go">${showPast ? "Hide ▴" : "Show ▾"}</span></span></button>` : "";
-  root.innerHTML = `${header({ views: true })}<div class="tl grouped${gone && !showPast ? " hide-past" : ""}">${whoKey()}${outsideBlock(p, "before")}${pastBar}${groups}${outsideBlock(p, "after")}</div>`;
+  root.innerHTML = `${header({ views: true })}<div class="tl grouped${pastHidden(ds) ? " hide-past" : ""}">${whoKey()}${outsideBlock(p, "before")}${pastBar(ds)}${groups}${outsideBlock(p, "after")}</div>`;
   wireHeader(); wireDays();
-  root.querySelector("[data-tlpast]")?.addEventListener("click", () => { const tl = root.querySelector(".tl"), hide = !tl.classList.contains("hide-past"); tl.classList.toggle("hide-past", hide);
-    try { localStorage.setItem("tp.tlPast", hide ? "0" : "1"); } catch (e) { /* ignore */ }
-    const b = root.querySelector("[data-tlpast]"); b.setAttribute("aria-expanded", String(!hide)); b.querySelector(".ob-go").textContent = hide ? "Show ▾" : "Hide ▴"; });
   root.querySelectorAll(".tl [data-detail]").forEach((b) => (b.onclick = (ev) => { if (ev.target.closest("[data-grip]")) return; ev.stopPropagation(); detailSheet(b.dataset.detail, b.dataset.dd || null); }));
   if (isEditor()) root.querySelectorAll(".tl ol.steps[data-order]").forEach((ol) => wireDrag(ol, "li", (from, to) => {   // drag a step that has no time to another place in its day
     const lis = [...ol.children], seq = lis.map((li) => li.dataset.ref), untimed = lis.filter((li) => "untimed" in li.dataset).map((li) => li.dataset.ref), [m] = seq.splice(from, 1); seq.splice(to, 0, m);
@@ -2678,7 +2684,7 @@ function renderJourney() {
   const actsOn = (date) => dayInfo(p, date).steps.filter((s) => s.k === "act");   // same order as the Timeline, hand-placed ones included
   // each activity is its own pill, left to right in order: dot, start time (if any), name; editors can drag the ones without a time
   const dayChip = (d) => { const a = actsOn(d);
-    return `<div role="button" tabindex="0" class="jday${d === today ? " today" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jn-acts" data-order="${d}">${a.map((x) => `<span class="ja" data-ref="${esc(x.ref)}" data-detail="entry:${esc(x.eid)}" data-dd="${d}" role="button"${x.time ? "" : " data-untimed"}><span class="jdot"></span>${x.time ? `<b class="jat">${esc(x.time)}</b>` : ""}<span class="jan">${fmt(x.title)}</span>${isEditor() && !x.time && a.length > 1 ? GRIP : ""}</span>`).join("")}</span>` : ""}</div>`; };
+    return `<div role="button" tabindex="0" class="jday${d === today ? " today" : ""}${d < today ? " past" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jn-acts" data-order="${d}">${a.map((x) => `<span class="ja" data-ref="${esc(x.ref)}" data-detail="entry:${esc(x.eid)}" data-dd="${d}" role="button"${x.time ? "" : " data-untimed"}><span class="jdot"></span>${x.time ? `<b class="jat">${esc(x.time)}</b>` : ""}<span class="jan">${fmt(x.title)}</span>${isEditor() && !x.time && a.length > 1 ? GRIP : ""}</span>`).join("")}</span>` : ""}</div>`; };
   const chips = (ds) => { let out = "", run = [];
     const flush = () => { if (run.length) out += `<div class="jempties">${run.map(dayChip).join("")}</div>`; run = []; };
     ds.forEach((d) => { if (actsOn(d).length) { flush(); out += dayChip(d); } else run.push(d); }); flush(); return out; };
@@ -2691,7 +2697,7 @@ function renderJourney() {
     if (i.type === "stay") {
       const N = dayDiff(i.start, i.end); const inner = [];
       for (let d = i.start; d < i.end; d = addDays(d, 1)) if (d >= store.trip.start && d <= store.trip.end) inner.push(d);
-      return `<li class="jrow station${i.status === "tbc" ? " tbc" : ""}">
+      return `<li class="jrow station${i.status === "tbc" ? " tbc" : ""}${i.end <= today ? " past" : ""}">
         <span class="jnode k-stay">${ICON.stay}</span>
         <div class="jn-body">
           <button class="jcard${i.start <= today && today < i.end ? " today" : ""}" data-detail="item:${esc(i.id)}"><span class="jl-top"><b>${esc(i.name)}${i.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>${dotsFor((i.who || []).filter((o) => o !== p && PEOPLE().includes(o)))}</span>
@@ -2703,15 +2709,15 @@ function renderJourney() {
     const title = isF ? `${codesOf(i.route).join(" → ")}` : `${i.company || "Car"}${i.pickup ? " · " + i.pickup : ""}`;
     const sub = isF ? [[i.airline, i.number].filter(Boolean).join(" "), [cleanTime(i.dep), i.arr].filter(Boolean).join(" – ")].filter(Boolean).join(" · ")
       : [i.vehicle && i.vehicle.replace(/\s*\(.*\)$/, ""), `until ${shortDate(i.end)}`, i.dropoff && i.dropoff !== i.pickup ? "return " + i.dropoff : ""].filter(Boolean).join(" · ");
-    return `<li class="jrow leg">
+    return `<li class="jrow leg${(isF ? i.start : i.end) < today ? " past" : ""}">
       <span class="jnode k-${k}">${ICON[k]}</span>
       <div class="jn-body"><button class="jleg k-${k}${i.status === "tbc" ? " tbc" : ""}${i.start === today ? " today" : ""}" data-detail="item:${esc(i.id)}">
         <span class="jl-top"><b>${esc(title)}</b><span class="jl-date">${WD3(i.start)} ${D(i.start).getDate()}</span>${dotsFor((i.who || []).filter((o) => o !== p && PEOPLE().includes(o)))}</span>
         <small>${esc(sub)}</small></button>${extra[i.id] ? `<div class="jdays">${chips(extra[i.id])}</div>` : ""}</div></li>`;
   }).join("");
   const t = store.trip;
-  root.innerHTML = `${header({ views: true })}<div class="jwrap">${whoKey()}${outsideBlock(p, "before")}
-    <ol class="journey">${stops || `<li class="jempty">No bookings yet${isEditor() ? " - add one with +" : ""}.</li>`}
+  root.innerHTML = `${header({ views: true })}<div class="jwrap">${whoKey()}${outsideBlock(p, "before")}${pastBar(days())}
+    <ol class="journey${pastHidden(days()) ? " hide-past" : ""}">${stops || `<li class="jempty">No bookings yet${isEditor() ? " - add one with +" : ""}.</li>`}
       ${t ? `<li class="jrow station end"><span class="jnode k-home">${ICON.home}</span><div class="jn-body"><div class="jcard plain"><b>End of Trip</b><small>${WD[D(t.end).getDay()]} ${longDate(t.end)}</small></div></div></li>` : ""}</ol>${outsideBlock(p, "after")}</div>`;
   wireHeader(); wireDays();
   if (isEditor()) root.querySelectorAll(".jwrap .jn-acts[data-order]").forEach((box) => wireDragFlow(box, ".ja", (from, to) => {

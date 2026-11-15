@@ -913,7 +913,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.54";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.55";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2721,7 +2721,7 @@ function entryLi(e) {
     return `<li id="en-${esc(e.id)}" class="entry st-${e.status} ${isAct ? (e.confirmed ? "is-conf" : "is-plan") : ""}">
       <div class="etext">${mark}${fmt(e.text)}${isAct && !e.confirmed ? ` <span class="planned">planned</span>` : ""}${ratingBadge(e.id)}
         ${(e.endDate && e.endDate !== e.date) ? `<span class="muted small"> (${fmtDate(e.date)} – ${fmtDate(e.endDate)})</span>` : ""}
-        ${e.who.length < PEOPLE().length ? `<span class="who idots whos" role="img" aria-label="${esc(e.who.map(NAME).join(", "))}">${ALL_CODES().filter((c) => e.who.includes(c)).map((w) => `<i class="tdot" style="--pc:${pcolor(w)}" title="${esc(NAME(w))}"></i>`).join("")}</span>` : ""}</div>
+        ${e.who.length ? `<span class="who idots whos" role="img" aria-label="${esc(e.who.map(NAME).join(", "))}">${ALL_CODES().filter((c) => e.who.includes(c)).map((w) => `<i class="tdot" style="--pc:${pcolor(w)}" title="${esc(NAME(w))}"></i>`).join("")}</span>` : ""}</div>
       <div class="eacts">${e.status === "recommended" ? voteBtn("e_" + e.id, firstText(e.text), "idea") : ""}${e.place ? `<a class="ibtn pin" target="_blank" rel="noopener" href="${maps(e.place)}" title="Open in Google Maps" aria-label="Open in Google Maps">${I.pin}</a>` : ""}
         ${isEditor() ? `${e.status === "recommended" ? `<button class="btn tiny" data-plan="${e.id}">Add to Plan</button>` : ""}
         ${isAct ? `<label class="ibtn" title="Attach a booking / ticket - marks it confirmed" aria-label="Attach a booking or ticket">${I.clip}<input type="file" hidden data-attach-entry="${e.id}"></label>` : ""}
@@ -2750,7 +2750,7 @@ function actRow(e) {
     ${isEditor() ? `<label class="conf" title="Confirmed activities show in the itinerary"><input type="checkbox" data-confirm="${e.id}" ${e.confirmed ? "checked" : ""} aria-label="Confirmed"></label>` : `<span class="aconf">${e.confirmed ? "✓" : "○"}</span>`}
     <button type="button" class="arow-main" data-detail="entry:${esc(e.id)}"><span class="arow-t">${tm ? `<b class="atime">${esc(tm)}</b>` : ""}<span>${fmt(text)}</span></span>
       <small>${[e.confirmed ? "" : "Planned - not confirmed", e.place ? esc(e.place) : "", e.endDate && e.endDate !== e.date ? `${fmtDate(e.date)} – ${fmtDate(e.endDate)}` : ""].filter(Boolean).join(" · ")}${ratingBadge(e.id)}${nf ? ` <span class="crow-badge">${I.clip}${nf}</span>` : ""}</small></button>
-    ${e.who.length < PEOPLE().length ? dotsFor(ALL_CODES().filter((c) => e.who.includes(c))) : ""}${canDrag ? GRIP : `<span class="crow-go">›</span>`}</li>`;
+    ${dotsFor(ALL_CODES().filter((c) => (e.who || []).includes(c)))}${canDrag ? GRIP : `<span class="crow-go">›</span>`}</li>`;
 }
 // the details sheet: the full booking card (or activity row) with every action it had; Delete sits under "More"
 function detailSheet(ref, date) {

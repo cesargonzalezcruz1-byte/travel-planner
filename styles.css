@@ -1379,3 +1379,9 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 /* v2.64: Overview activity pill - the row inside the pill is exactly the pill's height, so the dividing lines and the arrow stay inside the box (the tall arrow was stretching it) */
 .ov-act{grid-template-rows:minmax(0,1fr)} .ov-act span{min-height:0}
 .ov-act.paged span.ovnext{margin:0;padding:0 0 3px;overflow:hidden;border-radius:0 9px 9px 0}
+/* v2.65: Overview activity text - same size and weight as a stay's place name (not bold), up to two lines in every pill */
+.ov-card .ov-act span>small,.ov-card .ov-act.half span>small,.ov-card .ov-act.c3 span>small{font-size:9.5px;font-weight:500;line-height:1.1;letter-spacing:0;max-height:21px;-webkit-line-clamp:2;overflow-wrap:break-word;word-break:normal;hyphens:auto;-webkit-hyphens:auto}
+.ov-card .ov-act.ov-multi span>small{-webkit-line-clamp:6;max-height:none}
+.ov-card .ov-act span{padding:0 3px}
+.ov-card .ov-act span>small{overflow-wrap:normal;word-break:normal;hyphens:manual;-webkit-hyphens:manual;max-height:none;height:auto;max-height:21.5px}
+.ov-card .ov-act.ov-multi span>small{max-height:none}

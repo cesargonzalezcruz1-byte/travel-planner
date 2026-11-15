@@ -915,7 +915,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.64";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.65";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1669,6 +1669,20 @@ const OV_TYPES = { stay: "Stay", car: "Car", act: "Activity" };
 const ovCols = () => { try { const v = JSON.parse(localStorage.getItem("tp.ovcols") || "null"); if (Array.isArray(v) && v.length === 2 && v.every((x) => OV_TYPES[x])) return v; } catch (e) { /* ignore */ } return ["stay", "car"]; };
 // A one- or two-word label for an activity, short enough for an Overview pill: drops the time, brackets and filler words.
 const ACT_STOP = new Set("a an the at in to of for with on and or from by our my de la el del los las y en al day trip tour visit full half morning afternoon evening night".split(" "));
+// The key words of an activity for an Overview pill: shown in full where they fit two lines, trimmed word by word where they don't
+const actWords = (e) => { const w = shortAct(e, 60).split(/\s+/).filter(Boolean); return w.length ? w.slice(0, 6) : ["Activity"]; };
+const actSmall = (e) => { const w = actWords(e); return `<small data-w="${esc(JSON.stringify(w))}">${esc(w.join(" "))}</small>`; };
+function fitActs(scope) {
+  scope.querySelectorAll(".ov-act small[data-w]").forEach((el) => {
+    if (el.closest("[hidden]")) { el.dataset.fit = "later"; return; }
+    let w; try { w = JSON.parse(el.dataset.w); } catch (x) { return; }
+    el.style.fontSize = ""; el.textContent = w.join(" ");
+    const over = () => el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+    while (w.length > 1 && over()) { w = w.slice(0, -1); el.textContent = w.join(" "); }
+    if (over()) el.style.fontSize = "8.5px";   // one long word: a touch smaller rather than cut
+    el.dataset.fit = "1";
+  });
+}
 function shortAct(e, max = 16) {
   if (e.short) return e.short;
   let t = String(e.text || "").split("\n")[0].replace(/\([^)]*\)/g, " ").replace(/\b\d{1,2}[:.]\d{2}\s*(am|pm)?\b/gi, " ").replace(/\b\d{1,2}\s*(am|pm)\b/gi, " ");
@@ -1739,14 +1753,14 @@ function renderOverview() {
       const dayActs = ds.map((d) => dayInfo(p, d).steps.filter((x) => x.eid && !multi.has(x.eid)).map((x) => store.entries.find((e) => e.id === x.eid)).filter(Boolean));   // the day's order, as in the Timeline
       for (const id of multi) { const m = laneOf[id], e = store.entries.find((x) => x.id === id);
         const alone = lanes[1 - m.lane].every(([a, b]) => b < m.s || a > m.e) && dayActs.slice(m.s, m.e + 1).every((x) => !x.length);   // nothing beside it: full width
-        cells.push(`<button class="ov-act ov-multi" data-dd="${e.date < ds[0] ? ds[0] : e.date}" style="grid-column:${alone ? `${col} / span 2` : col + m.lane};grid-row:${m.s + 1} / ${m.e + 2}" title="${esc(actText(e).split("\n")[0])} · ${esc(shortDate(e.date))} – ${esc(shortDate(e.endDate))}"><span data-pg="0" data-ovd="entry:${esc(e.id)}"><small>${esc(shortAct(e, alone ? 34 : 14))}</small></span></button>`); }
+        cells.push(`<button class="ov-act ov-multi" data-dd="${e.date < ds[0] ? ds[0] : e.date}" style="grid-column:${alone ? `${col} / span 2` : col + m.lane};grid-row:${m.s + 1} / ${m.e + 2}" title="${esc(actText(e).split("\n")[0])} · ${esc(shortDate(e.date))} – ${esc(shortDate(e.endDate))}"><span data-pg="0" data-ovd="entry:${esc(e.id)}">${actSmall(e)}</span></button>`); }
       ds.forEach((d, k) => { const a = dayActs[k]; if (!a.length) return;
         const u = used(k); if (u.length === 2) return;   // both sides taken by longer activities (rare)
         const half = u.length === 1, gcol = half ? `${col + 1 - u[0]}` : `${col} / span 2`;
         // up to three activities side by side in the day's pill, split by thin lines; with more than three, the last column counts the rest
         // more than three: two at a time, and the third column is an arrow that shows the next ones (on the last ones it goes back to the start)
-        const n = half ? 1 : Math.min(a.length, 3), max = half ? 14 : n === 1 ? 34 : n === 2 ? 18 : 12, paged = half ? a.length > 1 : a.length > 3, per = half ? 1 : 2, pages = paged ? Math.ceil(a.length / per) : 1;
-        cells.push(`<button class="ov-act c${n}${paged ? " paged" : ""}${half ? " half" : ""}" data-dd="${d}" data-at="0" data-np="${pages}" style="grid-column:${gcol};grid-row:${k + 1}" title="${esc(a.map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e).split("\n")[0]).join(" · "))}">${a.map((e, j) => `<span data-pg="${paged ? Math.floor(j / per) : 0}" data-ovd="entry:${esc(e.id)}"${paged && j >= per ? " hidden" : ""}><small>${esc(shortAct(e, max))}</small></span>`).join("")}${paged ? `<span class="ovnext" data-ovnext role="button" aria-label="Show the next activities">›</span>` : ""}</button>`); });
+        const n = half ? 1 : Math.min(a.length, 3), max = half ? 18 : n === 1 ? 40 : n === 2 ? 24 : 16, paged = half ? a.length > 1 : a.length > 3, per = half ? 1 : 2, pages = paged ? Math.ceil(a.length / per) : 1;
+        cells.push(`<button class="ov-act c${n}${paged ? " paged" : ""}${half ? " half" : ""}" data-dd="${d}" data-at="0" data-np="${pages}" style="grid-column:${gcol};grid-row:${k + 1}" title="${esc(a.map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e).split("\n")[0]).join(" · "))}">${a.map((e, j) => `<span data-pg="${paged ? Math.floor(j / per) : 0}" data-ovd="entry:${esc(e.id)}"${paged && j >= per ? " hidden" : ""}>${actSmall(e)}</span>`).join("")}${paged ? `<span class="ovnext" data-ovnext role="button" aria-label="Show the next activities">›</span>` : ""}</button>`); });
       return;
     }
     layout(its.filter((i) => i.type === type)).forEach((pk, n) => {
@@ -1775,13 +1789,14 @@ function renderOverview() {
       </div>${outsideBlock(p, "after")}</div>`;
   const svgEl = root.querySelector(".ov-svg"); if (svgEl) { svgEl._shapes = shapes; svgEl._pane = ui.pane; } drawOverviewShapes(svgEl);
   wireHeader(); wireDays();
+  fitActs(root);
   // a flight, stay, car or activity opens its own details; the day itself opens from the date on the left
   root.querySelectorAll(".ov-fl[data-ovd], .ov-lab[data-ovd], .ov-act").forEach((b) => (b.onclick = (ev) => {
     const x = ev.target.closest("[data-ovnext]") ? null : ev.target.closest("[data-ovd]"); ev.stopPropagation();
     if (x && x.dataset.ovd.split(":")[1]) detailSheet(x.dataset.ovd, b.dataset.dd || null); }));
   root.querySelectorAll("[data-ovnext]").forEach((x) => (x.onclick = (ev) => { ev.stopPropagation(); ev.preventDefault();
     const b = x.closest(".ov-act"), np = +b.dataset.np, at = (+b.dataset.at + 1) % np; b.dataset.at = at;
-    b.querySelectorAll("[data-pg]").forEach((sp) => (sp.hidden = +sp.dataset.pg !== at));
+    b.querySelectorAll("[data-pg]").forEach((sp) => (sp.hidden = +sp.dataset.pg !== at)); fitActs(b);
     x.textContent = at === np - 1 ? "‹" : "›"; x.setAttribute("aria-label", at === np - 1 ? "Back to the first activities" : "Show the next activities"); }));
   root.querySelectorAll("[data-ovcol]").forEach((b) => (b.onclick = () => { const [n, k] = b.dataset.ovcol.split(":"); const c = ovCols(); c[+n] = k;
     try { localStorage.setItem("tp.ovcols", JSON.stringify(c)); } catch (e) { /* ignore */ } const y = scrollY; render(); scrollTo(0, y); }));

@@ -101,6 +101,36 @@ function wireDrag(list, rowSel, onDrop) {
     });
   });
 }
+// An activity was dragged within a list that shows only activities: put it right after the activity now before it (or before the one after it)
+// in the day's full sequence, and save.
+function moveAmongActs(p, date, m, upRef, dnRef) {
+  const steps = dayInfo(p, date).steps, seq = steps.map((x) => x.ref); if (!seq.includes(m) || (!upRef && !dnRef)) return;
+  seq.splice(seq.indexOf(m), 1); const at = upRef ? seq.indexOf(upRef) + 1 : seq.indexOf(dnRef); if (at < 0 || (upRef && at === 0)) return;
+  seq.splice(at, 0, m);
+  saveDayOrder(date, seq, m, steps.filter((x) => !x.time).map((x) => x.ref)).then(() => render()).catch((x) => toast("Couldn't save the new order: " + (x.code || x.message)));
+}
+// Drag to reorder pills that flow left to right and wrap onto more lines. The pill follows the finger; a bar shows where it will land.
+function wireDragFlow(list, sel, onDrop) {
+  list.querySelectorAll(":scope > " + sel + " [data-grip]").forEach((grip) => {
+    grip.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); });
+    grip.addEventListener("pointerdown", (e) => {
+      if (e.button) return; e.preventDefault(); e.stopPropagation();
+      const rows = [...list.querySelectorAll(":scope > " + sel)], row = grip.closest(sel), from = rows.indexOf(row), box = rows.map((r) => r.getBoundingClientRect());
+      const x0 = e.clientX, y0 = e.clientY; let to = from;
+      grip.setPointerCapture(e.pointerId); row.classList.add("dragging"); list.classList.add("drag-on");
+      const clear = () => rows.forEach((r) => r.classList.remove("ins-before", "ins-after"));
+      const move = (ev) => { row.style.transform = `translate(${ev.clientX - x0}px,${ev.clientY - y0}px)`; clear();
+        let best = -1, bd = 1e9; box.forEach((b, k) => { if (k === from) return; const dy = ev.clientY < b.top ? b.top - ev.clientY : ev.clientY > b.bottom ? ev.clientY - b.bottom : 0, dx = ev.clientX < b.left ? b.left - ev.clientX : ev.clientX > b.right ? ev.clientX - b.right : 0, d = dy * 3 + dx; if (d < bd) { bd = d; best = k; } });
+        if (best < 0) { to = from; return; }
+        const after = ev.clientX > box[best].left + box[best].width / 2; let ins = best + (after ? 1 : 0); if (from < ins) ins--; to = ins;
+        if (to !== from) rows[best].classList.add(after ? "ins-after" : "ins-before"); };
+      const end = (ev) => { grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", end); grip.removeEventListener("pointercancel", end);
+        clear(); row.style.transform = ""; row.classList.remove("dragging"); list.classList.remove("drag-on");
+        if (ev.type === "pointerup" && to !== from) onDrop(from, to); };
+      grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", end); grip.addEventListener("pointercancel", end);
+    });
+  });
+}
 const GRIP = `<i class="grip" data-grip role="button" aria-label="Drag to move" title="Drag to move"><svg viewBox="0 0 12 18" width="12" height="18" aria-hidden="true"><g fill="currentColor"><circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/><circle cx="3" cy="9" r="1.6"/><circle cx="9" cy="9" r="1.6"/><circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/></g></svg></i>`;
 const byActTime = (a, b) => (actTime(a) || "99").localeCompare(actTime(b) || "99");
 const entriesFor = (p, date) => store.entries.filter((e) => (e.who || []).includes(p) && e.date <= date && date <= (e.endDate || e.date));
@@ -883,7 +913,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.51";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.52";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2579,9 +2609,10 @@ function renderJourney() {
   const p = ui.person, ord = { flight: 0, car: 1, stay: 2 };
   const its = itemsFor(p).filter((i) => !(i.end < store.trip.start || i.start > store.trip.end)).sort((a, b) => a.start.localeCompare(b.start) || ord[a.type] - ord[b.type]);
   // every confirmed activity of a day (multi-day ones included)
-  const actsOn = (date) => dayInfo(p, date).steps.filter((s) => s.k === "act").map((s) => (s.time ? s.time + " " : "") + s.title);   // same order as the Timeline, hand-placed ones included
+  const actsOn = (date) => dayInfo(p, date).steps.filter((s) => s.k === "act");   // same order as the Timeline, hand-placed ones included
+  // each activity is its own pill, left to right in order: dot, start time (if any), name; editors can drag the ones without a time
   const dayChip = (d) => { const a = actsOn(d);
-    return `<button class="jday${d === today ? " today" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jn-acts">${a.map((t) => `<span class="ja"><span class="jdot"></span>${fmt(t)}</span>`).join("")}</span>` : ""}</button>`; };
+    return `<div role="button" tabindex="0" class="jday${d === today ? " today" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jn-acts" data-order="${d}">${a.map((x) => `<span class="ja" data-ref="${esc(x.ref)}"${x.time ? "" : " data-untimed"}><span class="jdot"></span>${x.time ? `<b class="jat">${esc(x.time)}</b>` : ""}<span class="jan">${fmt(x.title)}</span>${isEditor() && !x.time && a.length > 1 ? GRIP : ""}</span>`).join("")}</span>` : ""}</div>`; };
   const chips = (ds) => { let out = "", run = [];
     const flush = () => { if (run.length) out += `<div class="jempties">${run.map(dayChip).join("")}</div>`; run = []; };
     ds.forEach((d) => { if (actsOn(d).length) { flush(); out += dayChip(d); } else run.push(d); }); flush(); return out; };
@@ -2617,6 +2648,9 @@ function renderJourney() {
     <ol class="journey">${stops || `<li class="jempty">No bookings yet${isEditor() ? " - add one with +" : ""}.</li>`}
       ${t ? `<li class="jrow station end"><span class="jnode k-home">${ICON.home}</span><div class="jn-body"><div class="jcard plain"><b>End of Trip</b><small>${WD[D(t.end).getDay()]} ${longDate(t.end)}</small></div></div></li>` : ""}</ol>${outsideBlock(p, "after")}</div>`;
   wireHeader(); wireDays();
+  if (isEditor()) root.querySelectorAll(".jwrap .jn-acts[data-order]").forEach((box) => wireDragFlow(box, ".ja", (from, to) => {
+    const pills = [...box.querySelectorAll(":scope > .ja")], [mv] = pills.splice(from, 1); pills.splice(to, 0, mv); const at = pills.indexOf(mv);
+    moveAmongActs(p, box.dataset.order, mv.dataset.ref, pills[at - 1]?.dataset.ref, pills[at + 1]?.dataset.ref); }));
   root.querySelectorAll(".jwrap [data-detail]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); detailSheet(b.dataset.detail, null); }));
   const back = sessionStorage.getItem("tp.wscroll"); if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
   else if (!ui.jScrolled) { const el = root.querySelector(".jday.today, .jleg.today, .jcard.today"); if (el) { ui.jScrolled = true; window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + scrollY - 200)); } }
@@ -3037,11 +3071,8 @@ function renderDay() {
   wireCards(); wireDetails();
   { const ul = root.querySelector("ul.arows"); if (ul && isEditor()) wireDrag(ul, "li.arow", (from, to) => {
       const rows = [...ul.querySelectorAll(":scope > li.arow")], [mv] = rows.splice(from, 1); rows.splice(to, 0, mv);
-      const steps = dayInfo(p, date).steps, seq = steps.map((x) => x.ref), m = mv.dataset.ref, at = rows.indexOf(mv);
-      const up = rows.slice(0, at).reverse().find((r) => "conf" in r.dataset), dn = rows.slice(at + 1).find((r) => "conf" in r.dataset);
-      if (!seq.includes(m) || (!up && !dn)) return;
-      seq.splice(seq.indexOf(m), 1); seq.splice(up ? seq.indexOf(up.dataset.ref) + 1 : seq.indexOf(dn.dataset.ref), 0, m);
-      saveDayOrder(date, seq, m, steps.filter((x) => !x.time).map((x) => x.ref)).then(() => render()).catch((x) => toast("Couldn't save the new order: " + (x.code || x.message))); }); }
+      const at = rows.indexOf(mv), up = rows.slice(0, at).reverse().find((r) => "conf" in r.dataset), dn = rows.slice(at + 1).find((r) => "conf" in r.dataset);
+      moveAmongActs(p, date, mv.dataset.ref, up?.dataset.ref, dn?.dataset.ref); }); }
   root.querySelectorAll("[data-attach-day]").forEach((inp) => (inp.onchange = () => upload(inp.files, { date: inp.dataset.attachDay })));
 }
 // ------------------------------------------------------------------ date fields shown as dd-mmm-yy everywhere

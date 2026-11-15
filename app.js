@@ -915,7 +915,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.70";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.71";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -3078,7 +3078,7 @@ function renderDay() {
     pins.push({ q: e.place, name: e.place, kind: ok ? "Confirmed Activity" : e.status === "recommended" ? "Recommended" : "Planned - Not Confirmed", glyph: I.star, color: COLOR.act, hollow: !ok });
   });
   // Google recommendations near today's stay: top 5 to do + top 5 to eat (all of the open tab when expanded), skipping ones already planned
-  const rlocs = dayLocations(p, date), rkey = rlocs.some((l) => l.key === ui.recLoc) ? ui.recLoc : rlocs[0]?.key, rrec = rkey && (store.trip.recs || {})[rkey];
+  const rlocs = recLocs(p, date), rkey = rlocs.some((l) => l.key === ui.recLoc) ? ui.recLoc : rlocs[0]?.key, rrec = rkey && (store.trip.recs || {})[rkey];
   const inPlan = (x) => ents.some((e) => e.kind === "activity" && (e.text === x.name || String(e.place || "").startsWith(x.name)));
   const recPins = [];
   if (rrec) [["do", COLOR.act, I.star, "Recommended"], ["eat", cssv("--food"), I.eat, "Place to Eat"]].forEach(([tab, color, glyph, kind]) =>
@@ -3998,6 +3998,31 @@ function recLocations() {
   store.items.filter((i) => i.type === "stay" && stayArea(i)).forEach((s) => { const area = stayArea(s), key = recKey(area); if (!m.has(key)) m.set(key, { key, area, near: s.address || s.name }); });
   return [...m.values()];
 }
+// The town or area of an activity's place: "Key West Lighthouse, 938 Whitehead St, Key West, FL 33040" -> "Key West";
+// "…, 77780 Tulum, Q.R., Mexico" -> "Tulum". A place with no address parts is used as it is.
+function placeArea(place) {
+  const parts = String(place || "").split(",").map((x) => x.trim()).filter(Boolean); if (!parts.length) return "";
+  if (parts.length === 1) return parts[0];
+  const COUNTRY = /^(usa|us|united states( of america)?|mexico|méxico|australia|new zealand|nz|canada|uk|united kingdom)$/i;
+  const cand = parts.slice(1).filter((x) => !COUNTRY.test(x) && !/^[A-Z]{2}(\s+\d{4,6}(-\d{4})?)?$/.test(x) && !/^[A-Za-z.]{1,5}\.?$/.test(x) && !/^[\dA-Z]{4}\+[\dA-Z]{2,3}/.test(x))
+    .map((x) => x.replace(/^\d{4,6}\s+/, "").replace(/\s+\d{4,6}$/, "").trim()).filter((x) => x && !/^\d/.test(x) && !/\bS\/N\b|\bSt\b|\bAve\b|\bRd\b|\bBlvd\b|\bDr\b|\bCalle\b|\bCarretera\b|\bKm\b/i.test(x));
+  return cand.at(-1) || parts[0];
+}
+// Where to look for things to do and places to eat on a day: the areas of the day's activities (in the day's order), then where you
+// are staying (always last, for evenings back at the hotel). With no activity places, just the stay - as before.
+function recLocs(p, date) {
+  const out = [];
+  dayInfo(p, date).steps.filter((x) => x.eid).map((x) => store.entries.find((e) => e.id === x.eid)).filter((e) => e && e.place)
+    .forEach((e) => { const area = placeArea(e.place), key = area && recKey(area); if (key && !out.some((o) => o.key === key)) out.push({ key, area, near: e.place }); });
+  dayLocations(p, date).forEach((l) => { if (!out.some((o) => o.key === l.key)) out.push({ ...l, near: recLocations().find((x) => x.key === l.key)?.near || l.area }); });
+  return out;
+}
+function ensureDayRecs(locs) {   // the day's activity areas are looked up when the day is opened (stays are looked up ahead)
+  if (!isEditor() || !store.trip || !mapsReady() || recState.error) return;
+  const have = store.trip.recs || {};
+  locs.filter((l) => (!have[l.key] || have[l.key].v !== REC_V) && !recState.tried.has(l.key) && !recState.busy.has(l.key))
+    .forEach((l) => { recState.tried.add(l.key); recQueue = recQueue.then(() => fetchRecs(l)); });
+}
 function dayLocations(p, date) {
   const st = itemsFor(p).filter((i) => i.type === "stay" && i.start <= date && date <= i.end && stayArea(i));
   const night = st.find((i) => i.start <= date && date < i.end), left = st.find((i) => i.end === date && i !== night);
@@ -4201,7 +4226,7 @@ function wireVotes() {
   }));
 }
 function recsHtml(p, date, notesHtml) {
-  const locs = dayLocations(p, date);
+  const locs = recLocs(p, date); setTimeout(() => ensureDayRecs(locs), 0);
   if (!locs.length && !notesHtml) return "";
   if (!locs.some((l) => l.key === ui.recLoc)) ui.recLoc = locs[0]?.key;
   const loc = locs.find((l) => l.key === ui.recLoc), rec = loc && (store.trip.recs || {})[loc.key];
@@ -4240,8 +4265,7 @@ function wireRecs(p, date, others) {
   sec.querySelector("[data-rec-refresh]")?.addEventListener("click", () => {
     if (!mapsReady()) return toast("Needs the Google Maps key");
     recState.error = ""; recState.tried.clear();
-    const keys = dayLocations(p, date).map((l) => l.key), all = recLocations();
-    all.filter((l) => keys.includes(l.key) && !recState.busy.has(l.key)).forEach((l) => { recState.busy.add(l.key); recQueue = recQueue.then(() => fetchRecs(l)); });
+    recLocs(p, date).filter((l) => !recState.busy.has(l.key)).forEach((l) => { recState.busy.add(l.key); recQueue = recQueue.then(() => fetchRecs(l)); });
     toast("Searching Google…"); keep(); setTimeout(ensureRecs, 0);   // also picks up any other new locations
   });
   sec.querySelectorAll("[data-rec-add]").forEach((b) => (b.onclick = async () => {

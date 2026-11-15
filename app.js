@@ -915,7 +915,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.65";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.66";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1910,17 +1910,17 @@ function dayInfo(p, date) {
       const c = codesOf(i.route); const fl = [i.airline, i.number].filter(Boolean).join(" ");
       if (date === i.start) steps.push({ k: "flight", time: cleanTime(i.dep), title: c.join(" → ") || "Flight", sub: [fl, i.arr && "lands " + i.arr + landTz(i)].filter(Boolean).join(" · "), id: i.id });
       else if (date === i.end) steps.push({ k: "flight", time: cleanTime(i.arr), title: "Land in " + (c.at(-1) || ""), sub: fl, id: i.id });
-      else allDay.push({ k: "flight", title: "In flight", sub: fl });
+      else allDay.push({ k: "flight", title: "In flight", sub: fl, id: i.id });
     } else if (i.type === "stay") {
       const nm = i.short || i.name;
       if (date === i.start) steps.push({ k: "stay", time: cleanTime(i.checkin), key: i.checkin ? null : "23:58", title: "Check in", sub: i.name, tbc, id: i.id });
       if (date === i.end) steps.push({ k: "stay", time: cleanTime(i.checkout), key: i.checkout ? null : "00:01", title: "Check out", sub: i.name, tbc, id: i.id });
-      if (i.start < date && date < i.end) allDay.push({ k: "stay", title: nm, sub: `Night ${n} of ${N}`, tbc });
+      if (i.start < date && date < i.end) allDay.push({ k: "stay", title: nm, sub: `Night ${n} of ${N}`, tbc, id: i.id });
     } else if (i.type === "car") {
       const veh = i.vehicle ? i.vehicle.replace(/\s*\(.*\)$/, "") : "";
       if (date === i.start) steps.push({ k: "car", time: cleanTime(i.pickupTime), key: i.pickupTime ? null : "23:50", title: "Pick up " + (i.company || "car"), sub: [i.pickup, veh].filter(Boolean).join(" · "), tbc, id: i.id });
       if (date === i.end) steps.push({ k: "car", time: cleanTime(i.dropoffTime), key: i.dropoffTime ? null : firstDep ? minus1(firstDep) : "23:55", title: "Return " + (i.company || "car"), sub: i.dropoff || "", tbc, id: i.id });
-      if (i.start < date && date < i.end) allDay.push({ k: "car", title: [i.company, veh].filter(Boolean).join(" · "), sub: `Day ${n} of ${N + 1}`, tbc });
+      if (i.start < date && date < i.end) allDay.push({ k: "car", title: [i.company, veh].filter(Boolean).join(" · "), sub: `Day ${n} of ${N + 1}`, tbc, id: i.id });
     }
   }
   const ents = entriesFor(p, date);
@@ -2625,8 +2625,8 @@ function renderTimeline() {
         <span class="dc-title">${w ? dotsFor(PEOPLE().filter((o) => o !== p && together(p, o, date))) : ""}</span>
         ${date === today ? `<span class="tbadge now">Today</span>` : travel ? `<span class="tbadge">Travel Day</span>` : ""}
       </div>
-      ${allDay.length ? `<div class="allday">${allDay.map((s) => `<span class="chip k-${s.k}${s.tbc ? " tbc" : ""}"><span class="ic">${ICON[s.k]}</span>${esc(s.title)}${s.sub ? ` <span class="cs">· ${esc(s.sub)}</span>` : ""}</span>`).join("")}</div>` : ""}
-      ${steps.length ? `<ol class="steps" data-order="${date}">${steps.map((s, k) => `<li data-ref="${esc(s.ref || "")}"${s.time ? "" : " data-untimed"}><span class="st-time">${esc(s.time) || "–"}${zones && zones[k] && s.time ? `<small class="tz">${esc(zones[k])}</small>` : ""}</span><span class="st-dot k-${s.k}"></span>${s.k === "car" && s.id ? pillHtml(s).replace('<span class="pill', `<span data-detail="item:${esc(s.id)}" data-dd="${date}" role="button" tabindex="0" class="pill`) : isEditor() && !s.time && s.ref && steps.length > 1 ? pillHtml(s).replace(/<\/span>\s*$/, GRIP + "</span>") : pillHtml(s)}</li>`).join("")}</ol>` : ""}
+      ${allDay.length ? `<div class="allday">${allDay.map((s) => `<span class="chip k-${s.k}${s.tbc ? " tbc" : ""}"${s.id ? ` data-detail="item:${esc(s.id)}" data-dd="${date}" role="button" tabindex="0"` : ""}><span class="ic">${ICON[s.k]}</span>${esc(s.title)}${s.sub ? ` <span class="cs">· ${esc(s.sub)}</span>` : ""}</span>`).join("")}</div>` : ""}
+      ${steps.length ? `<ol class="steps" data-order="${date}">${steps.map((s, k) => `<li data-ref="${esc(s.ref || "")}"${s.time ? "" : " data-untimed"}><span class="st-time">${esc(s.time) || "–"}${zones && zones[k] && s.time ? `<small class="tz">${esc(zones[k])}</small>` : ""}</span><span class="st-dot k-${s.k}"></span>${((h) => (s.id || s.eid ? h.replace('<span class="pill', `<span data-detail="${s.eid ? "entry:" + esc(s.eid) : "item:" + esc(s.id)}" data-dd="${date}" role="button" tabindex="0" class="pill`) : h))(isEditor() && !s.time && s.ref && steps.length > 1 ? pillHtml(s).replace(/<\/span>\s*$/, GRIP + "</span>") : pillHtml(s))}</li>`).join("")}</ol>` : ""}
       ${!allDay.length && !steps.length ? `<p class="dc-empty">Nothing booked yet</p>` : ""}
       ${comments.map((c) => `<p class="dcom">${ICON.chat}<span>${fmt(c.text)}</span></p>`).join("")}
     </section>`;
@@ -2640,7 +2640,7 @@ function renderTimeline() {
         ${g.days.map((d) => cardOf[d]).join("")}</div></div></section>`; }).join("");
   root.innerHTML = `${header({ views: true })}<div class="tl grouped">${whoKey()}${outsideBlock(p, "before")}${groups}${outsideBlock(p, "after")}</div>`;
   wireHeader(); wireDays();
-  root.querySelectorAll(".tl [data-detail]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); detailSheet(b.dataset.detail, b.dataset.dd || null); }));
+  root.querySelectorAll(".tl [data-detail]").forEach((b) => (b.onclick = (ev) => { if (ev.target.closest("[data-grip]")) return; ev.stopPropagation(); detailSheet(b.dataset.detail, b.dataset.dd || null); }));
   if (isEditor()) root.querySelectorAll(".tl ol.steps[data-order]").forEach((ol) => wireDrag(ol, "li", (from, to) => {   // drag a step that has no time to another place in its day
     const lis = [...ol.children], seq = lis.map((li) => li.dataset.ref), untimed = lis.filter((li) => "untimed" in li.dataset).map((li) => li.dataset.ref), [m] = seq.splice(from, 1); seq.splice(to, 0, m);
     saveDayOrder(ol.dataset.order, seq, m, untimed).then(() => render()).catch((x) => toast("Couldn't save the new order: " + (x.code || x.message))); }));
@@ -2658,7 +2658,7 @@ function renderJourney() {
   const actsOn = (date) => dayInfo(p, date).steps.filter((s) => s.k === "act");   // same order as the Timeline, hand-placed ones included
   // each activity is its own pill, left to right in order: dot, start time (if any), name; editors can drag the ones without a time
   const dayChip = (d) => { const a = actsOn(d);
-    return `<div role="button" tabindex="0" class="jday${d === today ? " today" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jn-acts" data-order="${d}">${a.map((x) => `<span class="ja" data-ref="${esc(x.ref)}"${x.time ? "" : " data-untimed"}><span class="jdot"></span>${x.time ? `<b class="jat">${esc(x.time)}</b>` : ""}<span class="jan">${fmt(x.title)}</span>${isEditor() && !x.time && a.length > 1 ? GRIP : ""}</span>`).join("")}</span>` : ""}</div>`; };
+    return `<div role="button" tabindex="0" class="jday${d === today ? " today" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jn-acts" data-order="${d}">${a.map((x) => `<span class="ja" data-ref="${esc(x.ref)}" data-detail="entry:${esc(x.eid)}" data-dd="${d}" role="button"${x.time ? "" : " data-untimed"}><span class="jdot"></span>${x.time ? `<b class="jat">${esc(x.time)}</b>` : ""}<span class="jan">${fmt(x.title)}</span>${isEditor() && !x.time && a.length > 1 ? GRIP : ""}</span>`).join("")}</span>` : ""}</div>`; };
   const chips = (ds) => { let out = "", run = [];
     const flush = () => { if (run.length) out += `<div class="jempties">${run.map(dayChip).join("")}</div>`; run = []; };
     ds.forEach((d) => { if (actsOn(d).length) { flush(); out += dayChip(d); } else run.push(d); }); flush(); return out; };
@@ -2674,7 +2674,7 @@ function renderJourney() {
       return `<li class="jrow station${i.status === "tbc" ? " tbc" : ""}">
         <span class="jnode k-stay">${ICON.stay}</span>
         <div class="jn-body">
-          <button class="jcard${i.start <= today && today < i.end ? " today" : ""}" data-day="${i.start}"><span class="jl-top"><b>${esc(i.name)}${i.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>${dotsFor((i.who || []).filter((o) => o !== p && PEOPLE().includes(o)))}</span>
+          <button class="jcard${i.start <= today && today < i.end ? " today" : ""}" data-detail="item:${esc(i.id)}"><span class="jl-top"><b>${esc(i.name)}${i.status === "tbc" ? ` <span class="tbctag">TBC</span>` : ""}</b>${dotsFor((i.who || []).filter((o) => o !== p && PEOPLE().includes(o)))}</span>
             <small>${shortDate(i.start)} – ${shortDate(i.end)} · ${N} night${N === 1 ? "" : "s"}${i.address ? " · " + esc(i.address) : ""}</small></button>
           ${inner.length ? `<div class="jdays">${chips(inner)}</div>` : ""}
         </div></li>`;
@@ -2685,7 +2685,7 @@ function renderJourney() {
       : [i.vehicle && i.vehicle.replace(/\s*\(.*\)$/, ""), `until ${shortDate(i.end)}`, i.dropoff && i.dropoff !== i.pickup ? "return " + i.dropoff : ""].filter(Boolean).join(" · ");
     return `<li class="jrow leg">
       <span class="jnode k-${k}">${ICON[k]}</span>
-      <div class="jn-body"><button class="jleg k-${k}${i.status === "tbc" ? " tbc" : ""}${i.start === today ? " today" : ""}" ${isF ? `data-day="${i.start}"` : `data-detail="item:${esc(i.id)}"`}>
+      <div class="jn-body"><button class="jleg k-${k}${i.status === "tbc" ? " tbc" : ""}${i.start === today ? " today" : ""}" data-detail="item:${esc(i.id)}">
         <span class="jl-top"><b>${esc(title)}</b><span class="jl-date">${WD3(i.start)} ${D(i.start).getDate()}</span>${dotsFor((i.who || []).filter((o) => o !== p && PEOPLE().includes(o)))}</span>
         <small>${esc(sub)}</small></button>${extra[i.id] ? `<div class="jdays">${chips(extra[i.id])}</div>` : ""}</div></li>`;
   }).join("");
@@ -2697,7 +2697,7 @@ function renderJourney() {
   if (isEditor()) root.querySelectorAll(".jwrap .jn-acts[data-order]").forEach((box) => wireDragFlow(box, ".ja", (from, to) => {
     const pills = [...box.querySelectorAll(":scope > .ja")], [mv] = pills.splice(from, 1); pills.splice(to, 0, mv); const at = pills.indexOf(mv);
     moveAmongActs(p, box.dataset.order, mv.dataset.ref, pills[at - 1]?.dataset.ref, pills[at + 1]?.dataset.ref); }));
-  root.querySelectorAll(".jwrap [data-detail]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); detailSheet(b.dataset.detail, null); }));
+  root.querySelectorAll(".jwrap [data-detail]").forEach((b) => (b.onclick = (ev) => { if (ev.target.closest("[data-grip]")) return; ev.stopPropagation(); detailSheet(b.dataset.detail, b.dataset.dd || null); }));
   const back = sessionStorage.getItem("tp.wscroll"); if (back) { window.scrollTo(0, +back); sessionStorage.removeItem("tp.wscroll"); }
   else if (!ui.jScrolled) { const el = root.querySelector(".jday.today, .jleg.today, .jcard.today"); if (el) { ui.jScrolled = true; window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + scrollY - 200)); } }
 }

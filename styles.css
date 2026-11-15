@@ -1410,3 +1410,5 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .dayhead .nav{display:grid;place-items:center;padding:0;flex:none}
 /* v2.73: Journey - the same 6px gap between a stay card and its first day as everywhere else in the list */
 .journey .jcard:not(.plain){margin-bottom:6px}
+/* v2.74: Timeline - the same 6px gap between the stay heading, the car line and each day inside a stay group (as in Journey) */
+.tlg,.tlg-days{gap:6px} .tlg-body{gap:10px} .tl.grouped .tlg-days>*{margin-top:0;margin-bottom:0}

@@ -1422,3 +1422,5 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .ja .jan{font-weight:500} .ja .jat{font-weight:800}
 .ja.ins-before-v{box-shadow:0 -4px 0 0 var(--ink),inset 0 0 0 1.5px var(--act)} .ja.ins-after-v{box-shadow:0 4px 0 0 var(--ink),inset 0 0 0 1.5px var(--act)}
 .ja .jan *{font-weight:inherit}
+/* v2.77: back button in the header */ .iconbtn.navback[hidden]{display:none}
+/* v2.77: back button in the header */ .iconbtn.navback[hidden]{display:none}

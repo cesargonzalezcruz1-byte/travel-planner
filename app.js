@@ -39,7 +39,7 @@ function parseRoute() {
 const routeTo = (tripId, day, replace = false) => {
   const h = tripId ? `#/t/${encodeURIComponent(tripId)}${day ? "/" + day : ""}` : "#/";
   // If a pop-up's own history step is the current one, reuse it rather than stacking a new page on top of it.
-  if (replace || history.state?.m) history.replaceState(null, "", h); else history.pushState(null, "", h);
+  if (replace || history.state?.m) history.replaceState(replace ? null : { d: history.state?.d || 0 }, "", h); else { history.pushState({ d: (history.state?.d || 0) + 1 }, "", h); }
   parseRoute(); render();
 };
 const days = () => {
@@ -249,7 +249,19 @@ function applyFocus() {
 // redraws in the first few seconds (maps, recommendations, journal loading) keep the focused section in view
 function holdFocus() { const h = ui.focusHold; if (!h) return; if (h.moved || Date.now() > h.until) { ui.focusHold = null; return; } setTimeout(() => !h.moved && h.go(false), 60); }
 function clearFocusParam() { try { const u = new URL(location.href); u.searchParams.delete("focus"); history.replaceState(null, "", u.pathname + u.search + u.hash); } catch (e) { /* ignore */ } }
+// ---- in-app history: every change of screen (tab, view, day, either side of the two-view layout) is a step in the browser history,
+// so the ← button in the header and the phone's Back button both go back one screen at a time
+const navSnap = () => ({ view: ui.view, split: ui.split ? [...ui.split] : null, splitDay: ui.splitDay ? [...ui.splitDay] : null });
+let navD = history.state?.d || 0;
+function syncNav() {
+  if (!ui.tripId || skipPop > 0 || openModals().length) return;
+  const cur = history.state || {}, snap = navSnap(); if (cur.m) return;
+  if (!cur.v) { navD = cur.d ?? 0; history.replaceState({ ...cur, v: snap, d: navD }, "", location.href); }
+  else if (JSON.stringify(cur.v) !== JSON.stringify(snap)) { navD = (cur.d || 0) + 1; history.pushState({ v: snap, d: navD }, "", location.href); }
+  document.querySelectorAll("[data-navback]").forEach((b) => (b.hidden = !((history.state?.d || 0) > 0)));
+}
 function afterRender() {
+  setTimeout(syncNav, 0);
   if (ui.tripId && isEditor()) setTimeout(() => syncOffline(), 1500);
   applyFocus(); holdFocus();
   splitWas = splitOn() + "|" + splitWide();
@@ -916,7 +928,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.76";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.77";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1004,6 +1016,7 @@ function header(opts = {}) {
       : opts.views ? `<nav class="vseg${viewsFor().length > 3 ? " icons" : ""}" aria-label="View">${viewsFor().map(([k, l, ic]) => `<button class="${ui.view === k ? "on" : ""}" data-view="${k}" aria-label="${l}" title="${l}">${ICON[ic]}${ui.view === k && viewsFor().length <= 3 ? `<span>${l}</span>` : ""}</button>`).join("")}</nav>` : `<span class="hero-hint">${esc(NAME(me))}'s day</span>`}
       <span class="grow"></span>
       ${ui.pane !== 1 ? splitToggle() : ""}
+      <button class="iconbtn navback" data-navback ${(history.state?.d || 0) > 0 ? "" : "hidden"} aria-label="Back to the previous screen" title="Back"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
       <button class="iconbtn addbtn" data-act="add" aria-label="Add to the trip" title="Add to the trip">${ICON.plus}</button>
       ${tabs ? "" : `<details class="more"><summary class="iconbtn" aria-label="More">${ICON.dots}</summary><div class="pop">
         <span class="pop-role">${store.role === "editor" ? "Editor" : "Family"}${data.DEMO ? " · demo" : ""} · ${APP_VERSION}</span>
@@ -2745,7 +2758,7 @@ const modalWatch = new MutationObserver((recs) => {
 });
 modalWatch.observe(document.body, { childList: true });
 window.onpopstate = () => {
-  if (skipPop > 0) { skipPop--; return; }
+  if (skipPop > 0) { skipPop--; setTimeout(syncNav, 0); return; }
   const top = openModals().pop();
   if (top) {
     top.dispatchEvent(new MouseEvent("click"));                       // same as tapping outside the card
@@ -2754,8 +2767,12 @@ window.onpopstate = () => {
     modalWatch.takeRecords();                                         // this close already used its history step
     return;
   }
-  parseRoute(); render();
+  parseRoute();
+  const v = history.state?.v; navD = history.state?.d || 0;
+  if (v) { ui.view = v.view; if (v.split) ui.split = [...v.split]; if (v.splitDay) ui.splitDay = [...v.splitDay]; }   // the screen as it was at that step
+  render();
 };
+document.addEventListener("click", (e) => { if (e.target.closest?.("[data-navback]")) { e.preventDefault(); history.back(); } });
 
 // ---------------------------------------------------------------- day view
 function roleOn(i, date) {

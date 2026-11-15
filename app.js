@@ -915,7 +915,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.67";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.68";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2772,6 +2772,28 @@ function entryLi(e) {
         <button class="btn tiny" data-edit-entry="${e.id}">Edit</button>
         <button class="ibtn danger" data-del-entry="${e.id}" title="Delete" aria-label="Delete">${I.trash}</button>` : ""}</div>
       ${efiles.length ? `<div class="efiles">${efiles.map(fileLink).join("")}</div>` : ""}</li>`; }
+// The details card of an activity, laid out like the booking cards: icon, status, who, name, when and where, private details, links and buttons
+function actCard(e) {
+  const tm = actTime(e), text = actText(e), [title, ...more] = String(text).split("\n"), rec = e.status === "recommended";
+  const when = [e.endDate && e.endDate !== e.date ? `${WD[D(e.date).getDay()]} ${longDate(e.date)} – ${WD[D(e.endDate).getDay()]} ${longDate(e.endDate)}` : `${WD[D(e.date).getDay()]} ${longDate(e.date)}`, tm ? "at " + tm : ""].filter(Boolean).join(" ");
+  const pv = isEditor() ? store.priv[e.id] : null;
+  const pvHtml = pv && Object.keys(pv).length ? `<dl class="priv">${Object.entries(pv).filter(([k, v]) => v && !["updatedBy", "updatedAt", "kind"].includes(k) && !(k === "share" && v === "ours")).map(([k, v]) => `<dt>${esc(label(k))}</dt><dd>${esc(k === "share" ? SHARE[v] || v : v)}</dd>`).join("")}</dl>` : "";
+  const files = isEditor() ? store.files.filter((f) => f.entryId === e.id) : [];
+  const tag = rec ? "Idea" : e.confirmed ? "Confirmed" : "Planned";
+  return `<article class="icard k-act acard" id="en-${esc(e.id)}">
+    <div class="ihead"><span class="ic">${ICON.act}</span><span class="tag">${tag}</span>${ratingBadge(e.id)}
+      <span class="who idots" role="img" aria-label="${esc((e.who || []).map(NAME).join(", "))}">${ALL_CODES().filter((c) => (e.who || []).includes(c)).map((w) => `<i class="tdot" style="--pc:${pcolor(w)}" title="${esc(NAME(w))}"></i>`).join("")}</span></div>
+    <div class="ibody"><b>${fmt(title)}</b>${more.length ? `<br>${fmt(more.join("\n"))}` : ""}<br><span class="acwhen">${esc(when)}</span>${e.place && !String(text).includes(e.place) ? `<br>${esc(e.place)}` : ""}</div>
+    ${e.note ? `<div class="inote">${fmt(e.note)}</div>` : ""}
+    ${pvHtml}
+    <div class="ilinks">${e.place ? `<a class="maplink" target="_blank" rel="noopener" href="${maps(e.place)}"><i class="ic16">${I.pin}</i>Open in Google Maps</a>` : ""}${files.map(fileLink).join("")}
+      ${rec ? voteBtn("e_" + e.id, firstText(text), "idea") : ""}</div>
+    ${isEditor() ? `<div class="iacts"><button class="btn small" data-edit-entry="${e.id}">Edit</button>
+       ${rec ? `<button class="btn small" data-plan="${e.id}">Add to Plan</button>` : `<label class="btn small acconf"><input type="checkbox" data-confirm="${e.id}" ${e.confirmed ? "checked" : ""}>Confirmed</label>`}
+       <button class="btn small danger" data-del-entry="${e.id}"><i class="ic16">${I.trash}</i>Delete</button>
+       <label class="btn small"><i class="ic16">${I.clip}</i>Attach File<input type="file" hidden data-attach-entry="${e.id}"></label></div>` : ""}
+  </article>`;
+}
 // ---------------------------------------------------------------- v2 day screen: compact cards; tap one for its details sheet (everything the full card had)
 function itemRow(i, date) {
   const k = KIND[i.type], role = roleOn(i, date), codes = codesOf(i.route), n = (a, b) => dayDiff(a, b);
@@ -2807,7 +2829,7 @@ function detailSheet(ref, date) {
     const cur = kind === "item" ? store.items.find((x) => x.id === id) : store.entries.find((x) => x.id === id);
     if (!cur) return close();
     m.innerHTML = `<div class="sheet dsheet"><div class="ds-head"><b>${kind === "item" ? { flight: "Flight", stay: "Stay", car: "Car" }[cur.type] || "Booking" : cur.kind === "comment" ? "Note" : "Activity"}</b><button type="button" class="btn tiny" data-x aria-label="Close">✕</button></div>
-      ${kind === "item" ? itemCard(cur, d) : `<ul class="entries">${entryLi(cur)}</ul>`}
+      ${kind === "item" ? itemCard(cur, d) : cur.kind === "activity" ? actCard(cur) : `<ul class="entries">${entryLi(cur)}</ul>`}
       ${kind === "item" && cur.type === "stay" ? `<p class="muted small">${shortDate(cur.start)} – ${shortDate(cur.end)} · ${dayDiff(cur.start, cur.end)} night${dayDiff(cur.start, cur.end) === 1 ? "" : "s"}</p>` : ""}
       ${isEditor() ? `<div class="ds-foot"><button type="button" class="btn small danger" data-ds-del><i class="ic16">${I.trash}</i>Delete This ${kind === "item" ? { flight: "Flight", stay: "Stay", car: "Car" }[cur.type] || "Booking" : cur.kind === "comment" ? "Note" : "Activity"}</button></div>` : ""}</div>`;
     const keep = root; root = m; try { wireCards(); wireCheckins(); } finally { root = keep; }

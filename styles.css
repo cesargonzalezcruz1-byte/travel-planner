@@ -1346,3 +1346,11 @@ body.has-tabs:has(.whokey) .tabbar,.pfoot .whokey+.tabbar{box-shadow:0 -6px 14px
 html.who-hide .whokey>:not(.whotog){display:none} html.who-hide .whokey{padding-top:34px}
 html.who-hide .whotog{top:4px;transform:rotate(180deg)}
 html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + env(safe-area-inset-bottom))}
+/* v2.60: day Documents - name on the left, the "attached to" lists all the same width lined up on the right, then Remove */
+.files:has(.flink){container-type:inline-size}
+.files:has(.flink) .frow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,260px) auto;align-items:center;gap:8px}
+.files:has(.flink) .frow .filelink{display:block;min-width:0;max-width:100%;justify-self:start;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.files:has(.flink) .frow .filelink .ic16{display:inline-flex;vertical-align:-3px;margin-right:5px}
+.files:has(.flink) .frow .flink{width:100%;max-width:none}
+@container (max-width:520px){.files:has(.flink) .frow{grid-template-columns:minmax(0,1fr) auto;row-gap:6px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  .files:has(.flink) .frow .filelink{grid-column:1/-1}}

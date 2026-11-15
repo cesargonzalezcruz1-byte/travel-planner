@@ -913,7 +913,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.52";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.54";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1632,7 +1632,7 @@ function budgetForm() {
     async (fd) => {
       const rates = {}, cats = {};
       for (const [k, v] of fd.entries()) { if (k.startsWith("rate.") && v) rates[k.slice(5)] = +v; if (k.startsWith("cat.") && v) cats[k.slice(4)] = +v; }
-      const form = document.querySelector(".sheet");
+      const form = [...document.querySelectorAll("form.sheet")].pop();   // the form just opened (a details card may still be underneath)
       const methods = [...new Set(fd.getAll("pm").map((m) => m.trim()).filter(Boolean))];
       await data.savePrivate("_budget", { home: fd.get("home"), rates, total: +fd.get("total") || 0, cats, methods, ratesDate: form?.dataset.ratesDate || store.priv._budget?.ratesDate || "" });
     });
@@ -1671,7 +1671,7 @@ function shortAct(e, max = 16) {
   const words = sig(head).length >= 2 ? sig(head) : sig(t);
   if (!words.length) return String(e.text || "Activity").trim().slice(0, max);
   let out = words[0];
-  for (const w of words.slice(1, 3)) { if ((out + " " + w).length > max) break; out += " " + w; }
+  for (const w of words.slice(1, 5)) { if ((out + " " + w).length > max) break; out += " " + w; }
   return out;
 }
 function renderOverview() {
@@ -1722,8 +1722,10 @@ function renderOverview() {
   [[cols[0], 3], [cols[1], 5]].forEach(([type, col]) => {
     labType = type;
     if (type === "act") {   // one pill per day: the first confirmed activity in a couple of words, plus a count of the rest
-      ds.forEach((d, k) => { const a = entriesFor(p, d).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed).sort(byActTime); if (!a.length) return;
-        cells.push(`<button class="ov-act" data-day="${d}" style="grid-column:${col} / span 2;grid-row:${k + 1}" title="${esc(a.map((e) => String(e.text || "").split("\n")[0]).join(" · "))}"><b>${esc(shortAct(a[0], a.length > 1 ? 13 : 16))}</b>${a.length > 1 ? `<i>+${a.length - 1}</i>` : ""}</button>`); });
+      ds.forEach((d, k) => { const a = dayInfo(p, d).steps.filter((x) => x.eid).map((x) => store.entries.find((e) => e.id === x.eid)).filter(Boolean); if (!a.length) return;   // the day's order, as in the Timeline
+        // up to three activities side by side in the day's pill, split by thin lines; with more than three, the last column counts the rest
+        const show = a.length > 3 ? a.slice(0, 2) : a, n = Math.min(a.length, 3), max = n === 1 ? 34 : n === 2 ? 18 : 12;
+        cells.push(`<button class="ov-act c${n}" data-day="${d}" style="grid-column:${col} / span 2;grid-row:${k + 1}" title="${esc(a.map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e).split("\n")[0]).join(" · "))}">${show.map((e) => `<span>${esc(shortAct(e, max))}</span>`).join("")}${a.length > 3 ? `<span class="more">+${a.length - 2}</span>` : ""}</button>`); });
       return;
     }
     layout(its.filter((i) => i.type === type)).forEach((pk, n) => {
@@ -3965,7 +3967,9 @@ const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000
 function sortActs(acts, date) {
   if (!acts.some((e) => e.seq?.[date] != null)) {   // no route order: the Timeline's order (confirmed ones can be hand-placed); not-yet-confirmed ones slot in by time
     const rank = new Map(dayInfo(ui.person, date).steps.filter((s) => s.eid).map((s, k) => [s.eid, k])), out = acts.filter((e) => rank.has(e.id)).sort((a, b) => rank.get(a.id) - rank.get(b.id));
-    for (const e of acts.filter((x) => !rank.has(x.id)).sort(byActTime)) { const t = actTime(e), at = t ? out.findIndex((x) => actTime(x) > t) : -1; out.splice(at < 0 ? out.length : at, 0, e); }
+    for (const e of acts.filter((x) => !rank.has(x.id)).sort(byActTime)) { const t = actTime(e); let at = t ? out.findIndex((x) => actTime(x) > t) : out.length;
+      if (at < 0) at = out.reduce((n, x, k) => (actTime(x) ? k + 1 : n), 0);   // later than every timed one: straight after the last of them, ahead of the ones with no time
+      out.splice(at, 0, e); }
     return out;
   }
   return acts.slice().sort((a, b) => (a.seq?.[date] ?? 999) - (b.seq?.[date] ?? 999));
@@ -4386,7 +4390,30 @@ function modal(html, onSubmit, onDelete) {
 const whoBoxes = (who) => `<fieldset class="whobox"><legend>Who</legend>${PEOPLE().map((p) => `<label><input type="checkbox" name="who" value="${p}" ${who.includes(p) ? "checked" : ""}>${avHtml(p)}${esc(NAME(p))}</label>`).join("")}</fieldset>`;
 const PDF_BTN = `<div class="extract"><label class="btn small pdfbtn"><i class="ic16">${I.scan}</i>Fill from PDF or Photo<input type="file" hidden accept="application/pdf,image/*" data-extract></label>
   <span class="extract-status muted small">The file is read by AI, then attached. Check the details before saving.</span></div>`;
-function setVal(form, name, v) { const el = form.querySelector(`[name="${name}"]`); if (el && v !== undefined && v !== null && v !== "") el.value = v; }
+function setVal(form, name, v) { const el = form.querySelector(`[name="${name}"]`); if (el && v !== undefined && v !== null && v !== "") { const w = el.closest(".tpick");
+  if (w && !TPICK_RE.test(String(v))) w.outerHTML = `<input name="${name}" value="${esc(String(v))}">`;   // not a plain clock time: show it as text
+  else { el.value = v; if (w) tpickSync(el); } } }
+// ---- time picker: hour and minute lists, minutes in 5-minute steps. The value lives in a hidden field as "HH:MM" (a trailing note such as
+// "(+1)" is kept). A time that isn't a plain clock time ("by noon") falls back to an ordinary text box so nothing is lost.
+const TIME_KEYS = ["dep", "arr", "checkin", "checkout", "pickupTime", "dropoffTime", "time"];
+const TPICK_RE = /^\s*([01]?\d|2[0-3])[:.]([0-5]\d)(\s*\(.*\))?\s*$/;
+function timeField(name, value) {
+  const v = String(value || "");
+  if (v.trim() && !TPICK_RE.test(v)) return `<input name="${name}" value="${esc(v)}">`;
+  return `<span class="tpick"><select data-th aria-label="Hour"></select><b>:</b><select data-tm aria-label="Minutes"></select><input type="hidden" name="${name}" value="${esc(v)}"></span>`;
+}
+function tpickSync(hidden) {   // show the hidden value in the two lists
+  const w = hidden.closest(".tpick"), m = String(hidden.value || "").match(TPICK_RE), hh = m ? m[1].padStart(2, "0") : "", mm = m ? m[2] : "";
+  w.dataset.suf = m && m[3] ? m[3] : "";
+  const mins = Array.from({ length: 12 }, (_, k) => String(k * 5).padStart(2, "0")); if (mm && !mins.includes(mm)) { mins.push(mm); mins.sort(); }   // an existing odd minute (a 06:02 flight) stays selectable
+  w.querySelector("[data-th]").innerHTML = `<option value="">--</option>` + Array.from({ length: 24 }, (_, k) => String(k).padStart(2, "0")).map((h) => `<option${h === hh ? " selected" : ""}>${h}</option>`).join("");
+  w.querySelector("[data-tm]").innerHTML = `<option value="">--</option>` + mins.map((x) => `<option${x === mm ? " selected" : ""}>${x}</option>`).join("");
+}
+const tpickInit = (scope) => scope.querySelectorAll(".tpick input[type=hidden]").forEach(tpickSync);
+document.addEventListener("change", (e) => { const w = e.target.closest?.(".tpick"); if (!w || !e.target.matches("select")) return;
+  const h = w.querySelector("[data-th]"), m = w.querySelector("[data-tm]"), hid = w.querySelector("input[type=hidden]");
+  if (e.target === h && !h.value) m.value = ""; else if (e.target === h && !m.value) m.value = "00"; else if (e.target === m && m.value && !h.value) h.value = "12";
+  hid.value = h.value && m.value ? `${h.value}:${m.value}${w.dataset.suf || ""}` : ""; hid.dispatchEvent(new Event("input", { bubbles: true })); });
 // After AI fill: red label + * on the fields that matter most (and any the AI was unsure of); cleared once the field is touched.
 const CRITICAL = {
   flight: ["who", "start", "end", "route", "number", "dep", "arr", "priv.confirmation"],
@@ -4520,7 +4547,7 @@ function askDuplicate(prev, prevPriv, next, nextPriv, sameConf) {
 function itemForm(item) {
   const isNew = !item.id; const pv = (item.id && store.priv[item.id]) || {};
   const typeSel = isNew ? `<label>Type<select name="type">${["flight", "stay", "car"].map((t) => `<option value="${t}" ${t === item.type ? "selected" : ""}>${cap(t)}</option>`).join("")}</select></label>` : "";
-  const fieldsFor = (type, src = item) => FIELDS[type].map(([k, l]) => `<label>${l}<input name="${k}" value="${esc(src[k] || "")}"></label>`).join("");
+  const fieldsFor = (type, src = item) => FIELDS[type].map(([k, l]) => `<label>${l}${TIME_KEYS.includes(k) ? timeField(k, src[k]) : `<input name="${k}" value="${esc(src[k] || "")}">`}</label>`).join("");
   const privKeys = [...new Set([...PRIV_KEYS, ...Object.keys(pv)])].filter((k) => !["share", "fam", "paidBy", "theirPct", "arrival", "updatedBy", "updatedAt", "kind"].includes(k));
   const statusSel = (st) => `<label>Status<select name="status"><option value="booked" ${st !== "tbc" ? "selected" : ""}>Booked</option><option value="tbc" ${st === "tbc" ? "selected" : ""}>TBC</option></select></label>`;
   modal(`<h3>${isNew ? "Add Booking" : "Edit " + cap(item.type)}</h3>${PDF_BTN}${typeSel}
@@ -4569,11 +4596,11 @@ function itemForm(item) {
       else if (already) toast("Saved - " + form._pendingFile.name + " was already attached");
       if (form._ai?.journeys?.length > 1) await addOtherJourneys(form._ai, form._pendingFile);
     }, isNew ? null : () => data.deleteItem(item.id));
-  const form = document.querySelector(".sheet");
+  const form = [...document.querySelectorAll("form.sheet")].pop();   // the form just opened (a details card may still be underneath)
   const sel = form.querySelector("select[name=type]");
-  wirePay(form); wireShare(form);
+  wirePay(form); wireShare(form); tpickInit(form);
   const switchType = (t, src) => {
-    form.querySelector("#typeFields").innerHTML = fieldsFor(t, src);
+    form.querySelector("#typeFields").innerHTML = fieldsFor(t, src); tpickInit(form);
     form.querySelector("#statusBox").innerHTML = t !== "flight" ? statusSel(src.status) : "";
   };
   if (sel) sel.onchange = () => switchType(sel.value, item);
@@ -4605,7 +4632,7 @@ function entryForm(e) {
       <label>Type<select name="status"><option value="planned" ${e.status !== "recommended" ? "selected" : ""}>In the Plan</option><option value="recommended" ${e.status === "recommended" ? "selected" : ""}>Recommended Idea</option></select></label>
       <label class="check"><input type="checkbox" name="confirmed" ${e.confirmed ? "checked" : ""}> Confirmed - Show It in the Itinerary</label>` : ""}
     <div class="row"><label>From<input type="date" name="date" value="${e.date}" required></label><label>To<input type="date" name="endDate" value="${e.endDate || e.date}"></label></div>
-    ${e.kind === "activity" ? `<label>Start Time (optional)<span class="timerow"><input type="time" name="time" value="${esc(actTime(e))}"><button type="button" class="btn tiny" data-notime>No Time</button></span>
+    ${e.kind === "activity" ? `<label>Start Time (optional)<span class="timerow">${timeField("time", actTime(e))}<button type="button" class="btn tiny" data-notime>No Time</button></span>
       <small class="muted">Local time at the place. Activities are listed in time order; without a time they come after the timed ones.</small></label>` : ""}
     ${whoBoxes(e.who)}
     ${e.kind === "activity" && isEditor() ? `<details class="privbox" ${store.priv[e.id]?.cost ? "open" : ""}><summary>Cost (Editors Only)</summary>
@@ -4622,8 +4649,9 @@ function entryForm(e) {
       if (pc || had?.cost) await data.savePrivate(id, { ...(had || {}), cost: pc, share: fd.get("pshare") || "ours", fam: fd.get("pfam") || "", paidBy: fd.get("ppaidBy") || "us", theirPct: fd.get("ptheirPct") || "" });
       if (form._pendingFile) { toast("Attaching file…"); await data.uploadFile(form._pendingFile, { entryId: id, date: out.date }); toast("Saved and confirmed, with file attached"); }
     }, isNew ? null : () => data.deleteEntry(e.id));
-  const form = document.querySelector(".sheet"); wireShare(form);
-  form.querySelector("[data-notime]")?.addEventListener("click", () => { form.querySelector("[name=time]").value = ""; });
+  const form = [...document.querySelectorAll("form.sheet")].pop();   // the form just opened (a details card may still be underneath) wireShare(form);
+  tpickInit(form);
+  form.querySelector("[data-notime]")?.addEventListener("click", () => { const h = form.querySelector("[name=time]"); h.value = ""; tpickSync(h); });
   { const stay = store.items.find((i) => i.type === "stay" && i.status !== "tbc" && i.start <= e.date && e.date < i.end && (i.address || i.name));
     acAttach(form.querySelector("input[name=place]"), { any: true, near: stay ? stay.address || stay.name : "" }); }
   wireExtract(form, () => "activity", (r) => {

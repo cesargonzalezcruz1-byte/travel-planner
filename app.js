@@ -915,7 +915,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.56";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.57";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2848,6 +2848,10 @@ function wireCards() {
     const e = store.entries.find((x) => x.id === inp.dataset.attachEntry);
     await upload(inp.files, { entryId: e.id, date: e.date }); await data.saveEntry({ ...e, confirmed: true }); }));
   root.querySelectorAll("[data-file]").forEach((b) => (b.onclick = () => openFile(store.files.find((x) => x.id === b.dataset.file))));
+  root.querySelectorAll("[data-flink]").forEach((sel) => (sel.onchange = async () => {
+    const f = store.files.find((x) => x.id === sel.dataset.flink); if (!f) return; const [k, id] = sel.value.split(":");
+    try { await data.relinkFile(f, { itemId: k === "item" ? id : "", entryId: k === "entry" ? id : "", date: ui.day || f.date || "" }); toast(k ? "Moved - it now shows on " + sel.selectedOptions[0].textContent : "Kept on this day only"); }
+    catch (e) { toast("Couldn't move it: " + (e.code || e.message)); render(); } }));
   root.querySelectorAll("[data-del-file]").forEach((b) => (b.onclick = () => { const f = store.files.find((x) => x.id === b.dataset.delFile); if (confirm(`Remove ${f.name}?`)) data.deleteFile(f); }));
   root.querySelectorAll("[data-attach-item]").forEach((inp) => (inp.onchange = () => upload(inp.files, { itemId: inp.dataset.attachItem })));
 }
@@ -3050,7 +3054,10 @@ function renderDay() {
         + `<p class="bd-daytot">Day total <b>${money(ex.reduce((a, x) => a + (toHome({ amt: +x.amount || 0, cur: x.currency || S.home }, S) || 0), 0), S.home, 2)}</b></p>` : `<p class="muted">Nothing spent yet.</p>`}
         <button class="btn small" data-add-exp="${date}">+ Add Expense</button><label class="btn small" data-scan-wrap>${I.receipt}Scan Receipt<input type="file" accept="image/*,application/pdf" hidden data-scan-exp="${date}"></label></section>`; })() : ""}
     ${isEditor() ? `<section><h3>Documents</h3>
-      ${dayFiles.length ? `<div class="files">${dayFiles.map((f) => `<div class="frow">${fileLink(f)}<button class="btn tiny" data-del-file="${f.id}">Remove</button></div>`).join("")}</div>` : `<p class="muted">No documents for this day.</p>`}
+      ${dayFiles.length ? `<p class="muted small">Each document shows what it is attached to - change it if it went to the wrong one.</p><div class="files">${dayFiles.map((f) => `<div class="frow">${fileLink(f)}
+        <select class="flink" data-flink="${f.id}" aria-label="Attached to">${[["", "This day only"], ...its.map((i) => ["item:" + i.id, cap(i.type) + " · " + (i.type === "flight" ? codesOf(i.route).join("-") : i.short || i.name || i.company || "")]), ...ents.filter((e) => e.kind === "activity").map((e) => ["entry:" + e.id, "Activity · " + firstText(actText(e))])]
+          .map(([v, l]) => `<option value="${esc(v)}"${(f.itemId ? "item:" + f.itemId : f.entryId ? "entry:" + f.entryId : "") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}${f.itemId && !its.some((i) => i.id === f.itemId) || f.entryId && !ents.some((e) => e.id === f.entryId) ? `<option selected>Another day's booking</option>` : ""}</select>
+        <button class="btn tiny" data-del-file="${f.id}">Remove</button></div>`).join("")}</div>` : `<p class="muted">No documents for this day.</p>`}
       <label class="btn small">Upload for This Day<input type="file" hidden data-attach-day="${date}" multiple></label></section>` : ""}
     ${journalHtml(date)}
   </div>`;
@@ -3582,7 +3589,7 @@ async function createFromAI(x) {
   const priv = Object.fromEntries(Object.entries(x.private || {}).filter(([k, v]) => v && (k !== "arrival" || (x.type === "stay" && arrOk(v)))));
   if (x.type === "activity") {
     const id = await data.saveEntry({ kind: "activity", status: "planned", confirmed: true, date: x.start, endDate: x.end || x.start, who: people,
-      text: [x.time, x.text || x.name].filter(Boolean).join(" ") || "Activity", place: x.place || x.name || "", ...(x.note ? { note: x.note } : {}) });
+      text: x.text || x.name || "Activity", time: timeIn(x.time), place: x.place || x.name || "", ...(x.note ? { note: x.note } : {}) });
     if (Object.keys(priv).length) await data.savePrivate(id, priv);
     return { kind: "entry", id, type: "activity", start: x.start, end: x.end || x.start, rec: { text: x.text || x.name || "", place: x.place || "" }, conf: bnorm(priv.confirmation), names: [x.text, x.name, x.place] };
   }

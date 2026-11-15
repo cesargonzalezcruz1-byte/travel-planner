@@ -555,6 +555,11 @@ export async function moveFiles(fromId, toId) {
   if (DEMO) { mem().files.forEach((f) => { if (f.itemId === fromId) f.itemId = toId; }); demoLoad(store.tripId); emit(); return; }
   for (const f of fs) await fb.fsM.updateDoc(fb.fsM.doc(col("files"), f.id), { itemId: toId });
 }
+// attach a file to a different booking or activity (or to the day only)
+export async function relinkFile(f, { itemId = "", entryId = "", date = "" }) {
+  if (DEMO) { const x = mem().files.find((y) => y.id === f.id); if (x) Object.assign(x, { itemId, entryId, date }); demoLoad(store.tripId); emit(); return; }
+  await fb.fsM.updateDoc(fb.fsM.doc(col("files"), f.id), { itemId, entryId, date });
+}
 export async function deleteItem(id) {
   for (const f of store.files.filter((x) => x.itemId === id)) await deleteFile(f);   // its attached documents go with it
   if (DEMO) { const t = mem(); t.items = t.items.filter((x) => x.id !== id); delete t.priv[id]; demoLoad(store.tripId); emit(); return; }

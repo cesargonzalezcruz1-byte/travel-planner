@@ -915,7 +915,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.60";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.61";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -1731,8 +1731,9 @@ function renderOverview() {
     if (type === "act") {   // one pill per day: the first confirmed activity in a couple of words, plus a count of the rest
       ds.forEach((d, k) => { const a = dayInfo(p, d).steps.filter((x) => x.eid).map((x) => store.entries.find((e) => e.id === x.eid)).filter(Boolean); if (!a.length) return;   // the day's order, as in the Timeline
         // up to three activities side by side in the day's pill, split by thin lines; with more than three, the last column counts the rest
-        const show = a.length > 3 ? a.slice(0, 2) : a, n = Math.min(a.length, 3), max = n === 1 ? 34 : n === 2 ? 18 : 12;
-        cells.push(`<button class="ov-act c${n}" data-day="${d}" style="grid-column:${col} / span 2;grid-row:${k + 1}" title="${esc(a.map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e).split("\n")[0]).join(" · "))}">${show.map((e) => `<span>${esc(shortAct(e, max))}</span>`).join("")}${a.length > 3 ? `<span class="more">+${a.length - 2}</span>` : ""}</button>`); });
+        // more than three: two at a time, and the third column is an arrow that shows the next ones (on the last ones it goes back to the start)
+        const n = Math.min(a.length, 3), max = n === 1 ? 34 : n === 2 ? 18 : 12, paged = a.length > 3, pages = paged ? Math.ceil(a.length / 2) : 1;
+        cells.push(`<button class="ov-act c${n}${paged ? " paged" : ""}" data-day="${d}" data-at="0" data-np="${pages}" style="grid-column:${col} / span 2;grid-row:${k + 1}" title="${esc(a.map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e).split("\n")[0]).join(" · "))}">${a.map((e, j) => `<span data-pg="${paged ? Math.floor(j / 2) : 0}"${paged && j >= 2 ? " hidden" : ""}><small>${esc(shortAct(e, max))}</small></span>`).join("")}${paged ? `<span class="ovnext" data-ovnext role="button" aria-label="Show the next activities">›</span>` : ""}</button>`); });
       return;
     }
     layout(its.filter((i) => i.type === type)).forEach((pk, n) => {
@@ -1761,6 +1762,10 @@ function renderOverview() {
       </div>${outsideBlock(p, "after")}</div>`;
   const svgEl = root.querySelector(".ov-svg"); if (svgEl) { svgEl._shapes = shapes; svgEl._pane = ui.pane; } drawOverviewShapes(svgEl);
   wireHeader(); wireDays();
+  root.querySelectorAll("[data-ovnext]").forEach((x) => (x.onclick = (ev) => { ev.stopPropagation(); ev.preventDefault();
+    const b = x.closest(".ov-act"), np = +b.dataset.np, at = (+b.dataset.at + 1) % np; b.dataset.at = at;
+    b.querySelectorAll("[data-pg]").forEach((sp) => (sp.hidden = +sp.dataset.pg !== at));
+    x.textContent = at === np - 1 ? "‹" : "›"; x.setAttribute("aria-label", at === np - 1 ? "Back to the first activities" : "Show the next activities"); }));
   root.querySelectorAll("[data-ovcol]").forEach((b) => (b.onclick = () => { const [n, k] = b.dataset.ovcol.split(":"); const c = ovCols(); c[+n] = k;
     try { localStorage.setItem("tp.ovcols", JSON.stringify(c)); } catch (e) { /* ignore */ } const y = scrollY; render(); scrollTo(0, y); }));
   root.querySelectorAll("[data-swap]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); const k = b.dataset.swap; ui.swap[k] = (ui.swap[k] || 0) + 1;

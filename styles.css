@@ -1354,3 +1354,12 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .files:has(.flink) .frow .flink{width:100%;max-width:none}
 @container (max-width:520px){.files:has(.flink) .frow{grid-template-columns:minmax(0,1fr) auto;row-gap:6px;padding-bottom:8px;border-bottom:1px solid var(--line)}
   .files:has(.flink) .frow .filelink{grid-column:1/-1}}
+/* v2.61: Overview activity pill - dividing lines run the full height of the pill; more than three activities page with an arrow */
+.ov-act{align-items:stretch;padding:0 4px} .ov-act span{display:flex;align-items:center;justify-content:center;align-self:stretch;max-height:none;-webkit-line-clamp:unset;overflow:visible}
+.ov-act span[hidden]{display:none}
+.ov-act span>i{font-style:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-height:23px}
+.ov-act span+span{border-left:1.5px solid color-mix(in srgb,var(--act) 55%,transparent)}
+.ov-act.paged{grid-auto-columns:unset;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 30px} .ov-act.paged span:not([hidden]){grid-row:1}
+.ov-act .ovnext{font-size:20px;font-weight:700;line-height:1;cursor:pointer;color:var(--act-x)} .ov-act .ovnext:hover{background:color-mix(in srgb,var(--act) 14%,transparent)}
+.ov-act.paged .ovnext{grid-column:3}
+.ov-act span+span{border-left:0} .ov-act span:not([hidden])~span:not([hidden]){border-left:1.5px solid color-mix(in srgb,var(--act) 55%,transparent)}

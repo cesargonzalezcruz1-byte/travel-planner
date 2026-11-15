@@ -1406,3 +1406,5 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .ja:has(.jat) .jan{grid-column:2;grid-row:2;text-align:left}
 .ja:has(.jat) .grip{grid-column:3;grid-row:1 / span 2}
 .ja{min-width:0;flex:0 1 auto} .ja .jan{text-align:left}
+/* v2.72: day screen arrows drawn as icons so they sit exactly in the middle of their circles */
+.dayhead .nav{display:grid;place-items:center;padding:0;flex:none}

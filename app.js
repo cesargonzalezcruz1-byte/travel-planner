@@ -915,7 +915,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.71";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.72";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2220,10 +2220,10 @@ function renderOutside(side) {
   root.innerHTML = `${header()}
   <div class="dayview outside">
     <div class="dayhead out">
-      <button class="nav" data-ogo="before" ${side === "before" ? "disabled" : ""} aria-label="Last day of the trip">‹</button>
+      <button class="nav" data-ogo="before" ${side === "before" ? "disabled" : ""} aria-label="Last day of the trip"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
       <div><div class="wd">${esc(NAME(p))}</div><div class="dt">${side === "before" ? "Before Trip" : "After Trip"}</div>
         <div class="muted small">${side === "before" ? "Before the trip starts on " + fmtDate(t.start) : "After the trip ends on " + fmtDate(t.end)}</div></div>
-      <button class="nav" data-ogo="after" ${side === "after" ? "disabled" : ""} aria-label="First day of the trip">›</button>
+      <button class="nav" data-ogo="after" ${side === "after" ? "disabled" : ""} aria-label="First day of the trip"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
     </div>
     ${dates.length ? dates.map((d) => { const its = items.filter((i) => i.start === d), es = ents.filter((e) => e.date === d);
       return `<section><h3>${esc(WD[D(d).getDay()])} ${esc(fmtDate(d))}</h3>${its.map((i) => itemCard(i, d)).join("")}
@@ -3092,10 +3092,10 @@ function renderDay() {
   root.innerHTML = `${header()}
   <div class="dayview">
     <div class="dayhead${date === iso(new Date()) ? " today" : ""}">
-      <button class="nav" data-go="-1" ${idx === 0 && !hasBefore ? "disabled" : ""}>‹</button>
+      <button class="nav" data-go="-1" ${idx === 0 && !hasBefore ? "disabled" : ""} aria-label="Previous day"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
       <div><div class="wd">${date === iso(new Date()) ? "Today · " : ""}${WD[D(date).getDay()]}</div><div class="dt">${longDate(date)}</div>${others.length ? `<div class="ddots" role="group" aria-label="Travelling with">${others.map((o) => { const on = together(p, o, date);
         return `<button class="dd${on ? " on" : ""}" ${isEditor() ? `data-with="${o}"` : "disabled"} aria-pressed="${on}" aria-label="${esc(NAME(o))}: ${on ? "travelling with " + esc(NAME(p)) : "not with " + esc(NAME(p))}" title="${esc(NAME(o))}${on ? " - together" : " - apart"}${isEditor() ? " (tap to change)" : ""}" style="--pc:${pcolor(o)};--pi:${inkOn(pcolor(o))}">${ddIn(o)}</button>`; }).join("")}</div>` : ""}</div>
-      <button class="nav" data-go="1" ${idx === ds.length - 1 && !hasAfter ? "disabled" : ""}>›</button>
+      <button class="nav" data-go="1" ${idx === ds.length - 1 && !hasAfter ? "disabled" : ""} aria-label="Next day"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
     </div>
     ${wxStrip(p, date)}
 

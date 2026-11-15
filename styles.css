@@ -1416,3 +1416,9 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .tl.hide-past .tlg.past,.tl.hide-past .dcard.past{display:none}
 .tlpast .ob-head span:not(.ob-go){font-size:13px} .tlpast .ob-go{font-size:13px;font-weight:700;color:var(--ink2)}
 .dc-head{align-items:center} .dc-head .tbadge{align-self:center;height:auto;line-height:1.2}
+/* v2.76: Journey - one activity per line, every pill the full width of the day's white block; time bold, name regular */
+.jday .jn-acts{display:flex;flex-direction:column;align-items:stretch;flex:1;min-width:0;gap:6px}
+.jday .jn-acts .ja{width:100%;max-width:none;flex:none;min-width:0;box-sizing:border-box}
+.ja .jan{font-weight:500} .ja .jat{font-weight:800}
+.ja.ins-before-v{box-shadow:0 -4px 0 0 var(--ink),inset 0 0 0 1.5px var(--act)} .ja.ins-after-v{box-shadow:0 4px 0 0 var(--ink),inset 0 0 0 1.5px var(--act)}
+.ja .jan *{font-weight:inherit}

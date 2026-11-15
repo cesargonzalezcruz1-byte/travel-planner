@@ -117,13 +117,14 @@ function wireDragFlow(list, sel, onDrop) {
       if (e.button) return; e.preventDefault(); e.stopPropagation();
       const rows = [...list.querySelectorAll(":scope > " + sel)], row = grip.closest(sel), from = rows.indexOf(row), box = rows.map((r) => r.getBoundingClientRect());
       const x0 = e.clientX, y0 = e.clientY; let to = from;
+      const stacked = box.length > 1 && box.every((b) => Math.abs(b.left - box[0].left) < 2);   // one per line: place by height, not left/right
       grip.setPointerCapture(e.pointerId); row.classList.add("dragging"); list.classList.add("drag-on");
-      const clear = () => rows.forEach((r) => r.classList.remove("ins-before", "ins-after"));
+      const clear = () => rows.forEach((r) => r.classList.remove("ins-before", "ins-after", "ins-before-v", "ins-after-v"));
       const move = (ev) => { row.style.transform = `translate(${ev.clientX - x0}px,${ev.clientY - y0}px)`; clear();
         let best = -1, bd = 1e9; box.forEach((b, k) => { if (k === from) return; const dy = ev.clientY < b.top ? b.top - ev.clientY : ev.clientY > b.bottom ? ev.clientY - b.bottom : 0, dx = ev.clientX < b.left ? b.left - ev.clientX : ev.clientX > b.right ? ev.clientX - b.right : 0, d = dy * 3 + dx; if (d < bd) { bd = d; best = k; } });
         if (best < 0) { to = from; return; }
-        const after = ev.clientX > box[best].left + box[best].width / 2; let ins = best + (after ? 1 : 0); if (from < ins) ins--; to = ins;
-        if (to !== from) rows[best].classList.add(after ? "ins-after" : "ins-before"); };
+        const after = stacked ? ev.clientY > box[best].top + box[best].height / 2 : ev.clientX > box[best].left + box[best].width / 2; let ins = best + (after ? 1 : 0); if (from < ins) ins--; to = ins;
+        if (to !== from) rows[best].classList.add((after ? "ins-after" : "ins-before") + (stacked ? "-v" : "")); };
       const end = (ev) => { grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", end); grip.removeEventListener("pointercancel", end);
         clear(); row.style.transform = ""; row.classList.remove("dragging"); list.classList.remove("drag-on");
         if (ev.type === "pointerup" && to !== from) onDrop(from, to); };
@@ -915,7 +916,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.75";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.76";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),

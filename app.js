@@ -915,7 +915,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.58";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.59";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -2786,14 +2786,16 @@ function detailSheet(ref, date) {
 function wireDetails() { root.querySelectorAll("[data-detail]").forEach((b) => (b.onclick = () => detailSheet(b.dataset.detail, ui.day))); }
 
 // ---- one Add button: everything you can add to the trip, for the open day (or today / the first day)
-function addSheet() {
+function addSheet(btn) {
   const p = ui.person, t = store.trip, today = iso(new Date()), ds = days();
-  const date = ui.day && ds.includes(ui.day) ? ui.day : ds.includes(today) ? today : t.start;
+  // the day being looked at: the open day (in two-view mode, the open day on the side where + was tapped), else today, else the first day
+  const n = splitOn() ? paneOf(btn) : undefined, onDay = n !== undefined ? ui.splitDay[n] : splitOn() ? null : ui.day;
+  const date = onDay && ds.includes(onDay) ? onDay : ds.includes(today) ? today : t.start;
   const others = PEOPLE().filter((o) => o !== p), who = [p, ...others.filter((o) => together(p, o, date))], ed = isEditor();
   const m = document.createElement("div"); m.className = "modal"; document.body.appendChild(m);
   const tile = (k, icon, label, cls) => `<button type="button" class="addtile ${cls}" data-add="${k}"><i>${icon}</i>${label}</button>`;
   m.innerHTML = `<div class="sheet addsheet"><div class="ds-head"><h3>Add to the Trip</h3><button type="button" class="btn tiny" data-x aria-label="Close">✕</button></div>
-    <p class="muted small">For ${esc(WD[D(date).getDay()])} ${esc(shortDate(date))}${ui.day ? "" : " - you can change the date in the form"}.</p>
+    <p class="muted small">For ${esc(WD[D(date).getDay()])} ${esc(shortDate(date))}${onDay ? "" : " - you can change the date in the form"}.</p>
     ${ed ? `<button type="button" class="addscan" data-add="scan"><i>${I.scan || I.clip}</i><span><b>Scan a Booking</b><small>A photo, PDF or screenshot. The app reads it and puts it on the right days.</small></span></button>
       <label class="addscan addcam"><i>${I.camera}</i><span><b>Take a Photo of a Booking</b><small>Use the camera on a paper ticket, voucher or screen. The app reads it and keeps the photo with the booking.</small></span><input type="file" accept="image/*" capture="environment" hidden data-add-cam></label>` : ""}
     ${ed ? `<form class="addtype" data-addtype><label for="addline">Or just type it</label><div class="row"><input id="addline" name="line" placeholder="Dinner at Hartwood, Thursday 8 pm" autocomplete="off" maxlength="300"><button class="btn primary" aria-label="Add what I typed">→</button></div>
@@ -2807,7 +2809,7 @@ function addSheet() {
     const b = e.target.closest("[data-add]"); if (!b) return; const k = b.dataset.add; close();
     if (k === "scan") return bulkAttach();
     if (k === "activity" || k === "comment") return entryForm({ kind: k, date, endDate: date, who, status: "planned", confirmed: false, text: "", place: "" });
-    if (k === "expense") return expenseForm({ date: ui.day || defaultExpenseDate() });
+    if (k === "expense") return expenseForm({ date: onDay || defaultExpenseDate() });
     if (k === "journal") { ui.jdate = date; return goTab("journal"); }
     if (k === "todo") return todoSheet();
     return itemForm({ type: k, who, start: date, end: k === "flight" ? date : addDays(date, 1), status: "booked" });
@@ -2827,7 +2829,7 @@ function addSheet() {
     } catch (x) { console.error(x); btn.disabled = false; note.textContent = "Couldn't work that out: " + (x.message || x) + " - try the buttons below."; }
   };
   const cam = m.querySelector("[data-add-cam]"); if (cam) cam.onchange = () => { const f = cam.files[0]; close(); if (f) photoScan(f, (files) => bulkAttach(files)); };
-  const rc = m.querySelector("[data-add-rcpt]"); if (rc) rc.onchange = () => { const f = rc.files[0]; close(); if (f) scanReceipt(f, ui.day || defaultExpenseDate()); };
+  const rc = m.querySelector("[data-add-rcpt]"); if (rc) rc.onchange = () => { const f = rc.files[0]; close(); if (f) scanReceipt(f, onDay || defaultExpenseDate()); };
 }
 // Timeline: the days grouped under the stay you're sleeping at that night, with the car(s) you have
 function tlGroups(p, ds) {
@@ -4683,7 +4685,7 @@ const actions = {
   signout: () => data.signOut(),
   newtrip: () => tripForm(null),
   settings: () => tripForm(store.trips.find((t) => t.id === ui.tripId) || { id: ui.tripId, ...store.trip }),
-  add: () => addSheet(),
+  add: (b) => addSheet(b),
   export: () => {
     const blob = new Blob([JSON.stringify(data.exportAll(), null, 1)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `trip-backup-${iso(new Date())}.json`; a.click();

@@ -1440,3 +1440,11 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .wxtile .wxr{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:700;color:#2F7FD8;opacity:.75} .wxtile .wxr.wet{opacity:1}
 .wxtile .wxdrop{display:inline-flex;width:12px;height:12px} .wxtile .wxdrop svg{width:100%;height:100%}
 :root[data-theme="midnight"] .wxtile{background:linear-gradient(to top,#1B2B44,#16202F);box-shadow:inset 0 0 0 1.5px #2D4A73}
+/* v2.80: screens laid out as a single column never get wider than the phone - a long name (a car's model, an address) wraps or is
+   cut with … instead of pushing the whole page sideways */
+.now:not(.tbadge),.tl,.ov,.jwrap,.jtab,.morev,.bd,.dayview{grid-template-columns:minmax(0,1fr)}
+.now:not(.tbadge)>*,.tl>*,.ov>*,.jwrap>*,.jtab>*,.morev>*,.bd>*,.dayview>*{min-width:0;max-width:100%}
+.crow,.arow,.crow-t,.arow-t{min-width:0} .crow-t b,.crow-t span{overflow-wrap:anywhere}
+.jrate{min-width:0;max-width:100%} .jrate>*{min-width:0;max-width:100%} .starpick button{min-width:28px;padding:2px 1px}
+.hero-bar{min-width:0} .hero-bar .vseg.lab{flex:0 1 auto;min-width:0;overflow:hidden} .hero-bar .vseg.lab button{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:380px){.hero-bar{gap:6px} .hero-bar .vseg.lab button{padding:0 9px;font-size:13.5px} .hero-bar .iconbtn{width:44px;height:44px;flex:none}}

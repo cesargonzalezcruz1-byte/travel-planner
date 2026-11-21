@@ -133,6 +133,9 @@ function wireDragFlow(list, sel, onDrop) {
   });
 }
 const GRIP = `<i class="grip" data-grip role="button" aria-label="Drag to move" title="Drag to move"><svg viewBox="0 0 12 18" width="12" height="18" aria-hidden="true"><g fill="currentColor"><circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/><circle cx="3" cy="9" r="1.6"/><circle cx="9" cy="9" r="1.6"/><circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/></g></svg></i>`;
+// Restaurants and meals are activities shown in their own colour. An activity without a choice yet is guessed from its words.
+const EAT_RE = /\b(dinner|lunch|breakfast|brunch|supper|restaurant|restaurante|caf[eé]|coffee|bakery|taquer[ií]a|tacos?|pizza|sushi|bbq|grill|steakhouse|bistro|brewery|food court|food hall|ice ?cream|gelato|meal|eat|comida|cena|desayuno|almuerzo)\b/i;
+const isEat = (e) => (e?.aKind ? e.aKind === "eat" : EAT_RE.test(String(e?.text || "") + " " + String(e?.place || "").split(",")[0]));
 const byActTime = (a, b) => (actTime(a) || "99").localeCompare(actTime(b) || "99");
 const entriesFor = (p, date) => store.entries.filter((e) => (e.who || []).includes(p) && e.date <= date && date <= (e.endDate || e.date));
 
@@ -928,13 +931,14 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.82";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.83";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
   flight: SV('<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>'),
   stay: SV('<path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/>'),
   car: SV('<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2M9 17h6"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>'),
+  eat: SV('<path d="M7 3v8a2 2 0 0 0 2 2v8M5 3v5a2 2 0 0 0 2 2M9 3v5a2 2 0 0 1-2 2M17 3c-1.7 0-3 2-3 5s1.3 4 3 4v9M17 3v18"/>'),
   act: SV('<path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
   home: SV('<path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
   menu: SV('<path d="M4 6h16M4 12h16M4 18h16"/>'),
@@ -1767,14 +1771,14 @@ function renderOverview() {
       const dayActs = ds.map((d) => dayInfo(p, d).steps.filter((x) => x.eid && !multi.has(x.eid)).map((x) => store.entries.find((e) => e.id === x.eid)).filter(Boolean));   // the day's order, as in the Timeline
       for (const id of multi) { const m = laneOf[id], e = store.entries.find((x) => x.id === id);
         const alone = lanes[1 - m.lane].every(([a, b]) => b < m.s || a > m.e) && dayActs.slice(m.s, m.e + 1).every((x) => !x.length);   // nothing beside it: full width
-        cells.push(`<button class="ov-act ov-multi" data-dd="${e.date < ds[0] ? ds[0] : e.date}" style="grid-column:${alone ? `${col} / span 2` : col + m.lane};grid-row:${m.s + 1} / ${m.e + 2}" title="${esc(actText(e).split("\n")[0])} · ${esc(shortDate(e.date))} – ${esc(shortDate(e.endDate))}"><span data-pg="0" data-ovd="entry:${esc(e.id)}">${actSmall(e)}</span></button>`); }
+        cells.push(`<button class="ov-act ov-multi${isEat(e) ? " alleat" : ""}" data-dd="${e.date < ds[0] ? ds[0] : e.date}" style="grid-column:${alone ? `${col} / span 2` : col + m.lane};grid-row:${m.s + 1} / ${m.e + 2}" title="${esc(actText(e).split("\n")[0])} · ${esc(shortDate(e.date))} – ${esc(shortDate(e.endDate))}"><span${isEat(e) ? ' class="eat"' : ""} data-pg="0" data-ovd="entry:${esc(e.id)}">${actSmall(e)}</span></button>`); }
       ds.forEach((d, k) => { const a = dayActs[k]; if (!a.length) return;
         const u = used(k); if (u.length === 2) return;   // both sides taken by longer activities (rare)
         const half = u.length === 1, gcol = half ? `${col + 1 - u[0]}` : `${col} / span 2`;
         // up to three activities side by side in the day's pill, split by thin lines; with more than three, the last column counts the rest
         // more than three: two at a time, and the third column is an arrow that shows the next ones (on the last ones it goes back to the start)
         const n = half ? 1 : Math.min(a.length, 3), max = half ? 18 : n === 1 ? 40 : n === 2 ? 24 : 16, paged = half ? a.length > 1 : a.length > 3, per = half ? 1 : 2, pages = paged ? Math.ceil(a.length / per) : 1;
-        cells.push(`<button class="ov-act c${n}${paged ? " paged" : ""}${half ? " half" : ""}" data-dd="${d}" data-at="0" data-np="${pages}" style="grid-column:${gcol};grid-row:${k + 1}" title="${esc(a.map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e).split("\n")[0]).join(" · "))}">${a.map((e, j) => `<span data-pg="${paged ? Math.floor(j / per) : 0}" data-ovd="entry:${esc(e.id)}"${paged && j >= per ? " hidden" : ""}>${actSmall(e)}</span>`).join("")}${paged ? `<span class="ovnext" data-ovnext role="button" aria-label="Show the next activities">›</span>` : ""}</button>`); });
+        cells.push(`<button class="ov-act c${n}${paged ? " paged" : ""}${half ? " half" : ""}${a.every(isEat) ? " alleat" : ""}" data-dd="${d}" data-at="0" data-np="${pages}" style="grid-column:${gcol};grid-row:${k + 1}" title="${esc(a.map((e) => (actTime(e) ? actTime(e) + " " : "") + actText(e).split("\n")[0]).join(" · "))}">${a.map((e, j) => `<span${isEat(e) ? ' class="eat"' : ""} data-pg="${paged ? Math.floor(j / per) : 0}" data-ovd="entry:${esc(e.id)}"${paged && j >= per ? " hidden" : ""}>${actSmall(e)}</span>`).join("")}${paged ? `<span class="ovnext" data-ovnext role="button" aria-label="Show the next activities">›</span>` : ""}</button>`); });
       return;
     }
     layout(its.filter((i) => i.type === type)).forEach((pk, n) => {
@@ -1911,7 +1915,7 @@ window.addEventListener("resize", () => document.querySelectorAll(".ov-svg").for
   }, { passive: true });
 })();
 
-const pillHtml = (s) => `<span class="pill k-${s.k}${s.tbc ? " tbc" : ""}"><span class="ic">${ICON[s.k]}</span><span class="pt"><b>${s.rich ? fmt(s.title) : esc(s.title)}</b>${s.sub ? `<small>${esc(s.sub)}</small>` : ""}</span>${s.tbc ? `<span class="tbctag">TBC</span>` : ""}</span>`;
+const pillHtml = (s) => `<span class="pill k-${s.k}${s.eat ? " eat" : ""}${s.tbc ? " tbc" : ""}"><span class="ic">${ICON[s.eat ? "eat" : s.k]}</span><span class="pt"><b>${s.rich ? fmt(s.title) : esc(s.title)}</b>${s.sub ? `<small>${esc(s.sub)}</small>` : ""}</span>${s.tbc ? `<span class="tbctag">TBC</span>` : ""}</span>`;
 
 // ---------------------------------------------------------------- what happens on a day (for one traveller)
 function dayInfo(p, date) {
@@ -1939,7 +1943,7 @@ function dayInfo(p, date) {
   }
   const ents = entriesFor(p, date);
   const cacts = ents.filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed), ukey = untimedKey(cacts);
-  cacts.forEach((e) => steps.push({ eid: e.id, k: "act", time: actTime(e), key: ukey, title: actText(e), rich: true, sub: e.place && !e.text.includes(e.place) ? e.place : "" }));
+  cacts.forEach((e) => steps.push({ eid: e.id, eat: isEat(e), k: "act", time: actTime(e), key: ukey, title: actText(e), rich: true, sub: e.place && !e.text.includes(e.place) ? e.place : "" }));
   stepRefs(steps);
   const sortKey = (s) => s.time || s.key || "12:00";
   steps.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
@@ -2111,7 +2115,7 @@ function nowSteps(p, date) {
   }
   const cacts = entriesFor(p, date).filter((e) => e.kind === "activity" && e.status !== "recommended" && e.confirmed), ukey = untimedKey(cacts);
   cacts.forEach((e) =>
-    out.push({ entry: e, k: "act", time: actTime(e), key: ukey, title: firstText(actText(e)), sub: e.place && !e.text.includes(e.place) ? e.place : "", where: e.place || "" }));
+    out.push({ entry: e, eat: isEat(e), k: "act", time: actTime(e), key: ukey, title: firstText(actText(e)), sub: e.place && !e.text.includes(e.place) ? e.place : "", where: e.place || "" }));
   stepRefs(out);
   const sk = (s) => s.time || s.key || "12:00";
   out.sort((a, b) => sk(a).localeCompare(sk(b)));
@@ -2158,7 +2162,7 @@ function renderNow() {
   const zf = (st) => (st.flight || (st.k === "flight" && st.item) ? st.item : null);
   const zToday = stepZones(steps, date, zf), zTom = stepZones(tmSteps, tomorrow, zf);
   const zoneOf = (s, d) => { const list = d === date ? steps : tmSteps, z = d === date ? zToday : zTom, k = list.indexOf(s); return z && k >= 0 && s.time ? z[k] : ""; };
-  const line = (s, d) => `<li class="nstep k-${s.k}${done(s) && d === date ? " done" : ""}${s === next ? " is-next" : ""}"${s.k === "car" && s.item ? ` data-detail="item:${esc(s.item.id)}" data-dd="${d}" role="button" tabindex="0"` : ""}><span class="ntime">${esc(s.time || "")}${zoneOf(s, d) ? `<small class="tz">${esc(zoneOf(s, d))}</small>` : ""}</span><span class="nic">${ICON[KIND[s.k] || s.k] || ""}</span><span class="nt"><b>${esc(s.title)}</b>${s.sub ? `<small>${esc(s.sub)}</small>` : ""}</span></li>`;
+  const line = (s, d) => `<li class="nstep k-${s.k}${s.eat ? " eat" : ""}${done(s) && d === date ? " done" : ""}${s === next ? " is-next" : ""}"${s.k === "car" && s.item ? ` data-detail="item:${esc(s.item.id)}" data-dd="${d}" role="button" tabindex="0"` : ""}><span class="ntime">${esc(s.time || "")}${zoneOf(s, d) ? `<small class="tz">${esc(zoneOf(s, d))}</small>` : ""}</span><span class="nic">${ICON[s.eat ? "eat" : KIND[s.k] || s.k] || ""}</span><span class="nt"><b>${esc(s.title)}</b>${s.sub ? `<small>${esc(s.sub)}</small>` : ""}</span></li>`;
   const countdown = next ? (next.time ? inWords(minsUntil(nextDate, next.time)) : nextDate === today ? "today" : nextDate === tomorrow ? "tomorrow" : inWords(dayDiff(today, nextDate) * 1440)) : "";
   const stats = phase !== "after" ? {} : { places: new Set(itemsFor(p).filter((i) => i.type === "stay" && i.status !== "tbc").map((i) => areaOf(i) || i.short || i.name)).size, flights: itemsFor(p).filter((i) => i.type === "flight").length };
   const status = phase === "before" ? `Trip starts ${inWords(dayDiff(today, t.start) * 1440)} · ${fmtDate(t.start)}` : phase === "after" ? `Trip finished ${fmtDate(t.end)}` : `Day ${day} of ${N}${stay ? " · " + (areaOf(stay) || stay.short || stay.name) : ""}`;
@@ -2686,7 +2690,7 @@ function renderJourney() {
   const actsOn = (date) => dayInfo(p, date).steps.filter((s) => s.k === "act");   // same order as the Timeline, hand-placed ones included
   // each activity is its own pill, left to right in order: dot, start time (if any), name; editors can drag the ones without a time
   const dayChip = (d) => { const a = actsOn(d);
-    return `<div role="button" tabindex="0" class="jday${d === today ? " today" : ""}${d < today ? " past" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jn-acts" data-order="${d}">${a.map((x) => `<span class="ja" data-ref="${esc(x.ref)}" data-detail="entry:${esc(x.eid)}" data-dd="${d}" role="button"${x.time ? "" : " data-untimed"}><span class="jdot"></span>${x.time ? `<b class="jat">${esc(x.time)}</b>` : ""}<span class="jan">${fmt(x.title)}</span>${isEditor() && !x.time && a.length > 1 ? GRIP : ""}</span>`).join("")}</span>` : ""}</div>`; };
+    return `<div role="button" tabindex="0" class="jday${d === today ? " today" : ""}${d < today ? " past" : ""}${a.length ? "" : " noact"}" data-day="${d}"><span class="jd">${WD3(d).slice(0, 3)} ${D(d).getDate()}</span>${a.length ? `<span class="jn-acts" data-order="${d}">${a.map((x) => `<span class="ja${x.eat ? " eat" : ""}" data-ref="${esc(x.ref)}" data-detail="entry:${esc(x.eid)}" data-dd="${d}" role="button"${x.time ? "" : " data-untimed"}><span class="jdot"></span>${x.time ? `<b class="jat">${esc(x.time)}</b>` : ""}<span class="jan">${fmt(x.title)}</span>${isEditor() && !x.time && a.length > 1 ? GRIP : ""}</span>`).join("")}</span>` : ""}</div>`; };
   const chips = (ds) => { let out = "", run = [];
     const flush = () => { if (run.length) out += `<div class="jempties">${run.map(dayChip).join("")}</div>`; run = []; };
     ds.forEach((d) => { if (actsOn(d).length) { flush(); out += dayChip(d); } else run.push(d); }); flush(); return out; };
@@ -2812,8 +2816,8 @@ function actCard(e) {
   const pvHtml = pv && Object.keys(pv).length ? `<dl class="priv">${Object.entries(pv).filter(([k, v]) => v && !["updatedBy", "updatedAt", "kind"].includes(k) && !(k === "share" && v === "ours")).map(([k, v]) => `<dt>${esc(label(k))}</dt><dd>${esc(k === "share" ? SHARE[v] || v : v)}</dd>`).join("")}</dl>` : "";
   const files = isEditor() ? store.files.filter((f) => f.entryId === e.id) : [];
   const tag = rec ? "Idea" : e.confirmed ? "Confirmed" : "Planned";
-  return `<article class="icard k-act acard" id="en-${esc(e.id)}">
-    <div class="ihead"><span class="ic">${ICON.act}</span><span class="tag">${tag}</span>${ratingBadge(e.id)}
+  return `<article class="icard k-act acard${isEat(e) ? " eat" : ""}" id="en-${esc(e.id)}">
+    <div class="ihead"><span class="ic">${ICON[isEat(e) ? "eat" : "act"]}</span><span class="tag">${isEat(e) && !rec ? "Restaurant · " : ""}${tag}</span>${ratingBadge(e.id)}
       <span class="who idots" role="img" aria-label="${esc((e.who || []).map(NAME).join(", "))}">${ALL_CODES().filter((c) => (e.who || []).includes(c)).map((w) => `<i class="tdot" style="--pc:${pcolor(w)}" title="${esc(NAME(w))}"></i>`).join("")}</span></div>
     <div class="ibody"><b>${fmt(title)}</b>${more.length ? `<br>${fmt(more.join("\n"))}` : ""}<br><span class="acwhen">${esc(when)}</span>${e.place && !String(text).includes(e.place) ? `<br>${esc(e.place)}` : ""}</div>
     ${e.note ? `<div class="inote">${fmt(e.note)}</div>` : ""}
@@ -2844,7 +2848,7 @@ function actRow(e) {
   const nf = isEditor() ? store.files.filter((f) => f.entryId === e.id).length : 0, tm = actTime(e);
   const text = actText(e).split("\n")[0];
   const canDrag = isEditor() && e.confirmed && !tm && !e.seq;   // a confirmed activity with no time can be dragged to another place in the day
-  return `<li id="en-${esc(e.id)}" class="arow ${e.confirmed ? "is-conf" : "is-plan"}" data-ref="e:${esc(e.id)}"${e.confirmed ? " data-conf" : ""}>
+  return `<li id="en-${esc(e.id)}" class="arow ${e.confirmed ? "is-conf" : "is-plan"}${isEat(e) ? " eat" : ""}" data-ref="e:${esc(e.id)}"${e.confirmed ? " data-conf" : ""}>
     ${isEditor() ? `<label class="conf" title="Confirmed activities show in the itinerary"><input type="checkbox" data-confirm="${e.id}" ${e.confirmed ? "checked" : ""} aria-label="Confirmed"></label>` : `<span class="aconf">${e.confirmed ? "✓" : "○"}</span>`}
     <button type="button" class="arow-main" data-detail="entry:${esc(e.id)}"><span class="arow-t">${tm ? `<b class="atime">${esc(tm)}</b>` : ""}<span>${fmt(text)}</span></span>
       <small>${[e.confirmed ? "" : "Planned - not confirmed", e.place ? esc(e.place) : "", e.endDate && e.endDate !== e.date ? `${fmtDate(e.date)} – ${fmtDate(e.endDate)}` : ""].filter(Boolean).join(" · ")}${ratingBadge(e.id)}${nf ? ` <span class="crow-badge">${I.clip}${nf}</span>` : ""}</small></button>
@@ -3687,7 +3691,7 @@ async function createFromAI(x) {
   const priv = Object.fromEntries(Object.entries(x.private || {}).filter(([k, v]) => v && (k !== "arrival" || (x.type === "stay" && arrOk(v)))));
   if (x.type === "activity") {
     const id = await data.saveEntry({ kind: "activity", status: "planned", confirmed: true, date: x.start, endDate: x.end || x.start, who: people,
-      text: x.text || x.name || "Activity", time: timeIn(x.time), place: x.place || x.name || "", ...(x.note ? { note: x.note } : {}) });
+      text: x.text || x.name || "Activity", time: timeIn(x.time), place: x.place || x.name || "", ...(x.note ? { note: x.note } : {}), ...(x.aKind === "eat" || x.aKind === "act" ? { aKind: x.aKind } : {}) });
     if (Object.keys(priv).length) await data.savePrivate(id, priv);
     return { kind: "entry", id, type: "activity", start: x.start, end: x.end || x.start, rec: { text: x.text || x.name || "", place: x.place || "" }, conf: bnorm(priv.confirmation), names: [x.text, x.name, x.place] };
   }
@@ -4760,7 +4764,8 @@ function entryForm(e) {
   const isNew = !e.id;
   modal(`<h3>${isNew ? "Add" : "Edit"} ${cap(e.kind)}</h3>${e.kind === "activity" ? PDF_BTN : ""}
     <label>${e.kind === "comment" ? "Comment" : "Activity"}<textarea name="text" rows="3" required>${esc(e.text)}</textarea></label>
-    ${e.kind === "activity" ? `<label>Place (for Google Maps)<input name="place" value="${esc(e.place || "")}" placeholder="e.g. Gran Cenote Tulum"></label>
+    ${e.kind === "activity" ? `<div class="fld"><span class="flab">Kind</span><div class="catseg"><label><input type="radio" name="aKind" value="act" ${isEat(e) ? "" : "checked"}><i>${ICON.act}</i>Activity</label><label class="c-eat"><input type="radio" name="aKind" value="eat" ${isEat(e) ? "checked" : ""}><i>${ICON.eat}</i>Restaurant / Meal</label></div></div>
+      <label>Place (for Google Maps)<input name="place" value="${esc(e.place || "")}" placeholder="e.g. Gran Cenote Tulum"></label>
       <label>Notes<textarea name="note" rows="3" placeholder="e.g. meet at the dive shop 15 min early, bring swimmers and a towel, cash only at the entrance">${esc(e.note || "")}</textarea>
         <small class="muted">Everyone on the trip can see these. Filled in for you when you scan a booking - keep prices and booking numbers in the private details below.</small></label>
       <label>Short Label for Overview (optional)<input name="short" maxlength="18" value="${esc(e.short || "")}" placeholder="e.g. Chichén Itzá - leave blank for automatic"></label>
@@ -4775,7 +4780,7 @@ function entryForm(e) {
       ${shareFields(store.priv[e.id] || {}, (k) => "p" + k)}</details>` : ""}`,
     async (fd, form) => {
       const tm = e.kind === "activity" ? timeIn(fd.get("time")) : "";
-      const out = { ...e, text: tm ? fd.get("text").trim().replace(LEAD_TIME, "") || fd.get("text").trim() : fd.get("text").trim(), time: tm, place: fd.get("place") ?? e.place ?? "", short: e.kind === "activity" ? (fd.get("short") ?? e.short ?? "").trim() : "", note: e.kind === "activity" ? (fd.get("note") ?? e.note ?? "").trim() : e.note || "", status: fd.get("status") || "planned", confirmed: e.kind === "activity" ? (fd.get("confirmed") === "on" || !!form._pendingFile) && fd.get("status") !== "recommended" : true,
+      const out = { ...e, text: tm ? fd.get("text").trim().replace(LEAD_TIME, "") || fd.get("text").trim() : fd.get("text").trim(), time: tm, place: fd.get("place") ?? e.place ?? "", short: e.kind === "activity" ? (fd.get("short") ?? e.short ?? "").trim() : "", note: e.kind === "activity" ? (fd.get("note") ?? e.note ?? "").trim() : e.note || "", ...(e.kind === "activity" && fd.get("aKind") ? { aKind: fd.get("aKind") } : {}), status: fd.get("status") || "planned", confirmed: e.kind === "activity" ? (fd.get("confirmed") === "on" || !!form._pendingFile) && fd.get("status") !== "recommended" : true,
                     date: fd.get("date"), endDate: fd.get("endDate") || fd.get("date"), who: fd.getAll("who") };
       if (!out.who.length) throw new Error("Pick at least one person");
       if (out.place !== (e.place || "") || out.text.split("\n")[0] !== String(e.text || "").split("\n")[0]) { delete out.geo; delete out.routeSkip; }   // place changed: look it up again for routes
@@ -4792,6 +4797,7 @@ function entryForm(e) {
   wireExtract(form, () => "activity", (r) => {
     const txt = r.text || r.name || "";
     setVal(form, "text", txt); if (timeIn(r.time)) setVal(form, "time", timeIn(r.time)); setVal(form, "place", r.place || r.address); setVal(form, "pcost", r.private?.cost);
+    if (r.aKind === "eat" || r.aKind === "act") { const k = form.querySelector(`[name=aKind][value=${r.aKind}]`); if (k) k.checked = true; }
     if (r.note) { const n = form.querySelector("[name=note]"); if (n && !n.value.trim()) n.value = r.note; else if (n && !n.value.includes(r.note)) n.value = n.value.trim() + "\n" + r.note; } setVal(form, "date", r.start || r.date); setVal(form, "endDate", r.end || r.start || r.date);
     if (Array.isArray(r.who) && r.who.length) form.querySelectorAll("input[name=who]").forEach((cb) => (cb.checked = r.who.includes(cb.value)));
     const day0 = form.dataset.day0 || (form.dataset.day0 = form.querySelector("[name=date]")?.defaultValue || "");

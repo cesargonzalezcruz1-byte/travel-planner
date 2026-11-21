@@ -9,6 +9,7 @@
   --stay:#E0457B;   --stay-t:#FCE3EE;   --stay-t2:#F8CADC; --stay-x:#7A1440;
   --car:#0E8A84;    --car-t:#D8F1EE;    --car-t2:#BCE5E0;  --car-x:#0A4F4B;
   --act:#7A4BD6;    --act-t:#ECE3FC;    --act-x:#3E1E7A;
+  --eat:#5E8C1F;    --eat-t:#E8F3D6;    --eat-x:#2F4A0B;
   --food:#C77D0A; --transport:#0B8FB3; --shopping:#5E8F1A; --other:#A5A9B6;
   --today:#8E2F7E; --today-bg:#F6E3F1; --today-ink:#5E1A52;
   --danger:#B42318; --ok:#1E7A4E;
@@ -22,6 +23,7 @@
   --stay:#C2367A;   --stay-t:#FBE1EC;   --stay-t2:#F5C6DA; --stay-x:#7A1846;
   --car:#0E8A84;    --car-t:#D6F0EC;    --car-t2:#B9E3DD;  --car-x:#0A4F4B;
   --act:#7C4DDB;    --act-t:#ECE4FB;    --act-x:#3E1E7A;
+  --eat:#5E8C1F;    --eat-t:#E8F3D6;    --eat-x:#2F4A0B;
   --today:#1F8A5B; --today-bg:#E1F4E8; --today-ink:#125C3B;
 }
 /* ---- theme 3: Midnight (dark) ---- */
@@ -33,6 +35,7 @@
   --stay:#A47BFF;   --stay-t:#2E2350;   --stay-t2:#40306E; --stay-x:#DDD0FF;
   --car:#4FD1C5;    --car-t:#12393A;    --car-t2:#1B4F4F;  --car-x:#B9F1EA;
   --act:#FF5FA2;    --act-t:#3A1F2E;    --act-x:#FFC2DC;
+  --eat:#A6D65C;    --eat-t:#24331A;    --eat-x:#D8F2B0;
   --food:#E0A030; --transport:#2DB3D6; --shopping:#8CC63F; --other:#6B6F7C;
   --today:#3DD68C; --today-bg:#123726; --today-ink:#9BF2C5;
   --danger:#FF6B6B; --ok:#3DD68C; color-scheme:dark;
@@ -1449,3 +1452,17 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .hero-bar{min-width:0} .hero-bar .vseg.lab{flex:0 1 auto;min-width:0;overflow:hidden} .hero-bar .vseg.lab button{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:380px){.hero-bar{gap:6px} .hero-bar .vseg.lab button{padding:0 9px;font-size:13.5px} .hero-bar .iconbtn{width:44px;height:44px;flex:none}}
 /* v2.82: activity notes keep their line breaks */ .acard .inote{white-space:pre-line}
+
+/* v2.83: restaurants and meals get their own colour (green), everywhere an activity shows */
+.k-act.eat,.nstep.k-act.eat,.addtile.k-eat{--k:var(--eat);--kt:var(--eat-t);--kx:var(--eat-x)} .addtile.k-eat{background:var(--eat-t);color:var(--eat-x)}
+.k-act.eat{--act:var(--eat);--act-t:var(--eat-t);--act-x:var(--eat-x)}
+.ja.eat,.acard.eat,.arow.eat,.ov-act span.eat{--act:var(--eat);--act-t:var(--eat-t);--act-x:var(--eat-x)}
+.ja.eat{color:var(--eat-x);background:linear-gradient(to top,var(--eat-t),color-mix(in srgb,var(--eat-t) 30%,var(--card)));box-shadow:inset 0 0 0 1.5px var(--eat)} .ja.eat .jdot{background:var(--eat)}
+.ov-act span.eat{background:color-mix(in srgb,var(--eat-t) 85%,transparent);color:var(--eat-x)}
+.ov-act.alleat{background:linear-gradient(to top,var(--eat-t),color-mix(in srgb,var(--eat-t) 30%,var(--card)));box-shadow:inset 0 0 0 1.5px var(--eat);color:var(--eat-x)} .ov-act.alleat span.eat{background:transparent}
+.arow.eat .atime{color:var(--eat-x)} .arow.eat .ainline{background:var(--eat-t);color:var(--eat-x)}
+.acard.eat{--k:var(--eat);--kt:var(--eat-t);--kx:var(--eat-x)}
+.catseg{display:flex;gap:6px} .catseg label{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid var(--line2);border-radius:12px;padding:8px;cursor:pointer;font-weight:700;font-size:14px}
+.catseg input{position:absolute;opacity:0;pointer-events:none} .catseg label:has(input:checked){border-color:var(--act);background:var(--act-t);color:var(--act-x)} .catseg label.c-eat:has(input:checked){border-color:var(--eat);background:var(--eat-t);color:var(--eat-x)}
+.catseg i{display:inline-flex;width:16px;height:16px} .catseg i svg{width:100%;height:100%}
+.sheet .fld{display:grid;gap:5px;font-size:13px;font-weight:700} .sheet .catseg label{position:relative;display:flex;color:var(--ink)}

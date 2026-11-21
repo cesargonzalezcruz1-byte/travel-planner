@@ -673,6 +673,7 @@ const EXTRACT_SCHEMA = req({
   text: S("Activity: short description, e.g. 'Xcaret full day + evening show'"),
   flexible: { type: "boolean", description: "true if this is an open-dated voucher, pass or ticket usable on any day within a validity period (no booked visit date)" },
   validFrom: S("Open-dated voucher: first day it can be used YYYY-MM-DD"), validTo: S("Open-dated voucher: last day it can be used YYYY-MM-DD"),
+  aKind: S("Activity only: 'eat' for a restaurant, cafe, bar, food tour or meal booking; 'act' for anything else; '' if not an activity"),
   place: S("Activity: place name for Google Maps"), time: S("Activity start time HH:MM"),
   note: S("Practical notes for the family, in a few short lines. Stays: room type, breakfast, parking, shuttle. Activities and tickets: meeting point, arrive-by time, what to bring or wear, age/height limits, what is included, how to redeem the ticket, cancellation deadline. No confirmation numbers or prices."),
   private: req({

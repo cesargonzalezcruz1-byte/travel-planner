@@ -16,7 +16,9 @@ export const EDITORS = ["cesar.gonzalez.cruz1@gmail.com", "deb777deb@gmail.com"]
 export const TRIP_ID = "usmx-2026";
 export const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/12.19.0";
 // AI that reads booking PDFs (Firebase AI Logic, Agent Platform Gemini API). First model that works is used.
-export const AI_MODELS = ["gemini-3.6-flash", "gemini-3-flash", "gemini-2.5-flash"];
+// Gemini 3.6 Flash shuts down on 28-Jan-27 (Google notice of Nov 2026); Gemini 4 Hydrogen is Google's recommended replacement.
+// The older ones stay as fall-backs while they still work.
+export const AI_MODELS = ["gemini-4-hydrogen", "gemini-3.6-flash", "gemini-3-flash", "gemini-2.5-flash"];
 export const AI_LOCATION = "global";
 // AI that draws a portrait avatar from a photo (Gemini image models, "Nano Banana"). First model that works is used.
 export const AI_IMAGE_MODELS = ["gemini-3.1-flash-image", "gemini-nano-banana-2.1", "gemini-3.1-flash-lite-image"];

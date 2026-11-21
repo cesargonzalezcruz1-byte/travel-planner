@@ -928,7 +928,7 @@ const I = {
   drop: SV('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
   scan: SV('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/>'),
 };
-const APP_VERSION = "v2.81";   // shown in the ⋯ menu - matches the service worker cache name
+const APP_VERSION = "v2.82";   // shown in the ⋯ menu - matches the service worker cache name
 const mi = (act, icon, label) => `<button data-act="${act}"><i class="ic16">${icon}</i><span>${label}</span></button>`;   // menu item
 const ICON = {
   map: SV('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>'),
@@ -4761,6 +4761,8 @@ function entryForm(e) {
   modal(`<h3>${isNew ? "Add" : "Edit"} ${cap(e.kind)}</h3>${e.kind === "activity" ? PDF_BTN : ""}
     <label>${e.kind === "comment" ? "Comment" : "Activity"}<textarea name="text" rows="3" required>${esc(e.text)}</textarea></label>
     ${e.kind === "activity" ? `<label>Place (for Google Maps)<input name="place" value="${esc(e.place || "")}" placeholder="e.g. Gran Cenote Tulum"></label>
+      <label>Notes<textarea name="note" rows="3" placeholder="e.g. meet at the dive shop 15 min early, bring swimmers and a towel, cash only at the entrance">${esc(e.note || "")}</textarea>
+        <small class="muted">Everyone on the trip can see these. Filled in for you when you scan a booking - keep prices and booking numbers in the private details below.</small></label>
       <label>Short Label for Overview (optional)<input name="short" maxlength="18" value="${esc(e.short || "")}" placeholder="e.g. Chichén Itzá - leave blank for automatic"></label>
       <label>Type<select name="status"><option value="planned" ${e.status !== "recommended" ? "selected" : ""}>In the Plan</option><option value="recommended" ${e.status === "recommended" ? "selected" : ""}>Recommended Idea</option></select></label>
       <label class="check"><input type="checkbox" name="confirmed" ${e.confirmed ? "checked" : ""}> Confirmed - Show It in the Itinerary</label>` : ""}
@@ -4773,7 +4775,7 @@ function entryForm(e) {
       ${shareFields(store.priv[e.id] || {}, (k) => "p" + k)}</details>` : ""}`,
     async (fd, form) => {
       const tm = e.kind === "activity" ? timeIn(fd.get("time")) : "";
-      const out = { ...e, text: tm ? fd.get("text").trim().replace(LEAD_TIME, "") || fd.get("text").trim() : fd.get("text").trim(), time: tm, place: fd.get("place") ?? e.place ?? "", short: e.kind === "activity" ? (fd.get("short") ?? e.short ?? "").trim() : "", status: fd.get("status") || "planned", confirmed: e.kind === "activity" ? (fd.get("confirmed") === "on" || !!form._pendingFile) && fd.get("status") !== "recommended" : true,
+      const out = { ...e, text: tm ? fd.get("text").trim().replace(LEAD_TIME, "") || fd.get("text").trim() : fd.get("text").trim(), time: tm, place: fd.get("place") ?? e.place ?? "", short: e.kind === "activity" ? (fd.get("short") ?? e.short ?? "").trim() : "", note: e.kind === "activity" ? (fd.get("note") ?? e.note ?? "").trim() : e.note || "", status: fd.get("status") || "planned", confirmed: e.kind === "activity" ? (fd.get("confirmed") === "on" || !!form._pendingFile) && fd.get("status") !== "recommended" : true,
                     date: fd.get("date"), endDate: fd.get("endDate") || fd.get("date"), who: fd.getAll("who") };
       if (!out.who.length) throw new Error("Pick at least one person");
       if (out.place !== (e.place || "") || out.text.split("\n")[0] !== String(e.text || "").split("\n")[0]) { delete out.geo; delete out.routeSkip; }   // place changed: look it up again for routes
@@ -4789,7 +4791,8 @@ function entryForm(e) {
     acAttach(form.querySelector("input[name=place]"), { any: true, near: stay ? stay.address || stay.name : "" }); }
   wireExtract(form, () => "activity", (r) => {
     const txt = r.text || r.name || "";
-    setVal(form, "text", txt); if (timeIn(r.time)) setVal(form, "time", timeIn(r.time)); setVal(form, "place", r.place || r.address); setVal(form, "pcost", r.private?.cost); setVal(form, "date", r.start || r.date); setVal(form, "endDate", r.end || r.start || r.date);
+    setVal(form, "text", txt); if (timeIn(r.time)) setVal(form, "time", timeIn(r.time)); setVal(form, "place", r.place || r.address); setVal(form, "pcost", r.private?.cost);
+    if (r.note) { const n = form.querySelector("[name=note]"); if (n && !n.value.trim()) n.value = r.note; else if (n && !n.value.includes(r.note)) n.value = n.value.trim() + "\n" + r.note; } setVal(form, "date", r.start || r.date); setVal(form, "endDate", r.end || r.start || r.date);
     if (Array.isArray(r.who) && r.who.length) form.querySelectorAll("input[name=who]").forEach((cb) => (cb.checked = r.who.includes(cb.value)));
     const day0 = form.dataset.day0 || (form.dataset.day0 = form.querySelector("[name=date]")?.defaultValue || "");
     if (needsDate(r)) askVoucherDate(r, form._pendingFile?.name, day0).then((d) => { if (d) { setVal(form, "date", d); setVal(form, "endDate", d); } });

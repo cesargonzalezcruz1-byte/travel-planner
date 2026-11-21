@@ -674,7 +674,7 @@ const EXTRACT_SCHEMA = req({
   flexible: { type: "boolean", description: "true if this is an open-dated voucher, pass or ticket usable on any day within a validity period (no booked visit date)" },
   validFrom: S("Open-dated voucher: first day it can be used YYYY-MM-DD"), validTo: S("Open-dated voucher: last day it can be used YYYY-MM-DD"),
   place: S("Activity: place name for Google Maps"), time: S("Activity start time HH:MM"),
-  note: S("One short practical note for the family, e.g. room type, breakfast included, parking, shuttle (no confirmation numbers or prices)"),
+  note: S("Practical notes for the family, in a few short lines. Stays: room type, breakfast, parking, shuttle. Activities and tickets: meeting point, arrive-by time, what to bring or wear, age/height limits, what is included, how to redeem the ticket, cancellation deadline. No confirmation numbers or prices."),
   private: req({
     confirmation: S("Booking / confirmation / reservation / itinerary number(s)"), tickets: S("Ticket numbers"), seats: S("Seat numbers"),
     cost: S("Total price with currency, e.g. USD 245.10"), paidWith: S("Payment card or method, e.g. Visa ending 1234, or 'Pay at hotel'"),

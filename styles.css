@@ -1448,3 +1448,4 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 .jrate{min-width:0;max-width:100%} .jrate>*{min-width:0;max-width:100%} .starpick button{min-width:28px;padding:2px 1px}
 .hero-bar{min-width:0} .hero-bar .vseg.lab{flex:0 1 auto;min-width:0;overflow:hidden} .hero-bar .vseg.lab button{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:380px){.hero-bar{gap:6px} .hero-bar .vseg.lab button{padding:0 9px;font-size:13.5px} .hero-bar .iconbtn{width:44px;height:44px;flex:none}}
+/* v2.82: activity notes keep their line breaks */ .acard .inote{white-space:pre-line}

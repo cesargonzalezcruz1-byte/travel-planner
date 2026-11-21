@@ -1469,3 +1469,10 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 
 /* v2.84: Overview - restaurants keep the activity edge and text colour; only the inside is green */
 .ov-act span.eat{color:var(--act-x)} .ov-act.alleat{color:var(--act-x)}
+/* v2.85: Overview restaurant fill. Whole pill green when every activity showing is a restaurant (also per page of a paged pill);
+   when mixed, only the restaurant's part is green. The activity edge is always drawn on top so it never gets covered. */
+.ov-act{position:relative;overflow:hidden}
+.ov-act::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1.5px var(--act);pointer-events:none;z-index:1}
+.ov-act:has(span.eat:not([hidden])):not(:has(span[data-ovd]:not(.eat):not([hidden]))){background:linear-gradient(to top,var(--eat-t),color-mix(in srgb,var(--eat-t) 30%,var(--card)))}
+.ov-act:has(span.eat:not([hidden])):not(:has(span[data-ovd]:not(.eat):not([hidden]))) span.eat{background:transparent}
+.ov-act:not(.alleat):has(span[data-ovd]:not(.eat):not([hidden])):not(:has(span.eat:not([hidden]))){background:linear-gradient(to top,var(--act-t),color-mix(in srgb,var(--act-t) 30%,var(--card)))}

@@ -1456,13 +1456,16 @@ html.who-hide body.has-tabs #app:has(.whokey){padding-bottom:calc(84px + 20px + 
 /* v2.83: restaurants and meals get their own colour (green), everywhere an activity shows */
 .k-act.eat,.nstep.k-act.eat,.addtile.k-eat{--k:var(--eat);--kt:var(--eat-t);--kx:var(--eat-x)} .addtile.k-eat{background:var(--eat-t);color:var(--eat-x)}
 .k-act.eat{--act:var(--eat);--act-t:var(--eat-t);--act-x:var(--eat-x)}
-.ja.eat,.acard.eat,.arow.eat,.ov-act span.eat{--act:var(--eat);--act-t:var(--eat-t);--act-x:var(--eat-x)}
+.ja.eat,.acard.eat,.arow.eat{--act:var(--eat);--act-t:var(--eat-t);--act-x:var(--eat-x)}
 .ja.eat{color:var(--eat-x);background:linear-gradient(to top,var(--eat-t),color-mix(in srgb,var(--eat-t) 30%,var(--card)));box-shadow:inset 0 0 0 1.5px var(--eat)} .ja.eat .jdot{background:var(--eat)}
 .ov-act span.eat{background:color-mix(in srgb,var(--eat-t) 85%,transparent);color:var(--eat-x)}
-.ov-act.alleat{background:linear-gradient(to top,var(--eat-t),color-mix(in srgb,var(--eat-t) 30%,var(--card)));box-shadow:inset 0 0 0 1.5px var(--eat);color:var(--eat-x)} .ov-act.alleat span.eat{background:transparent}
+.ov-act.alleat{background:linear-gradient(to top,var(--eat-t),color-mix(in srgb,var(--eat-t) 30%,var(--card)))} .ov-act.alleat span.eat{background:transparent}
 .arow.eat .atime{color:var(--eat-x)} .arow.eat .ainline{background:var(--eat-t);color:var(--eat-x)}
 .acard.eat{--k:var(--eat);--kt:var(--eat-t);--kx:var(--eat-x)}
 .catseg{display:flex;gap:6px} .catseg label{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid var(--line2);border-radius:12px;padding:8px;cursor:pointer;font-weight:700;font-size:14px}
 .catseg input{position:absolute;opacity:0;pointer-events:none} .catseg label:has(input:checked){border-color:var(--act);background:var(--act-t);color:var(--act-x)} .catseg label.c-eat:has(input:checked){border-color:var(--eat);background:var(--eat-t);color:var(--eat-x)}
 .catseg i{display:inline-flex;width:16px;height:16px} .catseg i svg{width:100%;height:100%}
 .sheet .fld{display:grid;gap:5px;font-size:13px;font-weight:700} .sheet .catseg label{position:relative;display:flex;color:var(--ink)}
+
+/* v2.84: Overview - restaurants keep the activity edge and text colour; only the inside is green */
+.ov-act span.eat{color:var(--act-x)} .ov-act.alleat{color:var(--act-x)}
